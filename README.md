@@ -23,30 +23,22 @@ Drop a `.pbix` file, a `.pbip` project, or a `.SemanticModel` folder → get a *
 
 ## Quick Start
 
-### Option 1: Download the installer (recommended)
-1. Go to [Releases](https://github.com/djrien-ai/pbi-doc-generator/releases)
-2. Download the latest `PBI_Doc_Generator_Setup.exe`
-3. Install → launch from Start Menu
-4. Select your file → done
+### Portable .exe (no install)
+[Download from GitHub Releases (v0.2-beta)](https://github.com/djrien-ai/pbi-doc-generator/releases/tag/v0.2-beta)
 
-### Option 2: Run via pipx (recommended for devs)
+### To run it without an .exe
+Install Python 3.10+ from python.org (I'm sure you already have that).
+
+Open a terminal and run:
 ```bash
-pipx install git+https://github.com/djrien-ai/pbi-doc-generator.git
-pbi-doc-generator-gui
+python -m venv pbidoc
+pbidoc\Scripts\activate
+pip install git+https://github.com/djrien-ai/pbi-doc-generator.git
 ```
 
-### Option 3: Run from source
+Launch the tool:
 ```bash
-git clone https://github.com/djrien-ai/pbi-doc-generator.git
-cd pbi-doc-generator
-pip install -e .
-python gui.py
-```
-
-### Option 4: Command line
-```bash
-python extract.py "MyReport.pbix"
-python extract.py "MyReport.pbip" --output "docs/output.html"
+pbi-doc-generator
 ```
 
 ## How it works
