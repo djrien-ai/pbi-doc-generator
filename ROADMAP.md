@@ -19,6 +19,12 @@ Extract calculation group items and their expressions from the data model. Usefu
 ### TMDL / PBIP Support
 Add support for **Power BI Project files** (`.pbip`) and their TMDL format. This makes the tool useful for teams already using git-based workflows with their Power BI models — no need to convert back to `.pbix` first.
 
+### Output Format Choice
+Let users choose between **HTML** (current default) or **Markdown** output. Markdown makes it easy to drop documentation straight into a Git repo, wiki, or Confluence page.
+
+### English UI
+Switch the GUI from Dutch to English to make the tool accessible to a wider audience.
+
 ---
 
 Have a feature request? [Open an issue](https://github.com/djrien-ai/pbi-doc-generator/issues) or join the discussion on [Reddit](https://reddit.com/r/PowerBI).
