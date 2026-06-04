@@ -7,6 +7,8 @@ back-to-top button.
 """
 
 
+from mermaid_js import MERMAID_JS
+
 def generate_html(report_name: str, sections_html: str, sidebar_html: str) -> str:
     """Returns a complete standalone HTML document string.
 
@@ -25,7 +27,9 @@ def generate_html(report_name: str, sections_html: str, sidebar_html: str) -> st
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{report_name} — Data Documentation</title>
-<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script>
+{mermaid_js}
+</script>
 <style>
 /* ── CSS Variables ─────────────────────────────────────────────── */
 :root {{

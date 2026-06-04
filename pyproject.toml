@@ -30,7 +30,7 @@ classifiers = [
 
 dependencies = [
     "pbixray==0.1.21",
-    "pandas",
+    "pandas>=2.0.0,<3.0.0",
 ]
 
 [project.urls]
@@ -45,4 +45,4 @@ pbi-doc-generator = "gui:main"
 pbi-doc-generator-gui = "gui:main"
 
 [tool.setuptools]
-py-modules = ["gui", "extract", "html_template", "pbip_adapter", "tmdl_parser"]
+py-modules = ["gui", "extract", "html_template", "pbip_adapter", "tmdl_parser", "mermaid_js"]
