@@ -25,6 +25,12 @@ Let users choose between **HTML** (current default) or **Markdown** output. Mark
 ### English UI
 Switch the GUI from Dutch to English to make the tool accessible to a wider audience.
 
+### Hide System Tables
+Auto-generated Power BI tables (`LocalDateTable_*`, `DateTableTemplate_*`, `RowNumber-*`) are hidden by default. Optional checkbox to include them.
+
+### Multi-threaded XPrs9 Support ✅
+Large PBIX files using multithreaded compression now decompress correctly. *(Already shipped in v0.2)*
+
 ---
 
 Have a feature request? [Open an issue](https://github.com/djrien-ai/pbi-doc-generator/issues) or join the discussion on [Reddit](https://reddit.com/r/PowerBI).
