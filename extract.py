@@ -154,6 +154,16 @@ PbixUnpacker._PbixUnpacker__unpack = _patched_unpack
 # Helpers
 # ---------------------------------------------------------------------------
 
+_SYSTEM_TABLE_PREFIXES = (
+    'LocalDateTable_',
+    'DateTableTemplate_',
+    'RowNumber-',
+)
+
+def _is_system_table(name):
+    """Return True for auto-generated Power BI system tables."""
+    return any(str(name).startswith(p) for p in _SYSTEM_TABLE_PREFIXES)
+
 def _esc(text):
     """HTML-escape a string."""
     if text is None:
@@ -224,7 +234,7 @@ def _extract_hana_info(m_code):
 # Section builders — each returns (section_html, sidebar_html)
 # ---------------------------------------------------------------------------
 
-def build_data_sources(pq_df, dax_tables_df, m_params_df):
+def build_data_sources(pq_df, dax_tables_df, m_params_df, include_system_tables=False):
     """Section 1: Data Sources."""
     h = ""
     sidebar_items = []
@@ -260,6 +270,8 @@ def build_data_sources(pq_df, dax_tables_df, m_params_df):
     for tbl_name, m_code in pq_dict.items():
         if tbl_name in dax_table_names:
             continue  # DAX table, skip here
+        if not include_system_tables and _is_system_table(tbl_name):
+            continue
 
         if "SapHana.Database" in m_code:
             hana_tables.append((tbl_name, m_code))
@@ -277,6 +289,8 @@ def build_data_sources(pq_df, dax_tables_df, m_params_df):
     # Add DAX computed tables
     if dax_tables_df is not None:
         for _, row in dax_tables_df.iterrows():
+            if not include_system_tables and _is_system_table(row['TableName']):
+                continue
             computed_tables.append((row['TableName'], row.get('Expression', '')))
 
     # --- 1.1 HANA Views ---
@@ -345,7 +359,7 @@ def build_data_sources(pq_df, dax_tables_df, m_params_df):
     return section, sidebar
 
 
-def build_transformations(pq_df, dax_tables_df):
+def build_transformations(pq_df, dax_tables_df, include_system_tables=False):
     """Section 2: Power Query step-by-step per table."""
     h = ""
     sidebar_items = []
@@ -363,6 +377,8 @@ def build_transformations(pq_df, dax_tables_df):
         tbl = row['TableName']
         m_code = row['Expression']
         if tbl in dax_table_names:
+            continue
+        if not include_system_tables and _is_system_table(tbl):
             continue
 
         sec_id = f"sec2-tbl-{_safe_id(tbl)}"
@@ -391,6 +407,8 @@ def build_transformations(pq_df, dax_tables_df):
 
     # DAX calculated tables
     for tbl_name, dax_expr in dax_dict.items():
+        if not include_system_tables and _is_system_table(tbl_name):
+            continue
         sec_id = f"sec2-tbl-{_safe_id(tbl_name)}"
         sidebar_items.append(f'<li><a href="#{sec_id}">2.{idx} {_esc(tbl_name)}</a></li>')
         h += f'<h3 id="{sec_id}">2.{idx} {_esc(tbl_name)} (DAX Calculated Table) <a href="#{sec_id}" class="section-anchor">#</a></h3>\n'
@@ -402,7 +420,7 @@ def build_transformations(pq_df, dax_tables_df):
     return section, sidebar
 
 
-def build_relationships(rel_df):
+def build_relationships(rel_df, include_system_tables=False):
     """Section 3: Relationships + Mermaid diagram."""
     h = ""
 
@@ -414,6 +432,8 @@ def build_relationships(rel_df):
 
     # Filter out rows with NaN values
     rel_df = rel_df.dropna(subset=['FromTableName', 'ToTableName', 'FromColumnName', 'ToColumnName'])
+    if not include_system_tables:
+        rel_df = rel_df[~rel_df['FromTableName'].apply(_is_system_table) & ~rel_df['ToTableName'].apply(_is_system_table)]
 
     h += "<table>\n<thead><tr><th>#</th><th>From Table</th><th>From Column</th><th>--</th><th>To Table</th><th>To Column</th><th>Cross-Filter</th></tr></thead>\n<tbody>\n"
     for i, (_, row) in enumerate(rel_df.iterrows(), 1):
@@ -441,7 +461,7 @@ def build_relationships(rel_df):
     return section, sidebar
 
 
-def build_measures(measures_df):
+def build_measures(measures_df, include_system_tables=False):
     """Section 4: DAX Measures grouped by table."""
     h = ""
     sidebar_items = []
@@ -452,6 +472,13 @@ def build_measures(measures_df):
         section = f'<h2 id="sec4">4. DAX Measures <a href="#sec4" class="section-anchor">#</a></h2>\n{h}'
         return section, sidebar
 
+    if not include_system_tables:
+        measures_df = measures_df[~measures_df['TableName'].apply(_is_system_table)]
+    if len(measures_df) == 0:
+        h += "<p><em>No measures found.</em></p>\n"
+        sidebar = '<li><a href="#sec4">4. DAX Measures</a></li>'
+        section = f'<h2 id="sec4">4. DAX Measures <a href="#sec4" class="section-anchor">#</a></h2>\n{h}'
+        return section, sidebar
     grouped = measures_df.groupby('TableName')
     group_idx = 1
     for tbl_name, group in grouped:
@@ -474,7 +501,7 @@ def build_measures(measures_df):
     return section, sidebar
 
 
-def build_calculated_columns(dax_cols_df):
+def build_calculated_columns(dax_cols_df, include_system_tables=False):
     """Section 5: DAX Calculated Columns grouped by table."""
     h = ""
     sidebar_items = []
@@ -485,6 +512,13 @@ def build_calculated_columns(dax_cols_df):
         section = f'<h2 id="sec5">5. DAX Calculated Columns <a href="#sec5" class="section-anchor">#</a></h2>\n{h}'
         return section, sidebar
 
+    if not include_system_tables:
+        dax_cols_df = dax_cols_df[~dax_cols_df['TableName'].apply(_is_system_table)]
+    if len(dax_cols_df) == 0:
+        h += "<p><em>No calculated columns found.</em></p>\n"
+        sidebar = '<li><a href="#sec5">5. DAX Calculated Columns</a></li>'
+        section = f'<h2 id="sec5">5. DAX Calculated Columns <a href="#sec5" class="section-anchor">#</a></h2>\n{h}'
+        return section, sidebar
     grouped = dax_cols_df.groupby('TableName')
     group_idx = 1
     for tbl_name, group in grouped:
@@ -548,33 +582,175 @@ def build_observations(pq_df, rel_df, measures_df, dax_cols_df):
     section = f'<h2 id="sec6">6. Observations for Redevelopment <a href="#sec6" class="section-anchor">#</a></h2>\n{h}'
     return section, sidebar
 
+def build_calculation_groups(calc_groups, include_system_tables=False):
+    """Section: Calculation Groups (TMDL only)."""
+    h = ""
+    sidebar_items = []
+    
+    if not calc_groups:
+        return "", ""
+        
+    for idx, cg in enumerate(calc_groups, 1):
+        if not include_system_tables and _is_system_table(cg.table_name):
+            continue
+            
+        sec_id = f"sec-cg-{idx}"
+        sidebar_items.append(f'<li><a href="#{sec_id}">CG {idx}: {_esc(cg.table_name)}</a></li>')
+        h += f'<h3 id="{sec_id}">Calculation Group: {_esc(cg.table_name)} <a href="#{sec_id}" class="section-anchor">#</a></h3>\n'
+        h += f"<p>Column: {_code(cg.column_name)}</p>\n"
+        
+        h += "<table>\n<thead><tr><th>Item</th><th>DAX Expression</th><th>Ordinal</th></tr></thead>\n<tbody>\n"
+        # Sort items by ordinal if possible
+        items = sorted(cg.items, key=lambda x: getattr(x, 'ordinal', 0))
+        for item in items:
+            expr = getattr(item, 'expression', '').strip()
+            display = expr[:300] + ("..." if len(expr) > 300 else "")
+            h += f'<tr><td><strong>{_esc(getattr(item, "name", ""))}</strong></td><td>{_code(display)}</td><td>{getattr(item, "ordinal", "")}</td></tr>\n'
+        h += "</tbody></table>\n"
+
+    if not h:
+        return "", ""
+
+    sidebar = f'<li><a href="#sec-cg">Calculation Groups</a><ul>{"".join(sidebar_items)}</ul></li>'
+    section = f'<h2 id="sec-cg">Calculation Groups <a href="#sec-cg" class="section-anchor">#</a></h2>\n{h}'
+    return section, sidebar
+
+def _parse_dax_dependencies(expression, measure_names_lower, column_names_lower):
+    """Parse DAX dependencies for measure lineage."""
+    deps = {"measures": set(), "columns": set()}
+    if not expression:
+        return deps
+        
+    expr = re.sub(r'/\*.*?\*/', '', expression, flags=re.DOTALL)
+    expr = re.sub(r'--.*', '', expr)
+    expr = re.sub(r'//.*', '', expr)
+    expr = re.sub(r'"[^"]*"', '""', expr)
+    
+    vars_declared = set(re.findall(r'(?i)\bVAR\s+([a-zA-Z0-9_]+)\b', expr))
+    vars_declared_lower = {v.lower() for v in vars_declared}
+    
+    pattern = r"(?:('[^']+'|[a-zA-Z0-9_]+)\s*)?\[([^\]]+)\]"
+    for table_match, name_match in re.findall(pattern, expr):
+        name_lower = name_match.lower()
+        if name_lower in vars_declared_lower:
+            continue
+            
+        if table_match:
+            deps["columns"].add(name_match)
+        else:
+            if name_lower in measure_names_lower:
+                deps["measures"].add(name_match)
+            elif name_lower in column_names_lower:
+                deps["columns"].add(name_match)
+                
+    return deps
+
+def build_measure_lineage(measures_df, all_columns, include_system_tables=False):
+    """Section 7: Measure Lineage Diagram."""
+    h = ""
+    sidebar_items = []
+    
+    if measures_df is None or len(measures_df) == 0:
+        h += "<p><em>No measures found.</em></p>\n"
+        sidebar = '<li><a href="#sec7">7. Measure Lineage</a></li>'
+        section = f'<h2 id="sec7">7. Measure Lineage <a href="#sec7" class="section-anchor">#</a></h2>\n{h}'
+        return section, sidebar
+        
+    if not include_system_tables:
+        measures_df = measures_df[~measures_df['TableName'].apply(_is_system_table)]
+
+    measure_names_lower = {str(x).lower() for x in measures_df['Name'].dropna()}
+    column_names_lower = {str(x).lower() for x in all_columns}
+    
+    lineage = {}
+    for _, row in measures_df.iterrows():
+        m_name = row['Name']
+        expr = str(row.get('Expression', ''))
+        lineage[m_name] = _parse_dax_dependencies(expr, measure_names_lower, column_names_lower)
+        
+    has_any_deps = any(d['measures'] or d['columns'] for d in lineage.values())
+    
+    if not has_any_deps:
+        h += "<p><em>No measure dependencies found.</em></p>\n"
+    else:
+        h += "<h4>Dependency Diagram</h4>\n"
+        h += '<pre class="mermaid">\ngraph LR\n'
+        h += '    classDef measure fill:#0969da,stroke:#0550ae,color:#fff,rx:10,ry:10;\n'
+        h += '    classDef column fill:#f6f8fa,stroke:#d1d9e0,color:#1f2328;\n'
+        
+        used_measures = set()
+        used_columns = set()
+        for m, deps in lineage.items():
+            if deps['measures'] or deps['columns']:
+                used_measures.add(m)
+                used_measures.update(deps['measures'])
+                used_columns.update(deps['columns'])
+                
+        for m in sorted(used_measures):
+            h += f'    {_safe_id(m)}("{_esc(m)}"):::measure\n'
+        for c in sorted(used_columns):
+            h += f'    {_safe_id(c)}["{_esc(c)}"]:::column\n'
+            
+        for m, deps in lineage.items():
+            for dep_m in deps['measures']:
+                h += f'    {_safe_id(dep_m)} --> {_safe_id(m)}\n'
+            for dep_c in deps['columns']:
+                h += f'    {_safe_id(dep_c)} -.-> {_safe_id(m)}\n'
+        h += '</pre>\n'
+        
+        h += "<h4>Dependency Details</h4>\n"
+        h += "<table>\n<thead><tr><th>Measure</th><th>Depends on Measures</th><th>Depends on Columns</th></tr></thead>\n<tbody>\n"
+        for m, deps in sorted(lineage.items()):
+            if not deps['measures'] and not deps['columns']:
+                continue
+            m_links = ", ".join(_code(x) for x in sorted(deps['measures'])) if deps['measures'] else "--"
+            c_links = ", ".join(_code(x) for x in sorted(deps['columns'])) if deps['columns'] else "--"
+            h += f'<tr><td><strong>{_esc(m)}</strong></td><td>{m_links}</td><td>{c_links}</td></tr>\n'
+        h += "</tbody></table>\n"
+
+    sidebar = '<li><a href="#sec7">7. Measure Lineage</a></li>'
+    section = f'<h2 id="sec7">7. Measure Lineage <a href="#sec7" class="section-anchor">#</a></h2>\n{h}'
+    return section, sidebar
 
 # ---------------------------------------------------------------------------
 # Main extraction function (called by GUI and CLI)
 # ---------------------------------------------------------------------------
 
-def extract_from_pbix(pbix_path, output_path=None):
+def extract_documentation(input_path, output_path=None, include_system_tables=False):
     """
-    Extract metadata from a .pbix file and generate HTML documentation.
+    Extract metadata from a .pbix or .pbip file and generate HTML documentation.
 
     Parameters
     ----------
-    pbix_path : str
-        Path to the .pbix file.
+    input_path : str
+        Path to the .pbix or .pbip file.
     output_path : str, optional
-        Where to save the HTML. Default: same folder as the PBIX.
+        Where to save the HTML. Default: same folder as the input.
+    include_system_tables : bool
+        Whether to include auto-generated system tables.
 
     Returns
     -------
     str
         The path to the generated HTML file.
     """
-    from pbixray import PBIXRay
-
-    print(f"Loading PBIX: {pbix_path}")
-    model = PBIXRay(pbix_path)
-
-    report_name = Path(pbix_path).stem
+    input_path_obj = Path(input_path)
+    report_name = input_path_obj.stem
+    
+    if input_path.lower().endswith('.pbix'):
+        from pbixray import PBIXRay
+        print(f"Loading PBIX: {input_path}")
+        try:
+            model = PBIXRay(input_path)
+        except Exception as e:
+            raise ValueError(f"Could not open the PBIX file: '{input_path}'.\nIt may be corrupted, missing, or locked. Details: {e}")
+    elif input_path.lower().endswith('.pbip') or os.path.isdir(input_path):
+        from pbip_adapter import PbipAdapter
+        print(f"Loading PBIP/Folder: {input_path}")
+        # The TmdlModel handles the internal resolution and throws clear FileNotFoundError/ValueError
+        model = PbipAdapter(input_path)
+    else:
+        raise ValueError(f"Unsupported input: '{input_path}'. Expected a .pbix file, a .pbip file, or a SemanticModel folder.")
 
     print(f"  Tables:        {len(model.tables)}")
     print(f"  Measures:      {len(model.dax_measures)}")
@@ -585,22 +761,39 @@ def extract_from_pbix(pbix_path, output_path=None):
     sections = []
     sidebar_entries = []
 
-    s, sb = build_data_sources(model.power_query, model.dax_tables, model.m_parameters)
+    s, sb = build_data_sources(model.power_query, model.dax_tables, model.m_parameters, include_system_tables=include_system_tables)
     sections.append(s); sidebar_entries.append(sb)
 
-    s, sb = build_transformations(model.power_query, model.dax_tables)
+    s, sb = build_transformations(model.power_query, model.dax_tables, include_system_tables=include_system_tables)
     sections.append(s); sidebar_entries.append(sb)
 
-    s, sb = build_relationships(model.relationships)
+    s, sb = build_relationships(model.relationships, include_system_tables=include_system_tables)
     sections.append(s); sidebar_entries.append(sb)
 
-    s, sb = build_measures(model.dax_measures)
+    s, sb = build_measures(model.dax_measures, include_system_tables=include_system_tables)
     sections.append(s); sidebar_entries.append(sb)
 
-    s, sb = build_calculated_columns(model.dax_columns)
+    s, sb = build_calculated_columns(model.dax_columns, include_system_tables=include_system_tables)
     sections.append(s); sidebar_entries.append(sb)
+
+    # Add Calculation Groups if available (PBIP only)
+    if hasattr(model, 'calculation_groups'):
+        cg = model.calculation_groups
+        if cg:
+            s, sb = build_calculation_groups(cg, include_system_tables=include_system_tables)
+            if s:
+                sections.append(s); sidebar_entries.append(sb)
 
     s, sb = build_observations(model.power_query, model.relationships, model.dax_measures, model.dax_columns)
+    sections.append(s); sidebar_entries.append(sb)
+
+    all_columns = set()
+    if getattr(model, 'schema', None) is not None and 'ColumnName' in model.schema.columns:
+        all_columns.update(model.schema['ColumnName'].dropna().astype(str).tolist())
+    if getattr(model, 'dax_columns', None) is not None and 'ColumnName' in model.dax_columns.columns:
+        all_columns.update(model.dax_columns['ColumnName'].dropna().astype(str).tolist())
+        
+    s, sb = build_measure_lineage(model.dax_measures, all_columns, include_system_tables=include_system_tables)
     sections.append(s); sidebar_entries.append(sb)
 
     # Assemble HTML
@@ -610,7 +803,7 @@ def extract_from_pbix(pbix_path, output_path=None):
 
     # Output path
     if not output_path:
-        output_path = os.path.join(os.path.dirname(pbix_path), f"{report_name}_Data_Documentation.html")
+        output_path = os.path.join(input_path_obj.parent, f"{report_name}_Data_Documentation.html")
 
     with open(output_path, "w", encoding="utf-8") as f:
         f.write(output_html)
@@ -625,13 +818,14 @@ def extract_from_pbix(pbix_path, output_path=None):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Generate HTML data documentation from a Power BI .pbix file.",
+        description="Generate HTML data documentation from a Power BI .pbix or .pbip file.",
     )
-    parser.add_argument("pbix", help="Path to the .pbix file.")
+    parser.add_argument("file", help="Path to the .pbix or .pbip file.")
     parser.add_argument("--output", "-o", help="Output HTML file path.")
+    parser.add_argument("--sys-tables", action="store_true", help="Include auto-generated system tables.")
     args = parser.parse_args()
 
-    extract_from_pbix(args.pbix, args.output)
+    extract_documentation(args.file, args.output, include_system_tables=args.sys_tables)
 
 
 if __name__ == "__main__":

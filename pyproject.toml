@@ -1,10 +1,10 @@
 [build-system]
 requires = ["setuptools>=68.0", "wheel"]
-build-backend = "setuptools.backends._legacy:_Backend"
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "pbi-doc-generator"
-version = "0.1.0"
+version = "0.2.0"
 description = "Automatically generate data documentation from Power BI .pbix files"
 readme = "README.md"
 license = {text = "MIT"}
@@ -30,6 +30,7 @@ classifiers = [
 
 dependencies = [
     "pbixray>=0.1.21",
+    "pandas",
 ]
 
 [project.urls]
@@ -44,4 +45,4 @@ pbi-doc-generator = "gui:main"
 pbi-doc-generator-gui = "gui:main"
 
 [tool.setuptools]
-py-modules = ["gui", "extract", "html_template"]
+py-modules = ["gui", "extract", "html_template", "pbip_adapter", "tmdl_parser"]

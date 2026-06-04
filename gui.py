@@ -1,7 +1,7 @@
 """
 PBI Metadata Extractor – Tkinter GUI
 =====================================
-Opens a dark-themed window that lets the user pick a .pbix file,
+Opens a dark-themed window that lets the user pick a .pbix or .pbip file,
 runs the extraction in a background thread, and offers to open
 the resulting HTML documentation in a browser.
 """
@@ -35,7 +35,7 @@ class App(tk.Tk):
         self.resizable(False, False)
 
         # ── window size & centering ─────────────────────────────
-        win_w, win_h = 620, 420
+        win_w, win_h = 620, 460
         screen_w = self.winfo_screenwidth()
         screen_h = self.winfo_screenheight()
         x = (screen_w - win_w) // 2
@@ -91,23 +91,38 @@ class App(tk.Tk):
         # ── subtitle ──────────────────────────────────────────
         subtitle_lbl = ttk.Label(
             container,
-            text="Selecteer een .pbix bestand om automatisch\n"
-                 "een HTML documentatie te genereren",
+            text="Select a .pbix or .pbip file to automatically\n"
+                 "generate data documentation",
             font=("Segoe UI", 10),
             foreground=FG_DIM,
             anchor="center",
             justify="center",
         )
-        subtitle_lbl.pack(pady=(0, 30), fill="x")
+        subtitle_lbl.pack(pady=(0, 20), fill="x")
 
         # ── select button ─────────────────────────────────────
         self.select_btn = ttk.Button(
             container,
-            text="Selecteer PBIX bestand…",
+            text="Select file…",
             style="Accent.TButton",
             command=self._on_select,
         )
-        self.select_btn.pack(pady=(10, 10))
+        self.select_btn.pack(pady=(10, 6))
+
+        # ── options ────────────────────────────────────────────
+        self._include_sys_tables = tk.BooleanVar(value=False)
+        style.configure("Dark.TCheckbutton", background=BG, foreground=FG_DIM,
+                        font=("Segoe UI", 9))
+        style.map("Dark.TCheckbutton",
+                  background=[("active", BG)],
+                  foreground=[("active", FG)])
+        sys_cb = ttk.Checkbutton(
+            container,
+            text="Include system tables (LocalDateTable, etc.)",
+            variable=self._include_sys_tables,
+            style="Dark.TCheckbutton",
+        )
+        sys_cb.pack(pady=(0, 6))
 
         # ── status area (progress / success / error) ──────────
         self.status_frame = ttk.Frame(container)
@@ -130,7 +145,7 @@ class App(tk.Tk):
         # ── footer ────────────────────────────────────────────
         version_lbl = ttk.Label(
             container,
-            text="v0.1 beta  |  Developed by Rien Scheerlinck  |  github.com/djrien-ai",
+            text="v0.2 beta  |  Developed by Rien Scheerlinck  |  github.com/djrien-ai",
             font=("Segoe UI", 8),
             foreground=FG_DIM,
             anchor="center",
@@ -139,7 +154,7 @@ class App(tk.Tk):
 
         footer_lbl = ttk.Label(
             container,
-            text="Output: HTML wordt opgeslagen naast het PBIX bestand",
+            text="Output: HTML saved next to the source file",
             font=("Segoe UI", 9),
             foreground=FG_DIM,
             anchor="center",
@@ -155,8 +170,8 @@ class App(tk.Tk):
     def _on_select(self):
         """Open a file dialog, then kick off extraction in a thread."""
         pbix_path = filedialog.askopenfilename(
-            title="Selecteer een PBIX bestand",
-            filetypes=[("Power BI bestanden", "*.pbix"), ("Alle bestanden", "*.*")],
+            title="Select a Power BI file",
+            filetypes=[("Power BI files", "*.pbix *.pbip"), ("All files", "*.*")],
         )
         if not pbix_path:
             return  # user cancelled
@@ -164,7 +179,7 @@ class App(tk.Tk):
         # Update UI → processing state
         self.select_btn.configure(state="disabled")
         self._clear_open_button()
-        self.status_lbl.configure(text="Bezig met verwerken…", foreground=FG_DIM)
+        self.status_lbl.configure(text="Processing…", foreground=FG_DIM)
 
         # Run extraction on a background thread
         thread = threading.Thread(
@@ -177,9 +192,12 @@ class App(tk.Tk):
     def _run_extraction(self, pbix_path: str):
         """Execute the extraction (runs in a worker thread)."""
         try:
-            from extract import extract_from_pbix  # type: ignore
+            from extract import extract_documentation
 
-            result_path = extract_from_pbix(pbix_path)
+            result_path = extract_documentation(
+                pbix_path,
+                include_system_tables=self._include_sys_tables.get(),
+            )
             # Schedule UI update on the main thread
             self.after(0, self._on_success, result_path)
         except Exception as exc:
@@ -190,7 +208,7 @@ class App(tk.Tk):
         self.select_btn.configure(state="normal")
         display_path = os.path.basename(result_path)
         self.status_lbl.configure(
-            text=f"✓  Documentatie aangemaakt: {display_path}",
+            text=f"✓  Documentation created: {display_path}",
             foreground=SUCCESS,
         )
 
@@ -208,7 +226,7 @@ class App(tk.Tk):
         self.select_btn.configure(state="normal")
         self._clear_open_button()
         self.status_lbl.configure(
-            text=f"✗  Fout: {message}",
+            text=f"✗  Error: {message}",
             foreground=ERROR,
         )
 

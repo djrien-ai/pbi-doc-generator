@@ -22,3 +22,16 @@ Thumbs.db
 
 # Test outputs
 *_Data_Documentation.html
+*.html
+
+# Power BI Files
+*.pbix
+*.pbip
+*.SemanticModel
+*.Dataset
+
+# Debug / local scripts
+fix*.py
+debug_gui.py
+patch.py
+local_build/
