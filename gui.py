@@ -217,7 +217,7 @@ class App(tk.Tk):
             self.status_frame,
             text="Open in Browser",
             style="Open.TButton",
-            command=lambda p=result_path: webbrowser.open(p),
+            command=lambda p=result_path: threading.Thread(target=webbrowser.open, args=(p,), daemon=True).start(),
         )
         self.open_btn.pack(pady=(12, 0))
 
