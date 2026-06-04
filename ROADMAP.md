@@ -1,6 +1,6 @@
 # Roadmap
 
-## v0.1 — Current Release ✅
+## v0.1 Current Release ✅
 
 - Extract data documentation from `.pbix` files
 - Data sources, Power Query, relationships, DAX measures, calculated columns
@@ -8,7 +8,7 @@
 - Standalone `.exe` — no installation required
 - GitHub-style HTML output
 
-## v0.2 — Planned 🚧
+## v0.2 Planned 🚧
 
 ### Measure Lineage Diagram
 Parse DAX expressions to trace **measure → measure** and **measure → column** dependencies, then visualize them as an interactive Mermaid.js dependency graph. This gives instant insight into which measures build on top of each other and which columns they rely on.
