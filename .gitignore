@@ -1,0 +1,24 @@
+# Byte-compiled / optimized / DLL cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# PyInstaller
+build/
+dist/
+*.spec
+
+# Distribution / packaging
+*.egg-info/
+*.egg
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Test outputs
+*_Data_Documentation.html
