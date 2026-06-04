@@ -31,8 +31,11 @@ Typos, better explanations, screenshots of generated output — all appreciated.
 | File | What it does |
 |------|-------------|
 | `gui.py` | Tkinter GUI — file picker and progress display |
-| `extract.py` | Core engine — reads `.pbix` via PBIXRay, builds HTML sections |
+| `extract.py` | Core engine — reads data models, builds HTML sections |
+| `pbip_adapter.py` | Connects TMDL parsing to the extraction engine |
+| `tmdl_parser.py` | Natively parses PBIP SemanticModel folders |
 | `html_template.py` | HTML/CSS/JS template (GitHub-style design) |
+| `installer.iss` | Inno Setup compile script for Windows executable |
 
 ## Development setup
 
@@ -41,19 +44,20 @@ Typos, better explanations, screenshots of generated output — all appreciated.
 git clone https://github.com/YOUR-USERNAME/pbi-doc-generator.git
 cd pbi-doc-generator
 
-# Install the only dependency
-pip install pbixray
+# Install dependencies in editable mode
+pip install -e .
 
 # Run the GUI
 python gui.py
 
 # Or run from command line
 python extract.py "path/to/your/file.pbix"
+# (Also supports "path/to/project.pbip" or "path/to/*.SemanticModel")
 ```
 
 ## Code style
 
-- Keep it simple — this project is intentionally lightweight (3 files)
+- Keep it simple — this project is intentionally lightweight
 - No additional frameworks unless absolutely necessary
 - Comments in English
 
