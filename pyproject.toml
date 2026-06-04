@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "pbi-doc-generator"
+version = "0.1.0"
+description = "Automatically generate data documentation from Power BI .pbix files"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+authors = [
+    {name = "Rien Scheerlinck", email = "dj.rien@gmail.com"},
+]
+keywords = ["power-bi", "pbix", "documentation", "data-lineage", "metadata"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Information Technology",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Documentation",
+    "Topic :: Software Development :: Documentation",
+]
+
+dependencies = [
+    "pbixray>=0.1.21",
+]
+
+[project.urls]
+Homepage = "https://github.com/djrien-ai/pbi-doc-generator"
+Repository = "https://github.com/djrien-ai/pbi-doc-generator"
+Issues = "https://github.com/djrien-ai/pbi-doc-generator/issues"
+
+[project.scripts]
+pbi-doc-generator = "gui:main"
+
+[project.gui-scripts]
+pbi-doc-generator-gui = "gui:main"
+
+[tool.setuptools]
+py-modules = ["gui", "extract", "html_template"]
