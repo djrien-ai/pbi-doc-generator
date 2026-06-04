@@ -28,7 +28,7 @@ def generate_html(report_name: str, sections_html: str, sidebar_html: str) -> st
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>{report_name} — Data Documentation</title>
 <script>
-{mermaid_js}
+{MERMAID_JS}
 </script>
 <style>
 /* ── CSS Variables ─────────────────────────────────────────────── */
