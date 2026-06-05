@@ -142,15 +142,26 @@ class App(tk.Tk):
         # placeholder for the "Open in Browser" button
         self.open_btn = None
 
-        # ── footer ────────────────────────────────────────────
-        version_lbl = ttk.Label(
-            container,
-            text="v0.3 beta  |  Developed by Rien Scheerlinck  |  github.com/djrien-ai",
-            font=("Segoe UI", 8),
-            foreground=FG_DIM,
-            anchor="center",
-        )
-        version_lbl.pack(side="bottom", pady=(4, 0), fill="x")
+        # Footer with clickable links
+        footer_links = ttk.Frame(container)
+        footer_links.pack(side="bottom", pady=(4, 0))
+
+        lbl_v = ttk.Label(footer_links, text="v0.4  |", font=("Segoe UI", 8), foreground=FG_DIM)
+        lbl_v.pack(side="left")
+
+        lbl_dev = ttk.Label(footer_links, text="  Developed by", font=("Segoe UI", 8), foreground=FG_DIM)
+        lbl_dev.pack(side="left")
+
+        lbl_li = ttk.Label(footer_links, text=" Rien Scheerlinck", font=("Segoe UI", 8, "underline"), foreground=ACCENT, cursor="hand2")
+        lbl_li.pack(side="left")
+        lbl_li.bind("<Button-1>", lambda e: __import__('webbrowser').open("https://www.linkedin.com/in/rienscheerlinck/"))
+
+        lbl_sep2 = ttk.Label(footer_links, text="  |", font=("Segoe UI", 8), foreground=FG_DIM)
+        lbl_sep2.pack(side="left")
+
+        lbl_gh = ttk.Label(footer_links, text="  github.com/djrien-ai", font=("Segoe UI", 8, "underline"), foreground=ACCENT, cursor="hand2")
+        lbl_gh.pack(side="left")
+        lbl_gh.bind("<Button-1>", lambda e: __import__('webbrowser').open("https://github.com/djrien-ai/pbi-doc-generator"))
 
         footer_lbl = ttk.Label(
             container,

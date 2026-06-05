@@ -22,6 +22,284 @@ from pathlib import Path
 from html_template import generate_html
 
 # ---------------------------------------------------------------------------
+# Report Pages Extraction
+# ---------------------------------------------------------------------------
+import json
+import zipfile
+from pathlib import Path
+
+def _parse_expr(expr):
+    """Recursively parse PBI expression to extract table/column/measure names."""
+    if not isinstance(expr, dict):
+        return str(expr)
+    
+    if 'Measure' in expr:
+        table = _parse_expr(expr['Measure'].get('Expression', {}))
+        return f"{table}[{expr['Measure'].get('Property', '')}]"
+    elif 'Column' in expr:
+        table = _parse_expr(expr['Column'].get('Expression', {}))
+        return f"{table}[{expr['Column'].get('Property', '')}]"
+    elif 'SourceRef' in expr:
+        return expr['SourceRef'].get('Entity', '')
+    elif 'Aggregation' in expr:
+        agg_type = expr['Aggregation'].get('Function', 0)
+        col = _parse_expr(expr['Aggregation'].get('Expression', {}))
+        return f"Agg({col})"
+    elif 'HierarchyLevel' in expr:
+        level = expr['HierarchyLevel'].get('Level', '')
+        return f"HierarchyLevel({level})"
+    
+    return str(expr)
+
+def _parse_layout_data(data):
+    """Extract pages and visuals from parsed layout JSON."""
+    pages = []
+    for section in data.get('sections', []):
+        page_name = section.get('displayName', 'Unknown Page')
+        visuals = []
+        for vc in section.get('visualContainers', []):
+            if 'config' not in vc:
+                continue
+            config = json.loads(vc['config'])
+            
+            v_type = 'Unknown'
+            if 'singleVisual' in config:
+                v_type = config['singleVisual'].get('visualType', 'Unknown')
+                
+            title = ""
+            try:
+                if 'singleVisual' in config and 'vcObjects' in config['singleVisual']:
+                    title_obj = config['singleVisual']['vcObjects'].get('title', [])
+                    if title_obj and 'properties' in title_obj[0]:
+                        title = title_obj[0]['properties'].get('text', {}).get('expr', {}).get('Literal', {}).get('Value', '').strip("'")
+            except:
+                pass
+                
+            fields = []
+            if 'dataTransforms' in vc:
+                try:
+                    dt = json.loads(vc['dataTransforms'])
+                    if 'selects' in dt:
+                        for sel in dt['selects']:
+                            name = sel.get('displayName', '')
+                            expr_parsed = _parse_expr(sel.get('expr', {}))
+                            fields.append(f"{name} -> {expr_parsed}")
+                except:
+                    pass
+                    
+            filters = []
+            if 'filters' in vc:
+                try:
+                    vc_filters = json.loads(vc['filters'])
+                    for f in vc_filters:
+                        expr = f.get('expression', {})
+                        filters.append(_parse_expr(expr))
+                except:
+                    pass
+                    
+            visuals.append({
+                'type': v_type,
+                'title': title,
+                'fields': fields,
+                'filters': filters
+            })
+            
+        pages.append({
+            'name': page_name,
+            'hidden': section.get('config', '') and '"visibility":1' in json.dumps(section.get('config', '')),
+            'visuals': visuals
+        })
+    return pages
+
+def extract_report_pages_pbir_folder(report_dir):
+    import json
+    from pathlib import Path
+    pages_dict = {}
+    
+    pages_dir = report_dir / 'definition' / 'pages'
+    if not pages_dir.exists():
+        return []
+        
+    for page_folder in pages_dir.iterdir():
+        if not page_folder.is_dir():
+            continue
+            
+        page_json = page_folder / 'page.json'
+        if page_json.exists():
+            try:
+                with open(page_json, 'r', encoding='utf-8-sig', errors='ignore') as f:
+                    page_data = json.loads(f.read())
+                    page_name = page_data.get('displayName', 'Unknown Page')
+                    page_hidden = page_data.get('visibility', 0) == 1
+                    pages_dict[page_folder.name] = {'name': page_name, 'hidden': page_hidden, 'visuals': []}
+            except:
+                pass
+                
+        visuals_dir = page_folder / 'visuals'
+        if visuals_dir.exists() and page_folder.name in pages_dict:
+            for vis_folder in visuals_dir.iterdir():
+                vis_json = vis_folder / 'visual.json'
+                if vis_json.exists():
+                    try:
+                        with open(vis_json, 'r', encoding='utf-8-sig', errors='ignore') as f:
+                            vis_data = json.loads(f.read())
+                            
+                        v_type = vis_data.get('visual', {}).get('visualType', 'Unknown')
+                        
+                        title = ""
+                        try:
+                            title_text = vis_data.get('visual', {}).get('visualContainerObjects', {}).get('title', [])[0].get('properties', {}).get('text', {}).get('expr', {}).get('Literal', {}).get('Value', '')
+                            title = title_text.strip("'")
+                        except:
+                            pass
+                            
+                        fields = []
+                        for key in ['Values', 'Rows', 'Columns', 'Category', 'Y', 'X', 'Size', 'Tooltips']:
+                            projs = vis_data.get('visual', {}).get('query', {}).get('queryState', {}).get(key, {}).get('projections', [])
+                            if not projs and isinstance(vis_data.get('visual', {}).get('query', {}).get('queryState', {}).get(key, {}), list):
+                                projs = vis_data.get('visual', {}).get('query', {}).get('queryState', {}).get(key, [])
+                            if isinstance(projs, list):
+                                for p in projs:
+                                    name = p.get('queryRef', '')
+                                    expr_parsed = _parse_expr(p.get('field', {}))
+                                    fields.append(f"{key}: {name} -> {expr_parsed}")
+                                    
+                        if not fields:
+                            projs = vis_data.get('visual', {}).get('query', {}).get('queryState', {}).get('projections', [])
+                            for p in projs:
+                                name = p.get('queryRef', '')
+                                expr_parsed = _parse_expr(p.get('field', {}))
+                                fields.append(f"{name} -> {expr_parsed}")
+                                
+                        pages_dict[page_folder.name]['visuals'].append({
+                            'type': v_type,
+                            'title': title,
+                            'fields': fields,
+                            'filters': []
+                        })
+                    except:
+                        pass
+                        
+    return list(pages_dict.values())
+
+def extract_report_pages_pbir(z):
+    import json
+    pages_dict = {}
+    
+    page_files = [p for p in z.namelist() if p.startswith('Report/definition/pages/') and p.endswith('/page.json')]
+    for pf in page_files:
+        try:
+            page_id = pf.split('/')[3]
+            page_data = json.loads(z.read(pf).decode('utf-8-sig', errors='ignore'))
+            page_name = page_data.get('displayName', 'Unknown Page')
+            page_hidden = page_data.get('visibility', 0) == 1
+            pages_dict[page_id] = {'name': page_name, 'hidden': page_hidden, 'visuals': []}
+        except:
+            pass
+
+    visual_files = [p for p in z.namelist() if p.startswith('Report/definition/pages/') and p.endswith('/visual.json')]
+    for vf in visual_files:
+        try:
+            parts = vf.split('/')
+            page_id = parts[3]
+            if page_id not in pages_dict:
+                continue
+                
+            vis_data = json.loads(z.read(vf).decode('utf-8-sig', errors='ignore'))
+            v_type = vis_data.get('visual', {}).get('visualType', 'Unknown')
+            
+            title = ""
+            try:
+                title_text = vis_data.get('visual', {}).get('visualContainerObjects', {}).get('title', [])[0].get('properties', {}).get('text', {}).get('expr', {}).get('Literal', {}).get('Value', '')
+                title = title_text.strip("'")
+            except:
+                pass
+                
+            fields = []
+            for key in ['Values', 'Rows', 'Columns', 'Category', 'Y', 'X', 'Size', 'Tooltips']:
+                projs = vis_data.get('visual', {}).get('query', {}).get('queryState', {}).get(key, {}).get('projections', [])
+                if not projs and isinstance(vis_data.get('visual', {}).get('query', {}).get('queryState', {}).get(key, {}), list):
+                    projs = vis_data.get('visual', {}).get('query', {}).get('queryState', {}).get(key, [])
+                if isinstance(projs, list):
+                    for p in projs:
+                        name = p.get('queryRef', '')
+                        expr_parsed = _parse_expr(p.get('field', {}))
+                        fields.append(f"{name} -> {expr_parsed}")
+                        
+            if not fields:
+                projs = vis_data.get('visual', {}).get('query', {}).get('queryState', {}).get('projections', [])
+                for p in projs:
+                    name = p.get('queryRef', '')
+                    expr_parsed = _parse_expr(p.get('field', {}))
+                    fields.append(f"{name} -> {expr_parsed}")
+                    
+            pages_dict[page_id]['visuals'].append({
+                'type': v_type,
+                'title': title,
+                'fields': fields,
+                'filters': []
+            })
+        except:
+            pass
+            
+    return list(pages_dict.values())
+
+def extract_report_pages_pbix(pbix_path):
+    """Extract report pages from PBIX."""
+    try:
+        with zipfile.ZipFile(pbix_path) as z:
+            if 'Report/Layout' not in z.namelist():
+                return []
+            layout_bytes = z.read('Report/Layout')
+            layout_str = layout_bytes.decode('utf-16-le', errors='ignore').lstrip('\ufeff')
+            if layout_str and layout_str[0] != '{':
+                layout_str = layout_bytes.decode('utf-8', errors='ignore').lstrip('\ufeff')
+            data = json.loads(layout_str)
+            return _parse_layout_data(data)
+    except Exception as e:
+        print(f"Warning: Could not extract report pages from PBIX: {e}")
+        import traceback
+        return traceback.format_exc()
+
+def extract_report_pages_pbip(pbip_path):
+    """Extract report pages from PBIP (looks for matching .Report folder)."""
+    try:
+        pbip_file = Path(pbip_path)
+        pbip_dir = pbip_file.parent if pbip_file.is_file() else pbip_file
+        
+        # Match the .Report folder that belongs to THIS .pbip file
+        # e.g. "ServiceLevelOTIF_DS.pbip" -> "ServiceLevelOTIF_DS.Report"
+        report_dir = None
+        if pbip_file.is_file():
+            expected_name = pbip_file.stem + ".Report"
+            candidate = pbip_dir / expected_name
+            if candidate.exists() and candidate.is_dir():
+                report_dir = candidate
+        
+        # Fallback: first *.Report in directory (only if single file)
+        if report_dir is None:
+            report_dirs = list(pbip_dir.glob("*.Report"))
+            if not report_dirs:
+                return []
+            report_dir = report_dirs[0]
+        
+        report_json_path = report_dir / "report.json"
+        if report_json_path.exists():
+            with open(report_json_path, 'r', encoding='utf-8-sig', errors='ignore') as f:
+                content = f.read()
+                data = json.loads(content)
+                return _parse_layout_data(data)
+        else:
+            # Try PBIR format
+            return extract_report_pages_pbir_folder(report_dir)
+        return []
+    except Exception as e:
+        print(f"Warning: Could not extract report pages from PBIP: {e}")
+        import traceback
+        return traceback.format_exc()
+
+
+# ---------------------------------------------------------------------------
 # Fix for pbixray 0.1.21: add support for "multithreaded XPrs9" DataModel
 # format.  The shipped version only handles single-threaded Xpress9.
 # Algorithm ported from pbixray >=0.10 (loader.py).
@@ -150,6 +428,35 @@ def _patched_unpack(self):
 PbixUnpacker._PbixUnpacker__unpack = _patched_unpack
 
 
+
+# ---------------------------------------------------------------------------
+# Noise filter: technical/non-functional objects
+# ---------------------------------------------------------------------------
+TECHNICAL_DENYLIST = {
+    'ServerString', 'NoRecords', 'NrRecords', 'Total Deliveries shells',
+    'Last Refreshed (Local)', 'Transparent', 'BeginPeriod', 'EndPeriod',
+}
+TECHNICAL_PREFIXES = ('!',)
+TECHNICAL_PATTERNS = (re.compile(r'^Tooltip', re.IGNORECASE),)
+
+def _is_technical(name):
+    """Return True for technical/non-functional objects (denylist)."""
+    n = str(name)
+    if n in TECHNICAL_DENYLIST:
+        return True
+    if any(n.startswith(p) for p in TECHNICAL_PREFIXES):
+        return True
+    if any(pat.match(n) for pat in TECHNICAL_PATTERNS):
+        return True
+    return False
+
+def _is_binary_payload(m_code):
+    """Return True for inline binary/JSON table payloads."""
+    if not m_code:
+        return False
+    return bool(re.search(r'Binary\.Decompress\(.*?Binary\.FromText\(', m_code, re.DOTALL) or
+                re.search(r'Table\.FromRows\(\s*Json\.Document\(\s*Binary\.Decompress\(', m_code, re.DOTALL))
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -233,6 +540,237 @@ def _extract_hana_info(m_code):
 # ---------------------------------------------------------------------------
 # Section builders — each returns (section_html, sidebar_html)
 # ---------------------------------------------------------------------------
+# Role labels for semantic visual rendering (ENGLISH)
+# ---------------------------------------------------------------------------
+_WELL_LABELS = {
+    'Category': 'X-axis', 'X': 'X-axis', 'Axis': 'X-axis',
+    'Y': 'Y-axis', 'Y2': 'Y-axis (secondary)',
+    'Series': 'Legend', 'Legend': 'Legend',
+    'Values': 'Value', 'Rows': 'Rows', 'Columns': 'Columns',
+    'Tooltips': 'Tooltips', 'Details': 'Detail', 'Size': 'Size',
+}
+
+_VISUAL_LABELS = {
+    'barChart': 'Bar chart', 'columnChart': 'Column chart',
+    'lineChart': 'Line chart', 'areaChart': 'Area chart',
+    'clusteredBarChart': 'Clustered bar chart',
+    'clusteredColumnChart': 'Clustered column chart',
+    'stackedBarChart': 'Stacked bar chart',
+    'stackedColumnChart': 'Stacked column chart',
+    'hundredPercentStackedBarChart': '100% stacked bar chart',
+    'hundredPercentStackedColumnChart': '100% stacked column chart',
+    'lineClusteredColumnComboChart': 'Line + clustered column',
+    'lineStackedColumnComboChart': 'Line + stacked column',
+    'ribbonChart': 'Ribbon chart', 'waterfallChart': 'Waterfall chart',
+    'funnelChart': 'Funnel chart', 'scatterChart': 'Scatter chart',
+    'pieChart': 'Pie chart', 'donutChart': 'Donut chart',
+    'treemap': 'Treemap', 'map': 'Map', 'filledMap': 'Filled map',
+    'shapeMap': 'Shape map', 'gauge': 'Gauge', 'kpi': 'KPI',
+    'card': 'Card', 'multiRowCard': 'Multi-row card',
+    'tableEx': 'Table', 'pivotTable': 'Matrix', 'matrix': 'Matrix',
+    'slicer': 'Slicer', 'textbox': 'Text box', 'image': 'Image',
+    'actionButton': 'Button', 'basicShape': 'Shape',
+    'decompositionTreeVisual': 'Decomposition tree',
+    'keyDriversVisual': 'Key influencers',
+}
+
+def _clean_field_name(raw):
+    """Strip Entity[Field], -> syntax, aggregation wrappers, trailing parens."""
+    s = str(raw)
+    # Remove well prefix like "Values: " first
+    for prefix in _WELL_LABELS:
+        if s.startswith(prefix + ': '):
+            s = s[len(prefix) + 2:]
+            break
+    # Use the resolved name (right side of ->) if available
+    if ' -> ' in s:
+        resolved = s.split(' -> ')[-1]
+        # Extract from Entity[Field] pattern
+        bracket_match = re.search(r'\[([^\]]+)\]', resolved)
+        if bracket_match:
+            s = bracket_match.group(1)
+        else:
+            s = resolved
+    # Remove "Entity." prefix (e.g. "TableName.FieldName")
+    if '.' in s:
+        s = s.split('.')[-1]
+    # Strip aggregation wrapper: "Sum(Tbl[Field])" or "Agg(Entity[Field])" -> "Field"
+    agg_match = re.match(r'^(?:Sum|Count|Min|Max|Average|Agg)\((.+)\)$', s, re.IGNORECASE)
+    if agg_match:
+        inner = agg_match.group(1)
+        bracket_match2 = re.search(r'\[([^\]]+)\]', inner)
+        s = bracket_match2.group(1) if bracket_match2 else inner
+    # Strip trailing unbalanced closing parens
+    while s.endswith(')') and s.count(')') > s.count('('):
+        s = s[:-1]
+    # Strip numeric alias suffixes ("...months1" -> "...months")
+    s = re.sub(r'(\D)(\d{1,2})$', r'\1', s)
+    return s.strip()
+
+def _get_well(raw):
+    """Extract the well/role prefix from a raw field string."""
+    s = str(raw)
+    for prefix in _WELL_LABELS:
+        if s.startswith(prefix + ': '):
+            return prefix
+    return 'Values'
+
+def _is_measure_field(raw):
+    """Heuristic: field is a measure if it has Agg() wrapper or Measure ref."""
+    s = str(raw)
+    return 'Agg(' in s or 'Measure' in s or '[Measure]' in s
+
+def _readable_type(vtype):
+    """Return English-readable visual type label."""
+    return _VISUAL_LABELS.get(vtype, vtype)
+
+def _card_is_technical(v):
+    """Return True if a card visual shows a technical/helper measure."""
+    for f in v.get('fields', []):
+        name = _clean_field_name(f)
+        if _is_technical(name):
+            return True
+    title = v.get('title', '')
+    if title and _is_technical(title):
+        return True
+    return False
+
+def build_report_pages(pages, sec_num):
+    """Section N: Report Pages & Visuals. sec_num is the section number."""
+    h = ""
+    sidebar_items = []
+    sec_id = "sec-pages"
+    
+    if isinstance(pages, str):
+        h += f"<p><em>Error extracting report pages:</em></p>\n<pre><code>{_esc(pages)}</code></pre>\n"
+        sidebar = f'<li><a href="#{sec_id}">{sec_num}. Report Pages</a></li>'
+        section = f'<h2 id="{sec_id}">{sec_num}. Report Pages &amp; Visuals <a href="#{sec_id}" class="section-anchor">#</a></h2>\n{h}'
+        return section, sidebar
+
+    if not pages:
+        h += "<p><em>No report pages found (or could not extract).</em></p>\n"
+        sidebar = f'<li><a href="#{sec_id}">{sec_num}. Report Pages</a></li>'
+        section = f'<h2 id="{sec_id}">{sec_num}. Report Pages &amp; Visuals <a href="#{sec_id}" class="section-anchor">#</a></h2>\n{h}'
+        return section, sidebar
+        
+    for p_idx, page in enumerate(pages, 1):
+        page_sec_id = f"sec-page-{p_idx}"
+        page_name = page.get('name', 'Unknown')
+        hidden = page.get('hidden', False)
+        visuals = page.get('visuals', [])
+        
+        hidden_tag = ' <span style="color:var(--fg-muted);">[Hidden]</span>' if hidden else ''
+        sidebar_items.append(f'<li><a href="#{page_sec_id}">{sec_num}.{p_idx} {_esc(page_name)}</a></li>')
+        h += f'<h3 id="{page_sec_id}">{sec_num}.{p_idx} {_esc(page_name)}{hidden_tag} <a href="#{page_sec_id}" class="section-anchor">#</a></h3>\n'
+        
+        # Classify visuals
+        func_visuals = []
+        tech_visuals = []
+        tech_cards = []
+        slicers = []
+        for v in visuals:
+            vtype = v.get('type', '')
+            vtitle = v.get('title', '')
+            # Decorative / structural elements -> always technical
+            if vtype in ('basicShape', 'image', 'textbox', 'actionButton'):
+                tech_visuals.append(v)
+            # Explicit denylist on title or type
+            elif _is_technical(vtitle) or _is_technical(vtype):
+                tech_visuals.append(v)
+            elif vtype == 'slicer':
+                slicers.append(v)
+            # Cards showing technical measures -> technical
+            elif vtype in ('card', 'multiRowCard') and _card_is_technical(v):
+                tech_cards.append(v)
+            else:
+                func_visuals.append(v)
+        
+        data_visuals = [v for v in func_visuals if v.get('fields')]
+        
+        # Summary line
+        h += f"<p>{len(data_visuals)} functional visuals"
+        if slicers:
+            h += f", {len(slicers)} slicers"
+        h += ".</p>\n"
+        
+        # Slicer chip-line
+        if slicers:
+            slicer_fields = []
+            for sl in slicers:
+                for f in sl.get('fields', []):
+                    slicer_fields.append(_clean_field_name(f))
+            if slicer_fields:
+                chips = ", ".join(f"<code>{_esc(sf)}</code>" for sf in slicer_fields)
+                h += f"<p>Filters: {chips}</p>\n"
+        
+        # Data visuals as <ul> hierarchy
+        if data_visuals:
+            h += "<ul>\n"
+            for v in data_visuals:
+                vtype = v.get('type', 'Unknown')
+                vtitle = v.get('title', '')
+                label = _readable_type(vtype)
+                
+                # Visual heading
+                if vtitle:
+                    h += f"<li><strong>{_esc(label)}</strong> — {_esc(vtitle)}\n"
+                else:
+                    h += f"<li><strong>{_esc(label)}</strong>\n"
+                
+                # Group fields by well
+                wells = {}
+                for f in v.get('fields', []):
+                    well = _get_well(f)
+                    name = _clean_field_name(f)
+                    is_measure = _is_measure_field(f)
+                    display = f"{name} (measure)" if is_measure else name
+                    wells.setdefault(well, []).append(display)
+                
+                # Tables: "Columns (N):" label
+                if vtype in ('tableEx', 'pivotTable', 'matrix'):
+                    all_fields = [_clean_field_name(f) for f in v.get('fields', [])]
+                    n = len(all_fields)
+                    if n <= 8:
+                        field_str = ", ".join(_esc(f) for f in all_fields)
+                        h += f"<br><span style=\"color:var(--fg-muted);\">Columns ({n}): {field_str}</span>\n"
+                    else:
+                        sample = ", ".join(_esc(f) for f in all_fields[:5])
+                        h += f"<br><span style=\"color:var(--fg-muted);\">Columns ({n}): {sample}, …</span>\n"
+                elif wells:
+                    # Compact well line for charts
+                    parts = []
+                    for well_key, field_list in wells.items():
+                        well_label = _WELL_LABELS.get(well_key, well_key)
+                        # For cards, use "Value:" not "X-axis:"
+                        if vtype in ('card', 'multiRowCard') and well_label in ('X-axis', 'Value'):
+                            well_label = 'Value'
+                        fields_str = ", ".join(_esc(f) for f in field_list)
+                        parts.append(f"{well_label}: {fields_str}")
+                    h += f"<br><span style=\"color:var(--fg-muted);\">{' &middot; '.join(parts)}</span>\n"
+                
+                h += "</li>\n"
+            h += "</ul>\n"
+            
+        # Technical footnote
+        total_tech = len(tech_visuals) + len(tech_cards)
+        if total_tech > 0:
+            parts = []
+            if tech_cards:
+                parts.append(f"{len(tech_cards)} helper cards")
+            shapes_etc = len(tech_visuals)
+            if shapes_etc:
+                parts.append(f"{shapes_etc} shapes/buttons")
+            h += f'<details><summary>+ {total_tech} technical objects ({", ".join(parts)})</summary>\n'
+            h += "<ul>\n"
+            for v in tech_cards + tech_visuals:
+                title = _esc(v.get('title', '')) or v.get('type', '')
+                h += f'<li>{_esc(v.get("type", ""))}: {title}</li>\n'
+            h += "</ul></details>\n"
+            
+    sidebar = f'<li><a href="#{sec_id}">{sec_num}. Report Pages</a><ul>{"".join(sidebar_items)}</ul></li>'
+    section = f'<h2 id="{sec_id}">{sec_num}. Report Pages &amp; Visuals <a href="#{sec_id}" class="section-anchor">#</a></h2>\n{h}'
+    return section, sidebar
+
 
 def build_data_sources(pq_df, dax_tables_df, m_params_df, include_system_tables=False):
     """Section 1: Data Sources."""
@@ -264,7 +802,10 @@ def build_data_sources(pq_df, dax_tables_df, m_params_df, include_system_tables=
         "Other": [("Web.Contents", "Web"), ("Web.BrowserContents", "Web"), ("OData.Feed", "OData"), ("ActiveDirectory.Domains", "Active Directory")]
     }
 
-    pq_dict = dict(zip(pq_df['TableName'], pq_df['Expression']))
+    if pq_df.empty or 'TableName' not in pq_df.columns:
+        pq_dict = {}
+    else:
+        pq_dict = dict(zip(pq_df['TableName'], pq_df['Expression']))
 
     dax_table_names = set()
     if dax_tables_df is not None and len(dax_tables_df) > 0:
@@ -328,7 +869,12 @@ def build_data_sources(pq_df, dax_tables_df, m_params_df, include_system_tables=
         
         for i, (tbl_name, conn_type, m_code) in enumerate(cat_list, 1):
             # Try to extract HANA specifics if it's HANA
-            excerpt = m_code.split("\\n")[0].strip()[:80] + "..." if len(m_code) > 80 else m_code.strip()
+            if _is_binary_payload(m_code):
+                excerpt = "[binary payload - inline table]"
+            elif len(m_code) > 120:
+                excerpt = m_code.split("\\n")[0].strip()[:100] + "…"
+            else:
+                excerpt = m_code.strip()
             if conn_type == "SAP HANA":
                 pkg, view, _ = _extract_hana_info(m_code)
                 excerpt = f"Package: {pkg} / View: {view}"
@@ -348,7 +894,12 @@ def build_data_sources(pq_df, dax_tables_df, m_params_df, include_system_tables=
         h += "<table>\n<thead><tr><th>#</th><th>Table</th><th>Source</th><th>Type</th></tr></thead>\n<tbody>\n"
         for i, (tbl_name, expr) in enumerate(computed_tables, 1):
             is_dax = tbl_name in dax_table_names
-            src = expr.strip()[:80] + "..." if len(expr.strip()) > 80 else expr.strip()
+            if _is_binary_payload(expr):
+                src = "[binary payload - inline table]"
+            elif len(expr.strip()) > 120:
+                src = expr.strip()[:100] + "…"
+            else:
+                src = expr.strip()
             ttype = "DAX Calculated Table" if is_dax else "M (Power Query)"
             h += f'<tr><td>{i}</td><td><strong><a href="#sec2-tbl-{_safe_id(tbl_name)}">{_esc(tbl_name)}</a></strong></td>'
             h += f'<td>{_code(src)}</td><td>{_esc(ttype)}</td></tr>\n'
@@ -419,13 +970,14 @@ def build_transformations(pq_df, dax_tables_df, include_system_tables=False):
         if steps:
             h += "<ol>\n"
             for step_name, step_expr in steps:
-                display = step_expr[:250]
-                if len(step_expr) > 250:
-                    display += "..."
-                h += f"  <li><strong>{_esc(step_name)}</strong>: {_code(display)}</li>\n"
+                if _is_binary_payload(step_expr):
+                    display = "[binary payload omitted]"
+                else:
+                    display = step_expr
+                h += f"  <li><strong>{_esc(step_name)}</strong>:\n<pre><code>{_esc(display)}</code></pre></li>\n"
             h += "</ol>\n"
         else:
-            h += f"<pre><code>{_esc(m_code.strip()[:500])}</code></pre>\n"
+            h += f"<pre><code>{_esc(m_code.strip())}</code></pre>\n"
 
         # Warn about hardcoded connections
         if 'SapHana.Database("' in m_code or "SapHana.Database('" in m_code:
@@ -465,15 +1017,15 @@ def build_relationships(rel_df, include_system_tables=False):
     if not include_system_tables:
         rel_df = rel_df[~rel_df['FromTableName'].apply(_is_system_table) & ~rel_df['ToTableName'].apply(_is_system_table)]
 
-    h += "<table>\n<thead><tr><th>#</th><th>From Table</th><th>From Column</th><th>--</th><th>To Table</th><th>To Column</th><th>Cross-Filter</th></tr></thead>\n<tbody>\n"
+    h += "<table>\n<thead><tr><th>#</th><th>From Table</th><th>From Column</th><th>→</th><th>To Table</th><th>To Column</th><th>Cross-Filter</th></tr></thead>\n<tbody>\n"
     for i, (_, row) in enumerate(rel_df.iterrows(), 1):
         cf_raw = str(row.get('CrossFilteringBehavior', '1'))
         cf = "<strong>Both</strong>" if cf_raw == '2' or 'both' in cf_raw.lower() else "Single"
-        h += f'<tr><td>{i}</td><td>{_esc(str(row["FromTableName"]))}</td><td>{_code(str(row["FromColumnName"]))}</td><td>--</td>'
-        h += f'<td>{_esc(str(row["ToTableName"]))}</td><td>{_code(str(row["ToColumnName"]))}</td><td>{cf}</td></tr>\n'
+        h += f'<tr><td>{i}</td><td>{_esc(str(row["FromTableName"]))}</td><td><code>{_esc(str(row["FromColumnName"]))}</code></td><td>→</td>'
+        h += f'<td>{_esc(str(row["ToTableName"]))}</td><td><code>{_esc(str(row["ToColumnName"]))}</code></td><td>{cf}</td></tr>\n'
     h += "</tbody></table>\n"
 
-    # Mermaid diagram
+    # Rendered Mermaid diagram (mermaid.js is bundled in the exe)
     h += "<h4>Data Model Diagram</h4>\n"
     h += '<pre class="mermaid">\ngraph LR\n'
     all_tables = set()
@@ -484,7 +1036,7 @@ def build_relationships(rel_df, include_system_tables=False):
         h += f'    {_safe_id(tbl)}["{_esc(tbl)}"]\n'
     for _, row in rel_df.iterrows():
         h += f'    {_safe_id(str(row["FromTableName"]))} -->|"{_esc(str(row["FromColumnName"]))}"| {_safe_id(str(row["ToTableName"]))}\n'
-    h += "</pre>\n"
+    h += '</pre>\n'
 
     sidebar = '<li><a href="#sec3">3. Relationships</a></li>'
     section = f'<h2 id="sec3">3. Relationships <a href="#sec3" class="section-anchor">#</a></h2>\n{h}'
@@ -516,14 +1068,11 @@ def build_measures(measures_df, include_system_tables=False):
         sidebar_items.append(f'<li><a href="#{sec_id}">4.{group_idx} {_esc(tbl_name)}</a></li>')
         h += f'<h3 id="{sec_id}">4.{group_idx} Measures on {_esc(tbl_name)} <a href="#{sec_id}" class="section-anchor">#</a></h3>\n'
 
-        h += "<table>\n<thead><tr><th>Measure</th><th>DAX Expression</th></tr></thead>\n<tbody>\n"
-        for _, row in group.iterrows():
+        for _, row in group.sort_values('Name').iterrows():
             expr = str(row.get('Expression', '')).strip()
-            display = expr[:300]
-            if len(expr) > 300:
-                display += "..."
-            h += f'<tr><td><strong>{_esc(row["Name"])}</strong></td><td>{_code(display)}</td></tr>\n'
-        h += "</tbody></table>\n"
+            h += f"<h4>{_esc(row['Name'])}</h4>\n"
+            h += f"<pre><code>{_esc(expr)}</code></pre>\n"
+
         group_idx += 1
 
     sidebar = f'<li><a href="#sec4">4. DAX Measures</a><ul>{"".join(sidebar_items)}</ul></li>'
@@ -568,7 +1117,7 @@ def build_calculated_columns(dax_cols_df, include_system_tables=False):
     return section, sidebar
 
 
-def build_observations(pq_df, rel_df, measures_df, dax_cols_df):
+def build_observations(pq_df, rel_df, measures_df, dax_cols_df, pages=None):
     """Section 6: Auto-detected observations."""
     h = ""
     observations = []
@@ -602,14 +1151,50 @@ def build_observations(pq_df, rel_df, measures_df, dax_cols_df):
         observations.append(('tip', 'Calculated Columns',
             f'There are <strong>{len(dax_cols_df)}</strong> DAX calculated columns. Consider moving transformations to Power Query for better performance.'))
 
+    # Duplicate DAX expressions
+    if measures_df is not None and len(measures_df) > 1:
+        expr_map = {}
+        for _, row in measures_df.iterrows():
+            expr = str(row.get('Expression', '')).strip()
+            if expr and len(expr) > 10:
+                expr_map.setdefault(expr, []).append(row['Name'])
+        dupes = {expr: names for expr, names in expr_map.items() if len(names) > 1}
+        if dupes:
+            dupe_lines = []
+            for expr, names in dupes.items():
+                dupe_lines.append(", ".join(f"<strong>{_esc(n)}</strong>" for n in names))
+            observations.append(('tip', 'Duplicate DAX Logic',
+                f'These measures share identical DAX: {"; ".join(dupe_lines)}.'))
+
+    # Unused measures (defined but not on any report page)
+    if pages and measures_df is not None and len(measures_df) > 0:
+        bound_fields = set()
+        page_list = pages if isinstance(pages, list) else []
+        for page in page_list:
+            for vis in page.get('visuals', []):
+                for f in vis.get('fields', []):
+                    bound_fields.add(str(f).lower())
+        all_measure_names = set(measures_df['Name'].dropna().astype(str).tolist())
+        unused = []
+        for m in sorted(all_measure_names):
+            if not any(m.lower() in bf for bf in bound_fields):
+                unused.append(m)
+        if unused and len(unused) < len(all_measure_names):  # Only flag if some ARE used
+            if len(unused) <= 10:
+                ulist = ", ".join(f"<strong>{_esc(u)}</strong>" for u in unused)
+            else:
+                ulist = ", ".join(f"<strong>{_esc(u)}</strong>" for u in unused[:10]) + f" … and {len(unused)-10} more"
+            observations.append(('note', 'Unused Measures',
+                f'{len(unused)} measures defined but not bound to any report visual: {ulist}.'))
+
     if observations:
         for atype, title, text in observations:
             h += f'<div class="alert alert-{atype}"><div class="alert-title">{title}</div>{text}</div>\n'
     else:
         h += "<p>No significant observations detected.</p>\n"
 
-    sidebar = '<li><a href="#sec6">6. Observations</a></li>'
-    section = f'<h2 id="sec6">6. Observations for Redevelopment <a href="#sec6" class="section-anchor">#</a></h2>\n{h}'
+    sidebar = '<li><a href="#sec6">Observations</a></li>'
+    section = f'<h2 id="sec6">Observations for Redevelopment <a href="#sec6" class="section-anchor">#</a></h2>\n{h}'
     return section, sidebar
 
 def build_calculation_groups(calc_groups, include_system_tables=False):
@@ -634,8 +1219,7 @@ def build_calculation_groups(calc_groups, include_system_tables=False):
         items = sorted(cg.items, key=lambda x: getattr(x, 'ordinal', 0))
         for item in items:
             expr = getattr(item, 'expression', '').strip()
-            display = expr[:300] + ("..." if len(expr) > 300 else "")
-            h += f'<tr><td><strong>{_esc(getattr(item, "name", ""))}</strong></td><td>{_code(display)}</td><td>{getattr(item, "ordinal", "")}</td></tr>\n'
+            h += f'<tr><td><strong>{_esc(getattr(item, "name", ""))}</strong></td><td><pre><code>{_esc(expr)}</code></pre></td><td>{getattr(item, "ordinal", "")}</td></tr>\n'
         h += "</tbody></table>\n"
 
     if not h:
@@ -682,8 +1266,8 @@ def build_measure_lineage(measures_df, all_columns, include_system_tables=False)
     
     if measures_df is None or len(measures_df) == 0:
         h += "<p><em>No measures found.</em></p>\n"
-        sidebar = '<li><a href="#sec7">7. Measure Lineage</a></li>'
-        section = f'<h2 id="sec7">7. Measure Lineage <a href="#sec7" class="section-anchor">#</a></h2>\n{h}'
+        sidebar = '<li><a href="#sec7">Measure Lineage</a></li>'
+        section = f'<h2 id="sec7">Measure Lineage <a href="#sec7" class="section-anchor">#</a></h2>\n{h}'
         return section, sidebar
         
     if not include_system_tables:
@@ -703,6 +1287,7 @@ def build_measure_lineage(measures_df, all_columns, include_system_tables=False)
     if not has_any_deps:
         h += "<p><em>No measure dependencies found.</em></p>\n"
     else:
+        # Rendered Mermaid dependency diagram (mermaid.js is bundled)
         h += "<h4>Dependency Diagram</h4>\n"
         h += '<pre class="mermaid">\ngraph LR\n'
         h += '    classDef measure fill:#0969da,stroke:#0550ae,color:#fff,rx:10,ry:10;\n'
@@ -738,8 +1323,8 @@ def build_measure_lineage(measures_df, all_columns, include_system_tables=False)
             h += f'<tr><td><strong>{_esc(m)}</strong></td><td>{m_links}</td><td>{c_links}</td></tr>\n'
         h += "</tbody></table>\n"
 
-    sidebar = '<li><a href="#sec7">7. Measure Lineage</a></li>'
-    section = f'<h2 id="sec7">7. Measure Lineage <a href="#sec7" class="section-anchor">#</a></h2>\n{h}'
+    sidebar = '<li><a href="#sec7">Measure Lineage</a></li>'
+    section = f'<h2 id="sec7">Measure Lineage <a href="#sec7" class="section-anchor">#</a></h2>\n{h}'
     return section, sidebar
 
 # ---------------------------------------------------------------------------
@@ -787,6 +1372,13 @@ def extract_documentation(input_path, output_path=None, include_system_tables=Fa
     print(f"  Power Queries: {len(model.power_query)}")
     print(f"  Relationships: {len(model.relationships)}")
 
+    # Extract Report Pages early (needed for unused-measures observation)
+    if input_path.lower().endswith('.pbix'):
+        pages = extract_report_pages_pbix(input_path)
+    else:
+        pages = extract_report_pages_pbip(input_path)
+    print(f"  Report Pages:  {len(pages) if not isinstance(pages, str) else 'Error'}")
+
     # Build all sections
     sections = []
     sidebar_entries = []
@@ -814,7 +1406,7 @@ def extract_documentation(input_path, output_path=None, include_system_tables=Fa
             if s:
                 sections.append(s); sidebar_entries.append(sb)
 
-    s, sb = build_observations(model.power_query, model.relationships, model.dax_measures, model.dax_columns)
+    s, sb = build_observations(model.power_query, model.relationships, model.dax_measures, model.dax_columns, pages=pages)
     sections.append(s); sidebar_entries.append(sb)
 
     all_columns = set()
@@ -825,6 +1417,12 @@ def extract_documentation(input_path, output_path=None, include_system_tables=Fa
         
     s, sb = build_measure_lineage(model.dax_measures, all_columns, include_system_tables=include_system_tables)
     sections.append(s); sidebar_entries.append(sb)
+
+    # Report Pages as last section (dynamic number)
+    next_sec = len(sections) + 1
+    s, sb = build_report_pages(pages, sec_num=next_sec)
+    if s:
+        sections.append(s); sidebar_entries.append(sb)
 
     # Assemble HTML
     full_content = "\n\n".join(sections)
