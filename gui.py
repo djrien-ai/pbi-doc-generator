@@ -145,7 +145,7 @@ class App(tk.Tk):
         # ── footer ────────────────────────────────────────────
         version_lbl = ttk.Label(
             container,
-            text="v0.2 beta  |  Developed by Rien Scheerlinck  |  github.com/djrien-ai",
+            text="v0.3 beta  |  Developed by Rien Scheerlinck  |  github.com/djrien-ai",
             font=("Segoe UI", 8),
             foreground=FG_DIM,
             anchor="center",

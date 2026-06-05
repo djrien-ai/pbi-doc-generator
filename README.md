@@ -24,7 +24,7 @@ Drop a `.pbix` file, a `.pbip` project, or a `.SemanticModel` folder → get a *
 ## Quick Start
 
 ### Portable .exe (no install)
-[Download from GitHub Releases (v0.2-beta)](https://github.com/djrien-ai/pbi-doc-generator/releases/tag/v0.2-beta)
+[Download from GitHub Releases (v0.3-beta)](https://github.com/djrien-ai/pbi-doc-generator/releases/tag/v0.3-beta)
 
 ### To run it without an .exe
 Install Python 3.10+ from python.org (I'm sure you already have that).
