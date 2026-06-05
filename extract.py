@@ -239,11 +239,30 @@ def build_data_sources(pq_df, dax_tables_df, m_params_df, include_system_tables=
     h = ""
     sidebar_items = []
 
-    # Classify tables
-    hana_tables = []
-    manual_tables = []
+    # Dictionaries to group tables by category
+    categories = {
+        "File": [],
+        "Database": [],
+        "Power Platform": [],
+        "Azure": [],
+        "Online Services": [],
+        "Other": []
+    }
+    
+    # Internal categories
     computed_tables = []
-    param_tables = []
+    real_params = []
+    helper_funcs = []
+
+    # Keyword mappings
+    mappings = {
+        "File": [("Excel.Workbook", "Excel"), ("Csv.Document", "CSV"), ("Xml.Tables", "XML"), ("Json.Document", "JSON"), ("Pdf.Tables", "PDF"), ("Folder.Files", "Folder"), ("SharePoint.Files", "SharePoint Folder"), ("File.Contents", "File")],
+        "Database": [("Sql.Database", "SQL Server"), ("SapHana.Database", "SAP HANA"), ("SapBusinessWarehouse.Cubes", "SAP BW"), ("AnalysisServices.Database", "Analysis Services"), ("Oracle.Database", "Oracle"), ("PostgreSQL.Database", "PostgreSQL"), ("MySQL.Database", "MySQL"), ("Teradata.Database", "Teradata"), ("GoogleBigQuery.Database", "BigQuery"), ("Snowflake.Databases", "Snowflake"), ("AdoDotNet.DataSource", "ADO.NET"), ("Odbc.DataSource", "ODBC"), ("OleDb.DataSource", "OLE DB")],
+        "Power Platform": [("PowerBI.Dataflows", "Dataflows"), ("CommonDataService.Database", "Dataverse"), ("PowerPlatform.Dataflows", "Power Platform Dataflows")],
+        "Azure": [("AzureStorage.Blobs", "Azure Blobs"), ("AzureStorage.DataLake", "Azure Data Lake"), ("AzureDataExplorer.Contents", "Azure Data Explorer"), ("AzureSql.Database", "Azure SQL")],
+        "Online Services": [("Salesforce.Data", "Salesforce"), ("SharePoint.Contents", "SharePoint"), ("Exchange.Contents", "Exchange"), ("GoogleAnalytics.Accounts", "Google Analytics"), ("Dynamics365", "Dynamics 365")],
+        "Other": [("Web.Contents", "Web"), ("Web.BrowserContents", "Web"), ("OData.Feed", "OData"), ("ActiveDirectory.Domains", "Active Directory")]
+    }
 
     pq_dict = dict(zip(pq_df['TableName'], pq_df['Expression']))
 
@@ -251,9 +270,6 @@ def build_data_sources(pq_df, dax_tables_df, m_params_df, include_system_tables=
     if dax_tables_df is not None and len(dax_tables_df) > 0:
         dax_table_names = set(dax_tables_df['TableName'].tolist())
 
-    # Separate params/functions from real tables in m_parameters
-    real_params = []
-    helper_funcs = []
     if m_params_df is not None and len(m_params_df) > 0:
         for _, row in m_params_df.iterrows():
             name = row['ParameterName']
@@ -269,61 +285,66 @@ def build_data_sources(pq_df, dax_tables_df, m_params_df, include_system_tables=
 
     for tbl_name, m_code in pq_dict.items():
         if tbl_name in dax_table_names:
-            continue  # DAX table, skip here
+            continue
         if not include_system_tables and _is_system_table(tbl_name):
             continue
 
-        if "SapHana.Database" in m_code:
-            hana_tables.append((tbl_name, m_code))
-        elif "Binary.Decompress" in m_code or "Table.FromRows(Json" in m_code:
-            manual_tables.append((tbl_name, m_code))
-        elif "FnCreateDateTable" in m_code:
-            computed_tables.append((tbl_name, m_code))
-        elif "#table(type table" in m_code and "DateTime.LocalNow" in m_code:
-            manual_tables.append((tbl_name, m_code))
-        elif len(m_code.strip()) < 100 and ("Table.FromRows" in m_code or "Table.RemoveColumns" in m_code):
-            manual_tables.append((tbl_name, m_code))
-        else:
-            computed_tables.append((tbl_name, m_code))
+        matched = False
+        for cat_name, kw_list in mappings.items():
+            for kw, conn_type in kw_list:
+                if kw in m_code:
+                    categories[cat_name].append((tbl_name, conn_type, m_code))
+                    matched = True
+                    break
+            if matched:
+                break
+                
+        if not matched:
+            # Check for hardcoded manual tables or just compute
+            if "Binary.Decompress" in m_code or "Table.FromRows(Json" in m_code or ("#table(type table" in m_code and "DateTime.LocalNow" in m_code) or (len(m_code.strip()) < 100 and ("Table.FromRows" in m_code or "Table.RemoveColumns" in m_code)):
+                categories["Other"].append((tbl_name, "Manual/Inline Table", m_code))
+            else:
+                computed_tables.append((tbl_name, m_code))
 
-    # Add DAX computed tables
     if dax_tables_df is not None:
         for _, row in dax_tables_df.iterrows():
             if not include_system_tables and _is_system_table(row['TableName']):
                 continue
             computed_tables.append((row['TableName'], row.get('Expression', '')))
 
-    # --- 1.1 HANA Views ---
-    sec_id = "sec1-1"
-    sidebar_items.append(f'<li><a href="#{sec_id}">1.1 SAP HANA Views</a></li>')
-    h += f'<h3 id="{sec_id}">1.1 SAP HANA Views (Primary Source) <a href="#{sec_id}" class="section-anchor">#</a></h3>\n'
-
-    if hana_tables:
-        h += "<table>\n<thead><tr><th>#</th><th>Table Name</th><th>HANA Package</th><th>HANA View</th><th>Connection</th></tr></thead>\n<tbody>\n"
-        for i, (tbl_name, m_code) in enumerate(hana_tables, 1):
-            pkg, view, conn = _extract_hana_info(m_code)
+    # Build HTML for categories
+    sec_idx = 1
+    
+    for cat_name, cat_list in categories.items():
+        if not cat_list:
+            continue
+            
+        sec_id = f"sec1-{sec_idx}"
+        sidebar_items.append(f'<li><a href="#{sec_id}">1.{sec_idx} {cat_name}</a></li>')
+        if sec_idx > 1:
+            h += f'<hr>\n'
+        h += f'<h3 id="{sec_id}">1.{sec_idx} {cat_name} <a href="#{sec_id}" class="section-anchor">#</a></h3>\n'
+        h += "<table>\n<thead><tr><th>#</th><th>Table Name</th><th>Connection Type</th><th>Source Excerpt</th></tr></thead>\n<tbody>\n"
+        
+        for i, (tbl_name, conn_type, m_code) in enumerate(cat_list, 1):
+            # Try to extract HANA specifics if it's HANA
+            excerpt = m_code.split("\\n")[0].strip()[:80] + "..." if len(m_code) > 80 else m_code.strip()
+            if conn_type == "SAP HANA":
+                pkg, view, _ = _extract_hana_info(m_code)
+                excerpt = f"Package: {pkg} / View: {view}"
+                
             h += f'<tr><td>{i}</td><td><strong><a href="#sec2-tbl-{_safe_id(tbl_name)}">{_esc(tbl_name)}</a></strong></td>'
-            h += f'<td>{_code(pkg)}</td><td>{_code(view)}</td><td>{_esc(conn)}</td></tr>\n'
+            h += f'<td>{_esc(conn_type)}</td><td>{_code(excerpt)}</td></tr>\n'
         h += "</tbody></table>\n"
-    else:
-        h += "<p><em>No HANA views detected.</em></p>\n"
+        sec_idx += 1
 
-    # --- 1.2 Manual Tables ---
-    if manual_tables:
-        sec_id = "sec1-2"
-        sidebar_items.append(f'<li><a href="#{sec_id}">1.2 Manual Tables</a></li>')
-        h += f'<hr>\n<h3 id="{sec_id}">1.2 Manual / Hardcoded Tables <a href="#{sec_id}" class="section-anchor">#</a></h3>\n'
-        h += "<table>\n<thead><tr><th>#</th><th>Table</th><th>Type</th></tr></thead>\n<tbody>\n"
-        for i, (tbl_name, m_code) in enumerate(manual_tables, 1):
-            ttype = "Base64 encoded" if "Binary.Decompress" in m_code else "Inline M"
-            h += f'<tr><td>{i}</td><td><strong>{_esc(tbl_name)}</strong></td><td>{_esc(ttype)}</td></tr>\n'
-        h += "</tbody></table>\n"
-
-    # --- 1.3 Computed Tables ---
+    # Computed Tables
     if computed_tables:
-        sec_id = "sec1-3"
-        sidebar_items.append(f'<li><a href="#{sec_id}">1.3 Computed Tables</a></li>')
-        h += f'<hr>\n<h3 id="{sec_id}">1.3 Computed / Derived Tables <a href="#{sec_id}" class="section-anchor">#</a></h3>\n'
+        sec_id = f"sec1-{sec_idx}"
+        sidebar_items.append(f'<li><a href="#{sec_id}">1.{sec_idx} Computed Tables</a></li>')
+        if sec_idx > 1:
+            h += f'<hr>\n'
+        h += f'<h3 id="{sec_id}">1.{sec_idx} Computed / Derived Tables <a href="#{sec_id}" class="section-anchor">#</a></h3>\n'
         h += "<table>\n<thead><tr><th>#</th><th>Table</th><th>Source</th><th>Type</th></tr></thead>\n<tbody>\n"
         for i, (tbl_name, expr) in enumerate(computed_tables, 1):
             is_dax = tbl_name in dax_table_names
@@ -332,27 +353,36 @@ def build_data_sources(pq_df, dax_tables_df, m_params_df, include_system_tables=
             h += f'<tr><td>{i}</td><td><strong><a href="#sec2-tbl-{_safe_id(tbl_name)}">{_esc(tbl_name)}</a></strong></td>'
             h += f'<td>{_code(src)}</td><td>{_esc(ttype)}</td></tr>\n'
         h += "</tbody></table>\n"
+        sec_idx += 1
 
-    # --- 1.4 Parameters ---
+    # Parameters
     if real_params:
-        sec_id = "sec1-4"
-        sidebar_items.append(f'<li><a href="#{sec_id}">1.4 Parameters</a></li>')
-        h += f'<hr>\n<h3 id="{sec_id}">1.4 Parameters <a href="#{sec_id}" class="section-anchor">#</a></h3>\n'
+        sec_id = f"sec1-{sec_idx}"
+        sidebar_items.append(f'<li><a href="#{sec_id}">1.{sec_idx} Parameters</a></li>')
+        if sec_idx > 1:
+            h += f'<hr>\n'
+        h += f'<h3 id="{sec_id}">1.{sec_idx} Parameters <a href="#{sec_id}" class="section-anchor">#</a></h3>\n'
         h += "<table>\n<thead><tr><th>Parameter</th><th>Expression</th></tr></thead>\n<tbody>\n"
         for row in real_params:
             h += f'<tr><td>{_code(row["ParameterName"])}</td><td>{_code(str(row.get("Expression",""))[:150])}</td></tr>\n'
         h += "</tbody></table>\n"
+        sec_idx += 1
 
-    # --- 1.5 Helper Functions ---
+    # Helper Functions
     if helper_funcs:
-        sec_id = "sec1-5"
-        sidebar_items.append(f'<li><a href="#{sec_id}">1.5 Helper Functions</a></li>')
-        h += f'<hr>\n<h3 id="{sec_id}">1.5 Helper Functions <a href="#{sec_id}" class="section-anchor">#</a></h3>\n'
+        sec_id = f"sec1-{sec_idx}"
+        sidebar_items.append(f'<li><a href="#{sec_id}">1.{sec_idx} Helper Functions</a></li>')
+        if sec_idx > 1:
+            h += f'<hr>\n'
+        h += f'<h3 id="{sec_id}">1.{sec_idx} Helper Functions <a href="#{sec_id}" class="section-anchor">#</a></h3>\n'
         h += "<table>\n<thead><tr><th>Function</th><th>Description</th></tr></thead>\n<tbody>\n"
         for row in helper_funcs:
             desc = str(row.get("Description", "")) or "Custom M function"
             h += f'<tr><td>{_code(row["ParameterName"])}</td><td>{_esc(desc)}</td></tr>\n'
         h += "</tbody></table>\n"
+
+    if sec_idx == 1:
+        h += "<p><em>No data sources detected.</em></p>\n"
 
     sidebar = f'<li><a href="#sec1">1. Data Sources</a><ul>{"".join(sidebar_items)}</ul></li>'
     section = f'<h2 id="sec1">1. Data Sources <a href="#sec1" class="section-anchor">#</a></h2>\n{h}'
