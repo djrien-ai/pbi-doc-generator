@@ -1,37 +1,37 @@
 # Roadmap
 
-## v0.2 Current Release ✅
+## v0.5 Current Release ✅
 
-### Measure Lineage Diagram
-Parse DAX expressions to trace **measure → measure** and **measure → column** dependencies, then visualize them as an interactive Mermaid.js dependency graph. This gives instant insight into which measures build on top of each other and which columns they rely on.
+### Native DAX-to-English Translation
+A custom shape-aware parser that auto-translates complex DAX measures into plain, readable English sentences. It understands variables (`VAR`/`RETURN`), iterators (`SUMX`, `FILTER`), and nested `CALCULATE` blocks, formatting them automatically into clean bullet points.
 
-### Full TMDL / PBIP Support
-Support for **Power BI Project files** (`.pbip`) and their `.SemanticModel` folders. Parses the full TMDL semantic model natively (tables, Power Query/M, measures, calculated columns, relationships, and calculation groups).
+### Report Page & Visual Mapping
+Parses the complete visual layout of the report. It extracts all hidden and visible pages, identifies exactly which visuals use which fields/measures, and maps this directly into the DAX measure documentation (e.g. "Used in X Visuals").
 
-### Calculation Groups
-Extract calculation group items and their expressions from the data model (currently TMDL only). Useful for models that use calculation groups for time intelligence or other dynamic calculations.
+## Planned Features 🚧
 
-### English UI
-The GUI has been switched from Dutch to English to make the tool accessible to a wider audience.
-
-### Hide System Tables
-Auto-generated Power BI tables (`LocalDateTable_*`, `DateTableTemplate_*`, `RowNumber-*`) are hidden by default. Optional checkbox to include them.
-
-### Multi-threaded XPrs9 Support
-Large PBIX files using multithreaded compression now decompress correctly.
-
-## v0.1 Previous Release ✅
-
-- Extract data documentation from `.pbix` files
-- Data sources, Power Query, relationships, DAX measures, calculated columns
-- Interactive relationship diagram (Mermaid.js)
-- Standalone `.exe` — no installation required
-- GitHub-style HTML output
-
-## v0.3 Planned 🚧
+### Excel (.xlsx) Auto-Documentation
+*   **Power Query (M-Code):** Extracting Power Query directly from Excel files. Excel wraps the exact same `DataMashup` container as Power BI, so full extraction is highly feasible and coming soon.
+*   **Data Model (Power Pivot / DAX):** Investigating extracting the Excel Data Model by unpacking the internal Analysis Services Backup File (`.abf` cabinet format) from the Excel ZIP structure.
 
 ### Output Format Choice
 Let users choose between **HTML** (current default) or **Markdown** output. Markdown makes it easy to drop documentation straight into a Git repo, wiki, or Confluence page.
+
+---
+
+## Previous Releases ✅
+
+### v0.2
+*   **Measure Lineage Diagram:** Interactive Mermaid.js dependency graph parsing DAX expressions to trace **measure → measure** and **measure → column** dependencies.
+*   **Full TMDL / PBIP Support:** Parses the full TMDL semantic model natively directly from `.pbip` and `.SemanticModel` folders.
+*   **Calculation Groups:** Extract calculation group items and expressions (TMDL).
+*   **Multi-threaded XPrs9 Support:** Fixes decompression for large PBIX files.
+
+### v0.1
+*   Extract data documentation from `.pbix` files.
+*   Data sources, Power Query, relationships, DAX measures, calculated columns.
+*   Standalone `.exe` — no installation required.
+*   GitHub-style HTML output.
 
 ---
 
