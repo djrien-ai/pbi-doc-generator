@@ -19,12 +19,13 @@ Drop a `.pbix` file, a `.pbip` project, or a `.SemanticModel` folder → get a *
 | **Measure Lineage** | Measure→measure and measure→column Mermaid.js dependency graph |
 | **DAX Calculated Columns** | Calculated columns per table |
 | **Calculation Groups** | Calculation groups and items (for TMDL models) |
-| **Observations** | Automatically detected points of attention |
+| **Observations** | Hardcoded connections, bidirectional filters, unused measures, duplicate DAX |
+| **Report Pages & Visuals** | Per-page visual inventory with semantic data-role labels (X-axis, Y-axis, Legend, …) |
 
 ## Quick Start
 
 ### Portable .exe (no install)
-[Download from GitHub Releases (v0.3-beta)](https://github.com/djrien-ai/pbi-doc-generator/releases/tag/v0.3-beta)
+[Download from GitHub Releases (v0.4)](https://github.com/djrien-ai/pbi-doc-generator/releases/tag/v0.4)
 
 ### To run it without an .exe
 Install Python 3.10+ from python.org (I'm sure you already have that).
@@ -80,4 +81,15 @@ MIT — see [LICENSE](LICENSE)
 
 ## Author
 
-**Rien Scheerlinck** — [GitHub](https://github.com/djrien-ai) · [Email](mailto:dj.rien@gmail.com)
+**Rien Scheerlinck** — [GitHub](https://github.com/djrien-ai) · [LinkedIn](https://www.linkedin.com/in/rienscheerlinck/) · [Email](mailto:dj.rien@gmail.com)
+
+## What's New in v0.4
+
+- **Report Pages & Visuals** — full visual inventory per page with semantic data-role labels
+- **Noise filter** — technical cards (!-prefix, ServerString, etc.) hidden from functional count
+- **Observations** — unused measures and duplicate DAX detection
+- **No horizontal scroll** — code, tables, and diagrams wrap within page width
+- **Full DAX/M** — no truncation, all expressions shown in full
+- **Binary payload detection** — inline tables shown as `[binary payload omitted]`
+- **.Report folder matching** — correct matching when multiple .pbip files share a directory
+- **Clickable links** — LinkedIn and GitHub links in the GUI footer
