@@ -2792,8 +2792,8 @@ graph LR
     Total_Impressions -.-> Total_Impression
     Total_Market_Spent --> Cost_Per_Click
     Total_Clicks --> Cost_Per_Click
-    Total_Market_Spent --> Cost_Per_Impression
     Total_Impression --> Cost_Per_Impression
+    Total_Market_Spent --> Cost_Per_Impression
     Clicks -.-> Click_Through_Rate
     Total_Impressions -.-> Click_Through_Rate
     Clicks -.-> Conversion__
@@ -2817,8 +2817,8 @@ graph LR
     Leads -.-> Total_Leads
     Total_Market_Spent --> Cost_Per_Lead
     Total_Leads --> Cost_Per_Lead
-    Total_Cost --> Cost_Per_Mille
     Total_Impression --> Cost_Per_Mille
+    Total_Cost --> Cost_Per_Mille
     Lead_Pipeline -.-> Lead_Pipeline_Count
     Total_Revenue --> Profit__
     Profit --> Profit__
@@ -2877,7 +2877,7 @@ graph LR
 <p>Filters: <code>Customer_Type</code>, <code>Campaign</code>, <code>HierarchyLevel(Year)</code>, <code>Parameter</code></p>
 <ul>
 <li><strong>Donut chart</strong>
-<br><span style="color:var(--fg-muted);">Value: Ad, Profit (measure)</span>
+<br><span style="color:var(--fg-muted);">X-axis: Ad &middot; Y-axis: Profit (measure)</span>
 </li>
 <li><strong>Card</strong>
 <br><span style="color:var(--fg-muted);">Value: Total Spendings (measure)</span>
@@ -2889,16 +2889,16 @@ graph LR
 <br><span style="color:var(--fg-muted);">Value: Total Revenue (measure)</span>
 </li>
 <li><strong>Donut chart</strong>
-<br><span style="color:var(--fg-muted);">Value: Ad, Total Leads (measure)</span>
+<br><span style="color:var(--fg-muted);">X-axis: Ad &middot; Y-axis: Total Leads (measure)</span>
 </li>
 <li><strong>Clustered bar chart</strong>
-<br><span style="color:var(--fg-muted);">Value: Ad, Total Impression (measure), Total Clicks (measure)</span>
+<br><span style="color:var(--fg-muted);">X-axis: Ad &middot; Y-axis: Total Impression (measure), Total Clicks (measure)</span>
 </li>
 <li><strong>Line chart</strong>
-<br><span style="color:var(--fg-muted);">Value: Week Day, HierarchyLevel(Quarter), HierarchyLevel(Month), Profit (measure)</span>
+<br><span style="color:var(--fg-muted);">X-axis: Week Day, HierarchyLevel(Quarter), HierarchyLevel(Month) &middot; Y-axis: Profit (measure)</span>
 </li>
 <li><strong>Clustered column chart</strong>
-<br><span style="color:var(--fg-muted);">Value: Ad, Total Revenue (measure), Total Spendings (measure)</span>
+<br><span style="color:var(--fg-muted);">X-axis: Ad &middot; Y-axis: Total Revenue (measure), Total Spendings (measure)</span>
 </li>
 </ul>
 <details><summary>+ 10 technical objects (10 shapes/buttons)</summary>
@@ -2919,16 +2919,16 @@ graph LR
 <p>Filters: <code>Parameter</code>, <code>Parameter 2</code>, <code>HierarchyLevel(Year)</code>, <code>Brand</code>, <code>Customer_Type</code>, <code>Region</code></p>
 <ul>
 <li><strong>Bar chart</strong>
-<br><span style="color:var(--fg-muted);">Value: Campaign, Total Impression (measure)</span>
+<br><span style="color:var(--fg-muted);">X-axis: Campaign &middot; Y-axis: Total Impression (measure)</span>
 </li>
 <li><strong>Clustered column chart</strong>
-<br><span style="color:var(--fg-muted);">Value: Campaign, Total Clicks (measure)</span>
+<br><span style="color:var(--fg-muted);">X-axis: Campaign &middot; Y-axis: Total Clicks (measure)</span>
 </li>
 <li><strong>Donut chart</strong>
-<br><span style="color:var(--fg-muted);">Value: Total Conversion (measure), Promotion_Type</span>
+<br><span style="color:var(--fg-muted);">Y-axis: Total Conversion (measure) &middot; X-axis: Promotion_Type</span>
 </li>
 <li><strong>Line chart</strong>
-<br><span style="color:var(--fg-muted);">Value: Week Day, HierarchyLevel(Quarter), HierarchyLevel(Month), Total Impression (measure)</span>
+<br><span style="color:var(--fg-muted);">X-axis: Week Day, HierarchyLevel(Quarter), HierarchyLevel(Month) &middot; Y-axis: Total Impression (measure)</span>
 </li>
 <li><strong>cardVisual</strong>
 <br><span style="color:var(--fg-muted);">Value: Total Conversion (measure), Conversion % (measure), Total Revenue (measure), Cost Per Mille (measure)</span>
@@ -2952,22 +2952,22 @@ graph LR
 <p>Filters: <code>Parameter</code>, <code>HierarchyLevel(Year)</code>, <code>Traffic_Source</code>, <code>Customer_Type</code></p>
 <ul>
 <li><strong>Clustered column chart</strong>
-<br><span style="color:var(--fg-muted);">Value: Customer_Type, Total Clicks (measure)</span>
+<br><span style="color:var(--fg-muted);">X-axis: Customer_Type &middot; Y-axis: Total Clicks (measure)</span>
 </li>
 <li><strong>Donut chart</strong>
-<br><span style="color:var(--fg-muted);">Value: Customer_Type, AVG Revenue Per Customer (measure)</span>
+<br><span style="color:var(--fg-muted);">X-axis: Customer_Type &middot; Y-axis: AVG Revenue Per Customer (measure)</span>
 </li>
 <li><strong>Donut chart</strong>
-<br><span style="color:var(--fg-muted);">Value: Customer_Type, Total Leads (measure)</span>
+<br><span style="color:var(--fg-muted);">X-axis: Customer_Type &middot; Y-axis: Total Leads (measure)</span>
 </li>
 <li><strong>Clustered column chart</strong>
-<br><span style="color:var(--fg-muted);">Value: Lead_Source, Total Clicks (measure)</span>
+<br><span style="color:var(--fg-muted);">X-axis: Lead_Source &middot; Y-axis: Total Clicks (measure)</span>
 </li>
 <li><strong>Clustered bar chart</strong> — CAC by Customer Type
-<br><span style="color:var(--fg-muted);">Value: Customer_Type, Customer Acquisition Cost (measure)</span>
+<br><span style="color:var(--fg-muted);">X-axis: Customer_Type &middot; Y-axis: Customer Acquisition Cost (measure)</span>
 </li>
 <li><strong>Line chart</strong>
-<br><span style="color:var(--fg-muted);">Value: Week Day, Customer Acquisition Cost (measure), Profit % (measure), HierarchyLevel(Quarter), HierarchyLevel(Month)</span>
+<br><span style="color:var(--fg-muted);">X-axis: Week Day, HierarchyLevel(Quarter), HierarchyLevel(Month) &middot; Y-axis: Customer Acquisition Cost (measure) &middot; Y-axis (secondary): Profit % (measure)</span>
 </li>
 <li><strong>cardVisual</strong>
 <br><span style="color:var(--fg-muted);">Value: Cost Per Click (measure), AVG Revenue Per Customer (measure), Customer Acquisition Cost (measure), Click Through Rate (measure)</span>
@@ -2992,22 +2992,22 @@ graph LR
 <p>Filters: <code>Parameter</code>, <code>Parameter 2</code>, <code>HierarchyLevel(Year)</code>, <code>Region</code>, <code>State</code></p>
 <ul>
 <li><strong>Donut chart</strong>
-<br><span style="color:var(--fg-muted);">Value: Brand, Total Clicks (measure)</span>
+<br><span style="color:var(--fg-muted);">X-axis: Brand &middot; Y-axis: Total Clicks (measure)</span>
 </li>
 <li><strong>Clustered bar chart</strong>
-<br><span style="color:var(--fg-muted);">Value: Traffic_Source, Total Clicks (measure)</span>
+<br><span style="color:var(--fg-muted);">X-axis: Traffic_Source &middot; Y-axis: Total Clicks (measure)</span>
 </li>
 <li><strong>Line chart</strong>
-<br><span style="color:var(--fg-muted);">Value: Conversion % (measure), HierarchyLevel(Quarter), HierarchyLevel(Month), Week Day</span>
+<br><span style="color:var(--fg-muted);">Y-axis: Conversion % (measure) &middot; X-axis: HierarchyLevel(Quarter), HierarchyLevel(Month), Week Day</span>
 </li>
 <li><strong>Donut chart</strong>
-<br><span style="color:var(--fg-muted);">Value: Conversion % (measure), Region</span>
+<br><span style="color:var(--fg-muted);">Y-axis: Conversion % (measure) &middot; X-axis: Region</span>
 </li>
 <li><strong>Donut chart</strong>
-<br><span style="color:var(--fg-muted);">Value: Brand, Total Impression (measure)</span>
+<br><span style="color:var(--fg-muted);">X-axis: Brand &middot; Y-axis: Total Impression (measure)</span>
 </li>
 <li><strong>Line chart</strong>
-<br><span style="color:var(--fg-muted);">Value: Brand, HierarchyLevel(Quarter), HierarchyLevel(Month), Week Day, Total Impression (measure)</span>
+<br><span style="color:var(--fg-muted);">Legend: Brand &middot; X-axis: HierarchyLevel(Quarter), HierarchyLevel(Month), Week Day &middot; Y-axis: Total Impression (measure)</span>
 </li>
 <li><strong>cardVisual</strong>
 <br><span style="color:var(--fg-muted);">Value: Total Spendings (measure), Cost Per Lead (measure), Cost Per Click (measure), Cost Per Impression (measure), Cost Per Mille (measure)</span>
@@ -3031,19 +3031,19 @@ graph LR
 <p>Filters: <code>Parameter</code>, <code>Parameter 2</code></p>
 <ul>
 <li><strong>Clustered column chart</strong>
-<br><span style="color:var(--fg-muted);">Value: Traffic_Source, Total Clicks (measure)</span>
+<br><span style="color:var(--fg-muted);">X-axis: Traffic_Source &middot; Y-axis: Total Clicks (measure)</span>
 </li>
 <li><strong>Clustered column chart</strong>
-<br><span style="color:var(--fg-muted);">Value: Traffic_Source, Total Impression (measure)</span>
+<br><span style="color:var(--fg-muted);">X-axis: Traffic_Source &middot; Y-axis: Total Impression (measure)</span>
 </li>
 <li><strong>Line chart</strong>
-<br><span style="color:var(--fg-muted);">Value: Week Day, HierarchyLevel(Quarter), HierarchyLevel(Month), Total Impression (measure)</span>
+<br><span style="color:var(--fg-muted);">X-axis: Week Day, HierarchyLevel(Quarter), HierarchyLevel(Month) &middot; Y-axis: Total Impression (measure)</span>
 </li>
 <li><strong>funnel</strong> — Campaign Funnel
-<br><span style="color:var(--fg-muted);">Value: Total Impression (measure), Total Clicks (measure), Total Conversion (measure), Total Leads (measure), Total Visits (measure)</span>
+<br><span style="color:var(--fg-muted);">Y-axis: Total Impression (measure), Total Clicks (measure), Total Conversion (measure), Total Leads (measure), Total Visits (measure)</span>
 </li>
 <li><strong>ChicletSlicer1448559807354</strong>
-<br><span style="color:var(--fg-muted);">Value: URL, Traffic_Source</span>
+<br><span style="color:var(--fg-muted);">Value: URL &middot; X-axis: Traffic_Source</span>
 </li>
 </ul>
 <details><summary>+ 10 technical objects (10 shapes/buttons)</summary>
@@ -3060,9 +3060,19 @@ graph LR
 <li>image: image</li>
 </ul></details>
 <h3 id="sec-page-7">8.7 Page 1 <a href="#sec-page-7" class="section-anchor">#</a></h3>
-<p>0 functional visuals.</p>
+<p>1 functional visuals.</p>
+<ul>
+<li><strong>Decomposition tree</strong>
+<br><span style="color:var(--fg-muted);">Value: Total Spendings (measure)</span>
+</li>
+</ul>
 <h3 id="sec-page-8">8.8 Page 2 <a href="#sec-page-8" class="section-anchor">#</a></h3>
-<p>0 functional visuals.</p>
+<p>1 functional visuals.</p>
+<ul>
+<li><strong>Table</strong>
+<br><span style="color:var(--fg-muted);">Columns (4): a, HierarchyLevel(Year), HierarchyLevel(Quarter), Total Clicks</span>
+</li>
+</ul>
 
     </main>
 

@@ -83,9 +83,20 @@ def _parse_layout_data(data):
                         for sel in dt['selects']:
                             name = sel.get('displayName', '')
                             expr_parsed = _parse_expr(sel.get('expr', {}))
-                            fields.append(f"{name} -> {expr_parsed}")
+                            # Get the role/well from the select
+                            roles = sel.get('roles', {})
+                            role = list(roles.keys())[0] if roles else 'Values'
+                            fields.append(f"{role}: {name} -> {expr_parsed}")
                 except:
                     pass
+            
+            # Fallback: try prototypeQuery in singleVisual config
+            if not fields and 'singleVisual' in config:
+                pq = config['singleVisual'].get('prototypeQuery', {})
+                for sel in pq.get('Select', []):
+                    name = sel.get('Name', sel.get('NativeReferenceName', ''))
+                    expr_parsed = _parse_expr(sel)
+                    fields.append(f"Values: {name} -> {expr_parsed}")
                     
             filters = []
             if 'filters' in vc:
