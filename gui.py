@@ -37,7 +37,7 @@ class App(tk.Tk):
     def __init__(self):
         super().__init__()
 
-        self.title("PBI Metadata Extractor")
+        self.title("PBI Documentation Tool")
         self.configure(bg=BG)
         self.resizable(False, False)
 
@@ -88,7 +88,7 @@ class App(tk.Tk):
         # ── title ──────────────────────────────────────────────
         title_lbl = ttk.Label(
             container,
-            text="PBI Data Documentation Generator",
+            text="PBI Documentation Tool",
             font=("Segoe UI", 18, "bold"),
             foreground=FG,
             anchor="center",
@@ -153,7 +153,7 @@ class App(tk.Tk):
         footer_links = ttk.Frame(container)
         footer_links.pack(side="bottom", pady=(4, 0))
 
-        lbl_v = ttk.Label(footer_links, text="v0.4  |", font=("Segoe UI", 8), foreground=FG_DIM)
+        lbl_v = ttk.Label(footer_links, text="v0.5  |", font=("Segoe UI", 8), foreground=FG_DIM)
         lbl_v.pack(side="left")
 
         lbl_dev = ttk.Label(footer_links, text="  Developed by", font=("Segoe UI", 8), foreground=FG_DIM)
