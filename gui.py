@@ -12,6 +12,13 @@ import webbrowser
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
+try:
+    import pyi_splash
+    pyi_splash.close()
+except ImportError:
+    pass
+
+
 
 # ── colour palette ──────────────────────────────────────────────
 BG           = "#1e2328"

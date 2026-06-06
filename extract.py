@@ -1061,10 +1061,31 @@ def build_relationships(rel_df, include_system_tables=False):
     return section, sidebar
 
 
-def build_measures(measures_df, include_system_tables=False):
+def build_measures(measures_df, descriptions_dict=None, include_system_tables=False, pages=None):
     """Section 4: DAX Measures grouped by table."""
     h = ""
     sidebar_items = []
+
+    # Pre-process visual usages
+    usage_map = {}
+    if pages and not isinstance(pages, str):
+        for page in pages:
+            page_name = page.get('name', 'Unknown')
+            for v in page.get('visuals', []):
+                vtitle = v.get('title', '')
+                vtype = v.get('type', '')
+                label = _readable_type(vtype)
+                
+                vis_desc = f"{label}"
+                if vtitle:
+                    vis_desc += f' "{_esc(vtitle)}"'
+                    
+                for f in v.get('fields', []):
+                    clean = _clean_field_name(f).lower()
+                    usage_map.setdefault(clean, set()).add((page_name, vis_desc))
+                    
+    for k in usage_map:
+        usage_map[k] = sorted(list(usage_map[k]))
 
     if measures_df is None or len(measures_df) == 0:
         h += "<p><em>No measures found.</em></p>\n"
@@ -1090,6 +1111,24 @@ def build_measures(measures_df, include_system_tables=False):
             expr = str(row.get('Expression', '')).strip()
             h += f"<h4>{_esc(row['Name'])}</h4>\n"
             h += f"<pre><code>{_esc(expr)}</code></pre>\n"
+            
+            try:
+                from dax_parser import explain_dax
+                explanation = explain_dax(expr, descriptions_dict)
+                if explanation:
+                    h += f'<div class="dax-explanation"><strong>💡 Auto-Explanation (Beta):</strong><br/><br/>{explanation}</div>\n'
+            except Exception:
+                pass
+                
+            usages = usage_map.get(row['Name'].lower(), [])
+            if usages:
+                h += f'  <div style="margin-top: 15px;">\n'
+                h += f'    <span style="background: var(--accent); color: #fff; padding: 2px 8px; border-radius: 12px; font-size: 12px; font-weight: 600;">Used in {len(usages)} Visuals</span>\n'
+                h += f'    <ul style="font-size: 13px; color: var(--fg-muted); margin-top: 5px; padding-left: 20px;">\n'
+                for page_name, vis_desc in usages:
+                    h += f'      <li><strong>{_esc(page_name)}</strong> &mdash; {vis_desc}</li>\n'
+                h += f'    </ul>\n'
+                h += f'  </div>\n'
 
         group_idx += 1
 
@@ -1277,7 +1316,7 @@ def _parse_dax_dependencies(expression, measure_names_lower, column_names_lower)
                 
     return deps
 
-def build_measure_lineage(measures_df, all_columns, include_system_tables=False):
+def build_measure_lineage(measures_df, all_columns, include_system_tables=False, pages=None):
     """Section 7: Measure Lineage Diagram."""
     h = ""
     sidebar_items = []
@@ -1290,6 +1329,28 @@ def build_measure_lineage(measures_df, all_columns, include_system_tables=False)
         
     if not include_system_tables:
         measures_df = measures_df[~measures_df['TableName'].apply(_is_system_table)]
+
+    # Pre-process visual usages
+    usage_map = {}
+    if pages and not isinstance(pages, str):
+        for page in pages:
+            page_name = page.get('name', 'Unknown')
+            for v in page.get('visuals', []):
+                vtitle = v.get('title', '')
+                vtype = v.get('type', '')
+                label = _readable_type(vtype)
+                
+                vis_desc = f"{label}"
+                if vtitle:
+                    vis_desc += f' "{_esc(vtitle)}"'
+                    
+                for f in v.get('fields', []):
+                    clean = _clean_field_name(f).lower()
+                    usage_map.setdefault(clean, set()).add((page_name, vis_desc))
+                    
+    # Convert sets to sorted lists
+    for k in usage_map:
+        usage_map[k] = sorted(list(usage_map[k]))
 
     measure_names_lower = {str(x).lower() for x in measures_df['Name'].dropna()}
     column_names_lower = {str(x).lower() for x in all_columns}
@@ -1410,7 +1471,31 @@ def extract_documentation(input_path, output_path=None, include_system_tables=Fa
     s, sb = build_relationships(model.relationships, include_system_tables=include_system_tables)
     sections.append(s); sidebar_entries.append(sb)
 
-    s, sb = build_measures(model.dax_measures, include_system_tables=include_system_tables)
+    # Build dictionary of descriptions for the DAX Explainer
+    descriptions_dict = {}
+    if getattr(model, 'dax_columns', None) is not None:
+        for _, row in model.dax_columns.iterrows():
+            tbl = str(row.get('TableName', row.get('Table Name', '')))
+            col = str(row.get('Name', row.get('Column Name', '')))
+            desc = str(row.get('Description', '')).strip()
+            if desc and desc.lower() != 'nan':
+                descriptions_dict[f"{tbl}[{col}]"] = desc
+                descriptions_dict[f"[{col}]"] = desc
+                descriptions_dict[col] = desc
+
+    if getattr(model, 'dax_measures', None) is not None:
+        for _, row in model.dax_measures.iterrows():
+            tbl = str(row.get('TableName', row.get('Table Name', '')))
+            col = str(row.get('Name', row.get('Measure Name', '')))
+            desc = str(row.get('Description', '')).strip()
+            if desc and desc.lower() != 'nan':
+                descriptions_dict[f"{tbl}[{col}]"] = desc
+                descriptions_dict[f"[{col}]"] = desc
+                descriptions_dict[col] = desc
+                
+    descriptions = {str(k).lower(): str(v) for k, v in descriptions_dict.items()}
+
+    s, sb = build_measures(model.dax_measures, descriptions, include_system_tables=include_system_tables, pages=pages)
     sections.append(s); sidebar_entries.append(sb)
 
     s, sb = build_calculated_columns(model.dax_columns, include_system_tables=include_system_tables)
