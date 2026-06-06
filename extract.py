@@ -259,14 +259,21 @@ def extract_report_pages_pbix(pbix_path):
     """Extract report pages from PBIX."""
     try:
         with zipfile.ZipFile(pbix_path) as z:
-            if 'Report/Layout' not in z.namelist():
-                return []
-            layout_bytes = z.read('Report/Layout')
-            layout_str = layout_bytes.decode('utf-16-le', errors='ignore').lstrip('\ufeff')
-            if layout_str and layout_str[0] != '{':
-                layout_str = layout_bytes.decode('utf-8', errors='ignore').lstrip('\ufeff')
-            data = json.loads(layout_str)
-            return _parse_layout_data(data)
+            # Classic PBIX: Report/Layout (UTF-16-LE JSON)
+            if 'Report/Layout' in z.namelist():
+                layout_bytes = z.read('Report/Layout')
+                layout_str = layout_bytes.decode('utf-16-le', errors='ignore').lstrip('\ufeff')
+                if layout_str and layout_str[0] != '{':
+                    layout_str = layout_bytes.decode('utf-8', errors='ignore').lstrip('\ufeff')
+                data = json.loads(layout_str)
+                return _parse_layout_data(data)
+            
+            # Newer PBIX: PBIR format inside zip (Report/definition/pages/*)
+            page_files = [p for p in z.namelist() if p.startswith('Report/definition/pages/') and p.endswith('/page.json')]
+            if page_files:
+                return extract_report_pages_pbir(z)
+            
+            return []
     except Exception as e:
         print(f"Warning: Could not extract report pages from PBIX: {e}")
         import traceback
