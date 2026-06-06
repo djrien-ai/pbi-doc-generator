@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>sample — Data Documentation</title>
+<title>OTIF - Supplier PO's — Data Documentation</title>
 <script>
 (function(ZM,Dg){typeof exports=="object"&&typeof module<"u"?module.exports=Dg():typeof define=="function"&&define.amd?define(Dg):(ZM=typeof globalThis<"u"?globalThis:ZM||self,ZM.mermaid=Dg())})(this,function(){var dYe,gYe;"use strict";function ZM(i){for(var a=[],u=1;u<arguments.length;u++)a[u-1]=arguments[u];var d=Array.from(typeof i=="string"?[i]:i);d[d.length-1]=d[d.length-1].replace(/\r?\n([\t ]*)$/,"");var p=d.reduce(function(y,E){var _=E.match(/\n([\t ]+|(?!\s).)/g);return _?y.concat(_.map(function(A){var P,R;return(R=(P=A.match(/[\t ]/g))===null||P===void 0?void 0:P.length)!==null&&R!==void 0?R:0})):y},[]);if(p.length){var v=new RegExp(`
 [	 ]{`+Math.min.apply(Math,p)+"}","g");d=d.map(function(y){return y.replace(v,`
@@ -2236,6 +2236,8 @@ code {
     background: var(--code-bg);
     padding: 2px 6px;
     border-radius: 4px;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
 }
 
 pre {
@@ -2243,7 +2245,9 @@ pre {
     border: 1px solid var(--border-light);
     border-radius: 6px;
     padding: 16px;
-    overflow-x: auto;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    overflow-x: hidden;
     margin: 0 0 16px;
 }
 
@@ -2251,6 +2255,8 @@ pre code {
     background: none;
     padding: 0;
     font-size: 13px;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
 }
 
 /* ── Tables ────────────────────────────────────────────────────── */
@@ -2259,6 +2265,7 @@ table {
     border-collapse: collapse;
     margin: 0 0 16px;
     font-size: 14px;
+    table-layout: fixed;
 }
 
 th, td {
@@ -2266,12 +2273,13 @@ th, td {
     padding: 8px 12px;
     text-align: left;
     vertical-align: top;
+    white-space: normal;
+    overflow-wrap: anywhere;
 }
 
 th {
     background: var(--code-bg);
     font-weight: 600;
-    white-space: nowrap;
 }
 
 tr:nth-child(even) td {
@@ -2356,6 +2364,11 @@ li {
     text-align: center;
 }
 
+.mermaid svg {
+    max-width: 100%;
+    height: auto;
+}
+
 /* ── Misc ──────────────────────────────────────────────────────── */
 .subtitle {
     color: var(--fg-muted);
@@ -2430,619 +2443,1484 @@ strong {
     <!-- Sidebar navigation -->
     <nav class="sidebar">
         <h2>Contents</h2>
-        <li><a href="#sec1">1. Data Sources</a><ul><li><a href="#sec1-1">1.1 File</a></li><li><a href="#sec1-2">1.2 Computed Tables</a></li></ul></li>
-<li><a href="#sec2">2. Power Query Transformations</a><ul><li><a href="#sec2-tbl-Association">2.1 Association</a></li><li><a href="#sec2-tbl-Sales">2.2 Sales</a></li><li><a href="#sec2-tbl-Store">2.3 Store</a></li><li><a href="#sec2-tbl-Calendar">2.4 Calendar</a></li><li><a href="#sec2-tbl-Associated_Product">2.5 Associated Product</a></li><li><a href="#sec2-tbl-Analysis_DAX">2.6 Analysis DAX</a></li><li><a href="#sec2-tbl-Product">2.7 Product</a></li><li><a href="#sec2-tbl-Design_DAX">2.8 Design DAX</a></li><li><a href="#sec2-tbl-Customer">2.9 Customer</a></li><li><a href="#sec2-tbl-Issues_and_Promotions">2.10 Issues and Promotions</a></li><li><a href="#sec2-tbl-Age">2.11 Age</a></li><li><a href="#sec2-tbl-STable">2.12 STable</a></li><li><a href="#sec2-tbl-Tooltip_Info">2.13 Tooltip Info</a></li><li><a href="#sec2-tbl-Tooltip_Info2">2.14 Tooltip Info2</a></li><li><a href="#sec2-tbl-Details">2.15 Details</a></li><li><a href="#sec2-tbl-__Return_Rate">2.16 % Return Rate</a></li></ul></li>
+        <li><a href="#sec1">1. Data Sources</a><ul><li><a href="#sec1-1">1.1 File</a></li><li><a href="#sec1-2">1.2 Database</a></li><li><a href="#sec1-3">1.3 Other</a></li><li><a href="#sec1-4">1.4 Computed Tables</a></li><li><a href="#sec1-5">1.5 Helper Functions</a></li></ul></li>
+<li><a href="#sec2">2. Power Query Transformations</a><ul><li><a href="#sec2-tbl-CESTupdateTime">2.1 CESTupdateTime</a></li><li><a href="#sec2-tbl-DMContractConsumption">2.2 DMContractConsumption</a></li><li><a href="#sec2-tbl-DateConfirmed">2.3 DateConfirmed</a></li><li><a href="#sec2-tbl-DateDelivered">2.4 DateDelivered</a></li><li><a href="#sec2-tbl-DateRequired">2.5 DateRequired</a></li><li><a href="#sec2-tbl-DeliveryStatus">2.6 DeliveryStatus</a></li><li><a href="#sec2-tbl-DimDate">2.7 DimDate</a></li><li><a href="#sec2-tbl-DimMaterial">2.8 DimMaterial</a></li><li><a href="#sec2-tbl-DimMaterialAtPlantLevel">2.9 DimMaterialAtPlantLevel</a></li><li><a href="#sec2-tbl-DimPlant">2.10 DimPlant</a></li><li><a href="#sec2-tbl-DimPurchaseContractHeader">2.11 DimPurchaseContractHeader</a></li><li><a href="#sec2-tbl-DimPurchaseContractItem">2.12 DimPurchaseContractItem</a></li><li><a href="#sec2-tbl-HanaServer">2.13 HanaServer</a></li><li><a href="#sec2-tbl-ISO_Calendar">2.14 ISO Calendar</a></li><li><a href="#sec2-tbl-ReceptionStatus">2.15 ReceptionStatus</a></li><li><a href="#sec2-tbl-SupplierDeliveriesOnTime">2.16 SupplierDeliveriesOnTime</a></li><li><a href="#sec2-tbl-TextValueToday">2.17 TextValueToday</a></li><li><a href="#sec2-tbl-POLines_Filter">2.18 POLines Filter</a></li><li><a href="#sec2-tbl-Spent_Filter">2.19 Spent Filter</a></li><li><a href="#sec2-tbl-Vendor_PO_Lines">2.20 Vendor PO Lines</a></li><li><a href="#sec2-tbl-_Measures">2.21 _Measures</a></li></ul></li>
 <li><a href="#sec3">3. Relationships</a></li>
-<li><a href="#sec4">4. DAX Measures</a><ul><li><a href="#sec4-1">4.1 % Return Rate</a></li><li><a href="#sec4-2">4.2 Analysis DAX</a></li><li><a href="#sec4-3">4.3 Design DAX</a></li><li><a href="#sec4-4">4.4 Details</a></li></ul></li>
-<li><a href="#sec5">5. DAX Calculated Columns</a><ul><li><a href="#sec5-1">5.1 Associated Product</a></li><li><a href="#sec5-2">5.2 Calendar</a></li><li><a href="#sec5-3">5.3 Tooltip Info</a></li></ul></li>
-<li><a href="#sec6">6. Observations</a></li>
-<li><a href="#sec7">7. Measure Lineage</a></li>
+<li><a href="#sec4">4. DAX Measures</a><ul><li><a href="#sec4-1">4.1 _Measures</a></li></ul></li>
+<li><a href="#sec5">5. DAX Calculated Columns</a><ul><li><a href="#sec5-1">5.1 CESTupdateTime</a></li><li><a href="#sec5-2">5.2 DimMaterial</a></li><li><a href="#sec5-3">5.3 HanaServer</a></li><li><a href="#sec5-4">5.4 SupplierDeliveriesOnTime</a></li></ul></li>
+<li><a href="#sec6">Observations</a></li>
+<li><a href="#sec7">Measure Lineage</a></li>
+<li><a href="#sec-pages">8. Report Pages</a><ul><li><a href="#sec-page-1">8.1 Operational Report 2-steps Reception Info</a></li><li><a href="#sec-page-2">8.2 2-steps Reception Time KPI Info</a></li><li><a href="#sec-page-3">8.3 Drill PO Details</a></li><li><a href="#sec-page-4">8.4 2-steps Receipt Color Info</a></li><li><a href="#sec-page-5">8.5 Operational Report 2-steps reception</a></li><li><a href="#sec-page-6">8.6 2-steps GR - Reception Time KPI</a></li><li><a href="#sec-page-7">8.7 Deviation from Contractual Delivery Time</a></li><li><a href="#sec-page-8">8.8 Deviation Info</a></li><li><a href="#sec-page-9">8.9 Detail Info (Confirmed)</a></li><li><a href="#sec-page-10">8.10 Duplicate of OTIF by Vendor</a></li><li><a href="#sec-page-11">8.11 EOTIF by Vendor Info</a></li><li><a href="#sec-page-12">8.12 Service Level Info (Confirmed)</a></li><li><a href="#sec-page-13">8.13 Confirmed Delivery</a></li><li><a href="#sec-page-14">8.14 Detail Info</a></li><li><a href="#sec-page-15">8.15 Legend Info</a></li><li><a href="#sec-page-16">8.16 OTIF Supplier PO&#x27;s</a></li><li><a href="#sec-page-17">8.17 EOTIF by Supplier</a></li><li><a href="#sec-page-18">8.18 Service Level Info</a></li><li><a href="#sec-page-19">8.19 OTIF Supplier PO&#x27;s (Confirmed)</a></li><li><a href="#sec-page-20">8.20 OTIF by Supplier</a></li><li><a href="#sec-page-21">8.21 Contractual Delivery</a></li></ul></li>
     </nav>
 
     <!-- Main content -->
     <main class="content">
-        <h1>sample</h1>
-        <p style="font-size: 12px; color: var(--fg-muted); margin-bottom: 4px;">Generated by <a href="https://github.com/djrien-ai/pbi-doc-generator" style="color: var(--fg-muted);"><strong>PBI Doc Generator</strong></a> v0.1 beta &mdash; by Rien Scheerlinck</p>
-        <p class="subtitle">Data layer reference for redevelopment. Report pages / visuals are out of scope.</p>
+        <h1>OTIF - Supplier PO's</h1>
+        <p style="font-size: 12px; color: var(--fg-muted); margin-bottom: 4px;">Generated by <a href="https://github.com/djrien-ai/pbi-doc-generator" style="color: var(--fg-muted);"><strong>PBI Doc Generator</strong></a> v0.4 &mdash; by Rien Scheerlinck</p>
+        <p class="subtitle">Data layer reference for redevelopment. Complete data model and report page reference for redevelopment.</p>
         <h2 id="sec1">1. Data Sources <a href="#sec1" class="section-anchor">#</a></h2>
 <h3 id="sec1-1">1.1 File <a href="#sec1-1" class="section-anchor">#</a></h3>
 <table>
 <thead><tr><th>#</th><th>Table Name</th><th>Connection Type</th><th>Source Excerpt</th></tr></thead>
 <tbody>
-<tr><td>1</td><td><strong><a href="#sec2-tbl-Association">Association</a></strong></td><td>Excel</td><td><code>let
-    Source = Excel.Workbook(File.Contents(&quot;C:\Users\mimyersm\Dropbox\Data-27...</code></td></tr>
-<tr><td>2</td><td><strong><a href="#sec2-tbl-Sales">Sales</a></strong></td><td>Excel</td><td><code>let
-    Source = Excel.Workbook(File.Contents(&quot;C:\Users\mimyersm\Desktop\Sales &amp;...</code></td></tr>
-<tr><td>3</td><td><strong><a href="#sec2-tbl-Store">Store</a></strong></td><td>JSON</td><td><code>let
-    Source = Table.FromRows(Json.Document(Binary.Decompress(Binary.FromText(...</code></td></tr>
-<tr><td>4</td><td><strong><a href="#sec2-tbl-Calendar">Calendar</a></strong></td><td>JSON</td><td><code>let
-    Source = Table.FromRows(Json.Document(Binary.Decompress(Binary.FromText(...</code></td></tr>
-<tr><td>5</td><td><strong><a href="#sec2-tbl-Associated_Product">Associated Product</a></strong></td><td>JSON</td><td><code>let
-    Source = Table.FromRows(Json.Document(Binary.Decompress(Binary.FromText(...</code></td></tr>
-<tr><td>6</td><td><strong><a href="#sec2-tbl-Analysis_DAX">Analysis DAX</a></strong></td><td>JSON</td><td><code>let
-    Source = Table.FromRows(Json.Document(Binary.Decompress(Binary.FromText(...</code></td></tr>
-<tr><td>7</td><td><strong><a href="#sec2-tbl-Product">Product</a></strong></td><td>JSON</td><td><code>let
-    Source = Table.FromRows(Json.Document(Binary.Decompress(Binary.FromText(...</code></td></tr>
-<tr><td>8</td><td><strong><a href="#sec2-tbl-Design_DAX">Design DAX</a></strong></td><td>JSON</td><td><code>let
-    Source = Table.FromRows(Json.Document(Binary.Decompress(Binary.FromText(...</code></td></tr>
-<tr><td>9</td><td><strong><a href="#sec2-tbl-Customer">Customer</a></strong></td><td>Excel</td><td><code>let
-    Source = Excel.Workbook(File.Contents(&quot;C:\Users\mimyersm\Desktop\Sales &amp;...</code></td></tr>
-<tr><td>10</td><td><strong><a href="#sec2-tbl-Issues_and_Promotions">Issues and Promotions</a></strong></td><td>Excel</td><td><code>let
-    Source = Excel.Workbook(File.Contents(&quot;C:\Users\mimyersm\Desktop\Sales &amp;...</code></td></tr>
-<tr><td>11</td><td><strong><a href="#sec2-tbl-Age">Age</a></strong></td><td>JSON</td><td><code>let
-    Source = Table.FromRows(Json.Document(Binary.Decompress(Binary.FromText(...</code></td></tr>
-<tr><td>12</td><td><strong><a href="#sec2-tbl-STable">STable</a></strong></td><td>JSON</td><td><code>let
-    Source = Table.FromRows(Json.Document(Binary.Decompress(Binary.FromText(...</code></td></tr>
-<tr><td>13</td><td><strong><a href="#sec2-tbl-Tooltip_Info">Tooltip Info</a></strong></td><td>JSON</td><td><code>let
-    Source = Table.FromRows(Json.Document(Binary.Decompress(Binary.FromText(...</code></td></tr>
-<tr><td>14</td><td><strong><a href="#sec2-tbl-Tooltip_Info2">Tooltip Info2</a></strong></td><td>JSON</td><td><code>let
-    Source = Table.FromRows(Json.Document(Binary.Decompress(Binary.FromText(...</code></td></tr>
-<tr><td>15</td><td><strong><a href="#sec2-tbl-Details">Details</a></strong></td><td>JSON</td><td><code>let
-    Source = Table.FromRows(Json.Document(Binary.Decompress(Binary.FromText(...</code></td></tr>
+<tr><td>1</td><td><strong><a href="#sec2-tbl-DeliveryStatus">DeliveryStatus</a></strong></td><td>JSON</td><td><code>[binary payload - inline table]</code></td></tr>
+<tr><td>2</td><td><strong><a href="#sec2-tbl-ReceptionStatus">ReceptionStatus</a></strong></td><td>JSON</td><td><code>[binary payload - inline table]</code></td></tr>
 </tbody></table>
 <hr>
-<h3 id="sec1-2">1.2 Computed / Derived Tables <a href="#sec1-2" class="section-anchor">#</a></h3>
+<h3 id="sec1-2">1.2 Database <a href="#sec1-2" class="section-anchor">#</a></h3>
+<table>
+<thead><tr><th>#</th><th>Table Name</th><th>Connection Type</th><th>Source Excerpt</th></tr></thead>
+<tbody>
+<tr><td>1</td><td><strong><a href="#sec2-tbl-DMContractConsumption">DMContractConsumption</a></strong></td><td>SAP HANA</td><td><code>Package: infrabel.output_layer.ISCM.ContractManagement.ContractValueMonitoring / View: DMContractConsumption</code></td></tr>
+<tr><td>2</td><td><strong><a href="#sec2-tbl-DimDate">DimDate</a></strong></td><td>SAP HANA</td><td><code>Package: infrabel.analytics.Common.Dim / View: DimDate</code></td></tr>
+<tr><td>3</td><td><strong><a href="#sec2-tbl-DimMaterial">DimMaterial</a></strong></td><td>SAP HANA</td><td><code>Package: infrabel.analytics.IAM.IAM4.LO_EXECUTION / View: DimMaterial</code></td></tr>
+<tr><td>4</td><td><strong><a href="#sec2-tbl-DimMaterialAtPlantLevel">DimMaterialAtPlantLevel</a></strong></td><td>SAP HANA</td><td><code>Package: infrabel.analytics.IAM.IAM4.LO_EXECUTION / View: DimMaterialAtPlantLevel</code></td></tr>
+<tr><td>5</td><td><strong><a href="#sec2-tbl-DimPlant">DimPlant</a></strong></td><td>SAP HANA</td><td><code>Package: infrabel.analytics.IAM.IAM4.LO_EXECUTION / View: DimPlant</code></td></tr>
+<tr><td>6</td><td><strong><a href="#sec2-tbl-DimPurchaseContractHeader">DimPurchaseContractHeader</a></strong></td><td>SAP HANA</td><td><code>Package: infrabel.analytics.IFBA.IFBA5.PROCUREMENT / View: PurchaseContractHeader</code></td></tr>
+<tr><td>7</td><td><strong><a href="#sec2-tbl-DimPurchaseContractItem">DimPurchaseContractItem</a></strong></td><td>SAP HANA</td><td><code>Package: infrabel.analytics.IFBA.IFBA5.PROCUREMENT / View: PurchaseContractItem</code></td></tr>
+<tr><td>8</td><td><strong><a href="#sec2-tbl-SupplierDeliveriesOnTime">SupplierDeliveriesOnTime</a></strong></td><td>SAP HANA</td><td><code>Package: infrabel.analytics.IFBA.IFBA5.PROCUREMENT / View: SupplierDeliveriesOnTime</code></td></tr>
+</tbody></table>
+<hr>
+<h3 id="sec1-3">1.3 Other <a href="#sec1-3" class="section-anchor">#</a></h3>
+<table>
+<thead><tr><th>#</th><th>Table Name</th><th>Connection Type</th><th>Source Excerpt</th></tr></thead>
+<tbody>
+<tr><td>1</td><td><strong><a href="#sec2-tbl-CESTupdateTime">CESTupdateTime</a></strong></td><td>Web</td><td><code>let
+
+    Source = Xml.Document(Web.Contents(&quot;http://api.timezonedb.com/v2/get-time-zone?key=URP1KU54…</code></td></tr>
+<tr><td>2</td><td><strong><a href="#sec2-tbl-TextValueToday">TextValueToday</a></strong></td><td>Web</td><td><code>```
+				let
+				
+				    Source = Xml.Document(Web.Contents(&quot;http://api.timezonedb.com/v2/get-time-z…</code></td></tr>
+</tbody></table>
+<hr>
+<h3 id="sec1-4">1.4 Computed / Derived Tables <a href="#sec1-4" class="section-anchor">#</a></h3>
 <table>
 <thead><tr><th>#</th><th>Table</th><th>Source</th><th>Type</th></tr></thead>
 <tbody>
-<tr><td>1</td><td><strong><a href="#sec2-tbl-__Return_Rate">% Return Rate</a></strong></td><td><code>GENERATESERIES(0, 60, 1)</code></td><td>DAX Calculated Table</td></tr>
+<tr><td>1</td><td><strong><a href="#sec2-tbl-DateConfirmed">DateConfirmed</a></strong></td><td><code>let
+    Source = DateRequired,
+    #&quot;Renamed Columns&quot; = Table.RenameColumns(Source,{{&quot;Requirement Da…</code></td><td>M (Power Query)</td></tr>
+<tr><td>2</td><td><strong><a href="#sec2-tbl-DateDelivered">DateDelivered</a></strong></td><td><code>let
+    Source = DateRequired,
+    #&quot;Renamed Columns&quot; = Table.RenameColumns(Source,{{&quot;Requirement Da…</code></td><td>M (Power Query)</td></tr>
+<tr><td>3</td><td><strong><a href="#sec2-tbl-DateRequired">DateRequired</a></strong></td><td><code>let
+    Source = FnCreateDateTable(DateTime.Date(Date.AddYears(Date.StartOfYear(DateTime.LocalNow())…</code></td><td>M (Power Query)</td></tr>
+<tr><td>4</td><td><strong><a href="#sec2-tbl-HanaServer">HanaServer</a></strong></td><td><code>&quot;HANABIP.msnet.railb.be:30015&quot; meta [IsParameterQuery=true, List={&quot;HANABID.msnet.railb.be:30215&quot;, &quot;H…</code></td><td>M (Power Query)</td></tr>
+<tr><td>5</td><td><strong><a href="#sec2-tbl-ISO_Calendar">ISO Calendar</a></strong></td><td><code>```
+				let
+				    /* _____________ The following Values are used for computing ISO Weeks _________…</code></td><td>M (Power Query)</td></tr>
+<tr><td>6</td><td><strong><a href="#sec2-tbl-POLines_Filter">POLines Filter</a></strong></td><td><code>GENERATESERIES(0, [PO Lines Count], 1 )</code></td><td>DAX Calculated Table</td></tr>
+<tr><td>7</td><td><strong><a href="#sec2-tbl-Spent_Filter">Spent Filter</a></strong></td><td><code>GENERATESERIES(0, [Spent Amount], 1000 )</code></td><td>DAX Calculated Table</td></tr>
+<tr><td>8</td><td><strong><a href="#sec2-tbl-Vendor_PO_Lines">Vendor PO Lines</a></strong></td><td><code>SUMMARIZE(FILTER(SupplierDeliveriesOnTime,SupplierDeliveriesOnTime[Vendor (Key)] &lt;&gt; BLANK() &amp;&amp; RIGHT…</code></td><td>DAX Calculated Table</td></tr>
+<tr><td>9</td><td><strong><a href="#sec2-tbl-_Measures">_Measures</a></strong></td><td><code>Row(&quot;Column&quot;, BLANK())</code></td><td>DAX Calculated Table</td></tr>
+</tbody></table>
+<hr>
+<h3 id="sec1-5">1.5 Helper Functions <a href="#sec1-5" class="section-anchor">#</a></h3>
+<table>
+<thead><tr><th>Function</th><th>Description</th></tr></thead>
+<tbody>
+<tr><td><code>dateToday</code></td><td>Custom M function</td></tr>
+<tr><td><code>date6MonthsBefore</code></td><td>Custom M function</td></tr>
+<tr><td><code>HanaPackage</code></td><td>Custom M function</td></tr>
+<tr><td><code>HanaView</code></td><td>Custom M function</td></tr>
+<tr><td><code>CreatedFrom</code></td><td>Custom M function</td></tr>
+<tr><td><code>CreatedTo</code></td><td>Custom M function</td></tr>
+<tr><td><code>FnCreateDateTable</code></td><td>Custom M function</td></tr>
+<tr><td><code>UTCtoCEST</code></td><td>Custom M function</td></tr>
 </tbody></table>
 
 
 <h2 id="sec2">2. Power Query Transformations (Modeling) <a href="#sec2" class="section-anchor">#</a></h2>
-<h3 id="sec2-tbl-Association">2.1 Association <a href="#sec2-tbl-Association" class="section-anchor">#</a></h3>
+<h3 id="sec2-tbl-CESTupdateTime">2.1 CESTupdateTime <a href="#sec2-tbl-CESTupdateTime" class="section-anchor">#</a></h3>
 <ol>
-  <li><strong>Source</strong>: <code>Excel.Workbook(File.Contents(&quot;C:\Users\mimyersm\Dropbox\Data-27-09-2019.xlsx&quot;), null, true)</code></li>
-  <li><strong>Association_Sheet</strong>: <code>Source{[Item=&quot;Association&quot;,Kind=&quot;Sheet&quot;]}[Data]</code></li>
-  <li><strong>Promoted Headers</strong>: <code>Table.PromoteHeaders(Association_Sheet, [PromoteAllScalars=true])</code></li>
-  <li><strong>Changed Type</strong>: <code>Table.TransformColumnTypes(#&quot;Promoted Headers&quot;,{{&quot;RuleID&quot;, Int64.Type}, {&quot;LeftItemSetId&quot;, Int64.Type}, {&quot;RightItemSetId&quot;, Int64.Type}, {&quot;Probability&quot;, type number}, {&quot;Importance&quot;, type number}, {&quot;Support&quot;, Int64.Type}})</code></li>
-  <li><strong>Inserted Merged Column</strong>: <code>Table.AddColumn(#&quot;Changed Type&quot;, &quot;Merged&quot;, each Text.Combine({Text.From([LeftItemSetId], &quot;en-CA&quot;), Text.From([RightItemSetId], &quot;en-CA&quot;)}, &quot;&quot;), type text)</code></li>
-  <li><strong>Removed Duplicates</strong>: <code>Table.Distinct(#&quot;Inserted Merged Column&quot;, {&quot;Merged&quot;})</code></li>
-  <li><strong>Removed Columns</strong>: <code>Table.RemoveColumns(#&quot;Removed Duplicates&quot;,{&quot;Merged&quot;})</code></li>
+  <li><strong>Source</strong>:
+<pre><code>Xml.Document(Web.Contents(&quot;http://api.timezonedb.com/v2/get-time-zone?key=URP1KU545PGT&amp;format=xml&amp;by=zone&amp;zone=Europe/Brussels&quot;))</code></pre></li>
+  <li><strong>Value</strong>:
+<pre><code>Source{0}[Value]</code></pre></li>
+  <li><strong>Value1</strong>:
+<pre><code>Value{14}[Value]</code></pre></li>
 </ol>
 <hr>
-<h3 id="sec2-tbl-Sales">2.2 Sales <a href="#sec2-tbl-Sales" class="section-anchor">#</a></h3>
+<h3 id="sec2-tbl-DMContractConsumption">2.2 DMContractConsumption <a href="#sec2-tbl-DMContractConsumption" class="section-anchor">#</a></h3>
 <ol>
-  <li><strong>Source</strong>: <code>Excel.Workbook(File.Contents(&quot;C:\Users\mimyersm\Desktop\Sales &amp; Marketing Datas.xlsx&quot;), null, true)</code></li>
-  <li><strong>Data_Sheet</strong>: <code>Source{[Item=&quot;Data&quot;,Kind=&quot;Sheet&quot;]}[Data]</code></li>
-  <li><strong>Promoted Headers</strong>: <code>Table.PromoteHeaders(Data_Sheet, [PromoteAllScalars=true])</code></li>
-  <li><strong>Changed Type</strong>: <code>Table.TransformColumnTypes(#&quot;Promoted Headers&quot;,{{&quot;ID&quot;, Int64.Type}, {&quot;ProductID&quot;, Int64.Type}, {&quot;StoreID&quot;, Int64.Type}, {&quot;Unit&quot;, Int64.Type}, {&quot;Week&quot;, Int64.Type}, {&quot;Gender&quot;, type text}, {&quot;Age&quot;, Int64.Type}, {&quot;Status&quot;, type text}})</code></li>
-  <li><strong>Replaced Value</strong>: <code>Table.ReplaceValue(#&quot;Changed Type&quot;,1,2,Replacer.ReplaceValue,{&quot;Week&quot;})</code></li>
-  <li><strong>Merged Queries</strong>: <code>Table.NestedJoin(#&quot;Replaced Value&quot;, {&quot;ProductID&quot;}, Product, {&quot;ProductID&quot;}, &quot;Product&quot;, JoinKind.LeftOuter)</code></li>
-  <li><strong>Expanded Product</strong>: <code>Table.ExpandTableColumn(#&quot;Merged Queries&quot;, &quot;Product&quot;, {&quot;Price&quot;}, {&quot;Price&quot;})</code></li>
-  <li><strong>Inserted Multiplication</strong>: <code>Table.AddColumn(#&quot;Expanded Product&quot;, &quot;Multiplication&quot;, each [Price] * [Unit], Int64.Type)</code></li>
-  <li><strong>Renamed Columns</strong>: <code>Table.RenameColumns(#&quot;Inserted Multiplication&quot;,{{&quot;Multiplication&quot;, &quot;Amount&quot;}})</code></li>
-  <li><strong>Removed Columns</strong>: <code>Table.RemoveColumns(#&quot;Renamed Columns&quot;,{&quot;Price&quot;})</code></li>
-  <li><strong>Merged Queries1</strong>: <code>Table.NestedJoin(#&quot;Removed Columns&quot;, {&quot;Week&quot;}, Calendar, {&quot;Week&quot;}, &quot;Calendar&quot;, JoinKind.LeftOuter)</code></li>
-  <li><strong>Expanded Calendar</strong>: <code>Table.ExpandTableColumn(#&quot;Merged Queries1&quot;, &quot;Calendar&quot;, {&quot;Date&quot;}, {&quot;Date&quot;})</code></li>
-  <li><strong>Removed Columns1</strong>: <code>Table.RemoveColumns(#&quot;Expanded Calendar&quot;,{&quot;Week&quot;, &quot;Gender&quot;, &quot;Age&quot;})</code></li>
+  <li><strong>Source</strong>:
+<pre><code>SapHana.Database(HanaServer, [Implementation=&quot;2.0&quot;])</code></pre></li>
+  <li><strong>Contents</strong>:
+<pre><code>Source{[Name=&quot;Contents&quot;]}[Data],
+    infrabel.output_layer.ISCM.ContractManagement.ContractValueMonitoring = Contents{[Name=&quot;infrabel.output_layer.ISCM.ContractManagement.ContractValueMonitoring&quot;]}[Data]</code></pre></li>
+  <li><strong>DMContractConsumption1</strong>:
+<pre><code>infrabel.output_layer.ISCM.ContractManagement.ContractValueMonitoring{[Name=&quot;DMContractConsumption&quot;]}[Data]</code></pre></li>
+  <li><strong>Added Items</strong>:
+<pre><code>Cube.Transform(DMContractConsumption1,
+        {
+            {Cube.AddAndExpandDimensionColumn, &quot;[DMContractConsumption]&quot;, {&quot;[0CONTRACT].[0CONTRACT].Attribute&quot;, &quot;[0VAL_END_1].[0VAL_END_1].Attribute&quot;, &quot;[0VAL_START_2].[0VAL_START_2].Attribute&quot;, &quot;[0VENDOR].[0VENDOR].Attribute&quot;}, {&quot;0CONTRACT&quot;, &quot;Validity period end&quot;, &quot;Validity period: Start date&quot;, &quot;Vendor&quot;}},
+            {Cube.AddMeasureColumn, &quot;GR: Amount delivered&quot;, &quot;[Measures].[Actuals]&quot;}
+        })</code></pre></li>
+  <li><strong>Sorted Rows</strong>:
+<pre><code>Table.Sort(#&quot;Added Items&quot;,{{&quot;0CONTRACT&quot;, Order.Descending}})</code></pre></li>
+  <li><strong>Changed Type</strong>:
+<pre><code>Table.TransformColumnTypes(#&quot;Sorted Rows&quot;,{{&quot;Validity period end&quot;, type date}, {&quot;Validity period: Start date&quot;, type date}})</code></pre></li>
 </ol>
 <hr>
-<h3 id="sec2-tbl-Store">2.3 Store <a href="#sec2-tbl-Store" class="section-anchor">#</a></h3>
+<h3 id="sec2-tbl-DateConfirmed">2.3 DateConfirmed <a href="#sec2-tbl-DateConfirmed" class="section-anchor">#</a></h3>
 <ol>
-  <li><strong>Source</strong>: <code>Table.FromRows(Json.Document(Binary.Decompress(Binary.FromText(&quot;bZLNasNADITfxec0SPsjrY5paaFQSkohl5DDus3B4NjUsUsfv6tk7VKyJ8sLn0Yz0n5fYbWqNnUdz+n7+DMehy62qbwLvGZ21tv043At5MlKqqvDal8Zhdrma2oKFIrx2tWZNaBxxs2UtrqPQx1vIRJvxWQpH4TCDCn9HtvvqTSgMyySKUT6k/KpeI...</code></li>
-  <li><strong>Changed Type</strong>: <code>Table.TransformColumnTypes(Source,{{&quot;ManufacturerID&quot;, Int64.Type}, {&quot;Manufacturer&quot;, type text}, {&quot;Type&quot;, type text}, {&quot;Longitude&quot;, type number}, {&quot;Latitude&quot;, type number}, {&quot;image&quot;, type text}})</code></li>
-  <li><strong>Renamed Columns</strong>: <code>Table.RenameColumns(#&quot;Changed Type&quot;,{{&quot;ManufacturerID&quot;, &quot;StoreID&quot;}, {&quot;Manufacturer&quot;, &quot;Store&quot;}})</code></li>
+  <li><strong>Source</strong>:
+<pre><code>DateRequired</code></pre></li>
+  <li><strong>Renamed Columns</strong>:
+<pre><code>Table.RenameColumns(Source,{{&quot;Requirement Date&quot;, &quot;Confirmation Date&quot;}})</code></pre></li>
 </ol>
 <hr>
-<h3 id="sec2-tbl-Calendar">2.4 Calendar <a href="#sec2-tbl-Calendar" class="section-anchor">#</a></h3>
+<h3 id="sec2-tbl-DateDelivered">2.4 DateDelivered <a href="#sec2-tbl-DateDelivered" class="section-anchor">#</a></h3>
 <ol>
-  <li><strong>Source</strong>: <code>Table.FromRows(Json.Document(Binary.Decompress(Binary.FromText(&quot;fZSxisMwDIZfJWQuqSQ7dtztlg6FPkHpkIMbrxyFG+7tq4vcwD9I4IQUvg/kfk5ut5H4qEuI28ByItI1rNPwPY2HkfW6rI/+xOP9oHzxeQFeNp6Tzyfg08YL+XwGPhtffX4Gfrb5dR5x+KLX+euz76TY/OTzFfhqfPX5BfjF5s8+34Bv+/zJ60V6u6...</code></li>
-  <li><strong>Changed Type</strong>: <code>Table.TransformColumnTypes(Source,{{&quot;Date&quot;, type datetime}, {&quot;Week&quot;, Int64.Type}, {&quot;Month Name&quot;, type text}, {&quot;MonthSort&quot;, Int64.Type}, {&quot;Week of Year&quot;, Int64.Type}})</code></li>
-  <li><strong>Renamed Columns</strong>: <code>Table.RenameColumns(#&quot;Changed Type&quot;,{{&quot;Month Name&quot;, &quot;Month&quot;}})</code></li>
-  <li><strong>Changed Type1</strong>: <code>Table.TransformColumnTypes(#&quot;Renamed Columns&quot;,{{&quot;Date&quot;, type date}})</code></li>
-  <li><strong>Removed Columns</strong>: <code>Table.RemoveColumns(#&quot;Changed Type1&quot;,{&quot;Week of Year&quot;})</code></li>
+  <li><strong>Source</strong>:
+<pre><code>DateRequired</code></pre></li>
+  <li><strong>Renamed Columns</strong>:
+<pre><code>Table.RenameColumns(Source,{{&quot;Requirement Date&quot;, &quot;Delivery Date&quot;}})</code></pre></li>
 </ol>
 <hr>
-<h3 id="sec2-tbl-Associated_Product">2.5 Associated Product <a href="#sec2-tbl-Associated_Product" class="section-anchor">#</a></h3>
+<h3 id="sec2-tbl-DateRequired">2.5 DateRequired <a href="#sec2-tbl-DateRequired" class="section-anchor">#</a></h3>
 <ol>
-  <li><strong>Source</strong>: <code>Table.FromRows(Json.Document(Binary.Decompress(Binary.FromText(&quot;ldRZb4JAEAfw78KzcZi9t2/W2Naj1mIPj/igqIgUKohH/fTdpgn7urwQQvILs7P/mfncQ6/h7crycLwDiNNlFN82RfPvZXPcLcOkGX6n5nukCQNUSoB4jMOo1zxkkbdozD3iyhFQM2iX/tvqqdLUVVNQVEvo58ktsJy51y4oJ9CN8mTUrzh3/zvVgk...</code></li>
-  <li><strong>Changed Type</strong>: <code>Table.TransformColumnTypes(Source,{{&quot;ProductID&quot;, Int64.Type}, {&quot;Product Image&quot;, type text}})</code></li>
-  <li><strong>Merged Queries</strong>: <code>Table.NestedJoin(#&quot;Changed Type&quot;, {&quot;ProductID&quot;}, Product, {&quot;ProductID&quot;}, &quot;Product&quot;, JoinKind.LeftOuter)</code></li>
-  <li><strong>Expanded Product</strong>: <code>Table.ExpandTableColumn(#&quot;Merged Queries&quot;, &quot;Product&quot;, {&quot;Product&quot;}, {&quot;Product.1&quot;})</code></li>
-  <li><strong>Renamed Columns</strong>: <code>Table.RenameColumns(#&quot;Expanded Product&quot;,{{&quot;Product.1&quot;, &quot;Product&quot;}})</code></li>
+  <li><strong>Source</strong>:
+<pre><code>FnCreateDateTable(DateTime.Date(Date.AddYears(Date.StartOfYear(DateTime.LocalNow()),-2)), DateTime.Date(Date.AddYears(Date.EndOfYear(DateTime.LocalNow()),1)))</code></pre></li>
+  <li><strong>Renamed Columns</strong>:
+<pre><code>Table.RenameColumns(Source,{{&quot;Date&quot;, &quot;Requirement Date&quot;}})</code></pre></li>
+  <li><strong>Sorted Rows</strong>:
+<pre><code>Table.Sort(#&quot;Renamed Columns&quot;,{{&quot;Requirement Date&quot;, Order.Ascending}})</code></pre></li>
+  <li><strong>Merged Queries</strong>:
+<pre><code>Table.NestedJoin(#&quot;Sorted Rows&quot;, {&quot;Requirement Date&quot;}, DimDate, {&quot;DateName&quot;}, &quot;DimDate&quot;, JoinKind.LeftOuter)</code></pre></li>
+  <li><strong>Expanded DimDate</strong>:
+<pre><code>Table.ExpandTableColumn(#&quot;Merged Queries&quot;, &quot;DimDate&quot;, {&quot;IsWorkingDay&quot;}, {&quot;IsWorkingDay&quot;})</code></pre></li>
 </ol>
 <hr>
-<h3 id="sec2-tbl-Analysis_DAX">2.6 Analysis DAX <a href="#sec2-tbl-Analysis_DAX" class="section-anchor">#</a></h3>
+<h3 id="sec2-tbl-DeliveryStatus">2.6 DeliveryStatus <a href="#sec2-tbl-DeliveryStatus" class="section-anchor">#</a></h3>
 <ol>
-  <li><strong>Source</strong>: <code>Table.FromRows(Json.Document(Binary.Decompress(Binary.FromText(&quot;i44FAA==&quot;, BinaryEncoding.Base64), Compression.Deflate)), let _t = ((type text) meta [Serialized.Text = true]) in type table [Column1 = _t])</code></li>
-  <li><strong>Changed Type</strong>: <code>Table.TransformColumnTypes(Source,{{&quot;Column1&quot;, type text}})</code></li>
-  <li><strong>Removed Columns</strong>: <code>Table.RemoveColumns(#&quot;Changed Type&quot;,{&quot;Column1&quot;})</code></li>
+  <li><strong>Source</strong>:
+<pre><code>[binary payload omitted]</code></pre></li>
+  <li><strong>Changed Type</strong>:
+<pre><code>Table.TransformColumnTypes(Source,{{&quot;Key&quot;, type text}, {&quot;Delivery Complete&quot;, type text}})</code></pre></li>
 </ol>
 <hr>
-<h3 id="sec2-tbl-Product">2.7 Product <a href="#sec2-tbl-Product" class="section-anchor">#</a></h3>
+<h3 id="sec2-tbl-DimDate">2.7 DimDate <a href="#sec2-tbl-DimDate" class="section-anchor">#</a></h3>
 <ol>
-  <li><strong>Source</strong>: <code>Table.FromRows(Json.Document(Binary.Decompress(Binary.FromText(&quot;xZlbU+JKEMe/imXt4+72ZC65nDcuwopCooAG9+xDhAEiIYFcUPj0ZwZxq04lW0UrWz4AIanBmV/9u/vf7c+f57XxWGbZ+ddzQ73c6TQcyzNmisONWzlR75Z6zfN8lf0DEC6DWbiT6Xd9IbN5MF58HydLdX/mUAoWowxYNiw6/vdVPDt2oQFUWAReLo...</code></li>
-  <li><strong>Changed Type</strong>: <code>Table.TransformColumnTypes(Source,{{&quot;Product&quot;, type text}, {&quot;ProductID&quot;, Int64.Type}, {&quot;Category&quot;, type text}, {&quot;CategoryID&quot;, Int64.Type}, {&quot;Segment&quot;, type text}, {&quot;SegmentID&quot;, Int64.Type}, {&quot;Product Image&quot;, type text}, {&quot;Category Image&quot;, type text},...</code></li>
+  <li><strong>Source</strong>:
+<pre><code>SapHana.Database(&quot;hanabip.msnet.railb.be:30015&quot;, [Implementation=&quot;2.0&quot;])</code></pre></li>
+  <li><strong>Contents</strong>:
+<pre><code>Source{[Name=&quot;Contents&quot;]}[Data],
+    infrabel.analytics.Common.Dim = Contents{[Name=&quot;infrabel.analytics.Common.Dim&quot;]}[Data]</code></pre></li>
+  <li><strong>DimDate1</strong>:
+<pre><code>infrabel.analytics.Common.Dim{[Name=&quot;DimDate&quot;]}[Data]</code></pre></li>
+  <li><strong>Added Items</strong>:
+<pre><code>Cube.Transform(DimDate1,
+        {
+            {Cube.AddAndExpandDimensionColumn, &quot;[DimDate]&quot;, {&quot;[DimDate].[DateKey]&quot;, &quot;[DimDate].[DateName]&quot;, &quot;[DimDate].[IsWorkingDay]&quot;}, {&quot;DateKey&quot;, &quot;DateName&quot;, &quot;IsWorkingDay&quot;}}
+        })</code></pre></li>
+  <li><strong>Changed Type</strong>:
+<pre><code>Table.TransformColumnTypes(#&quot;Added Items&quot;,{{&quot;DateName&quot;, type date}})</code></pre></li>
+</ol>
+<div class="alert alert-warning"><div class="alert-title">Warning</div>This table has a <strong>hardcoded</strong> HANA connection instead of using a parameter.</div>
+<hr>
+<h3 id="sec2-tbl-DimMaterial">2.8 DimMaterial <a href="#sec2-tbl-DimMaterial" class="section-anchor">#</a></h3>
+<ol>
+  <li><strong>Source</strong>:
+<pre><code>SapHana.Database(HanaServer, [Implementation=&quot;2.0&quot;])</code></pre></li>
+  <li><strong>Contents</strong>:
+<pre><code>Source{[Name=&quot;Contents&quot;]}[Data],
+				    infrabel.analytics.IAM.IAM4.LO_EXECUTION = Contents{[Name=&quot;infrabel.analytics.IAM.IAM4.LO_EXECUTION&quot;]}[Data]</code></pre></li>
+  <li><strong>DimMaterial1</strong>:
+<pre><code>infrabel.analytics.IAM.IAM4.LO_EXECUTION{[Name=&quot;DimMaterial&quot;]}[Data]</code></pre></li>
+  <li><strong>Added Items</strong>:
+<pre><code>Cube.Transform(DimMaterial1,
+				        {
+				            {Cube.AddAndExpandDimensionColumn, &quot;[DimMaterial]&quot;, {&quot;[IMSTAE].[IMSTAE].Attribute&quot;, &quot;[IMSTAE___T].[IMSTAE___T].Attribute&quot;,
+				             &quot;[0MATERIAL].[0MATERIAL].Attribute&quot;, &quot;[MaterialTextFR].[MaterialTextFR].Attribute&quot;, 
+				             &quot;[MaterialTextNL].[MaterialTextNL].Attribute&quot;, &quot;[DimMaterial_MaterialNN].[DimMaterial_MaterialNN].Attribute&quot;, 
+				             &quot;[0PROD_HIER].[0PROD_HIER].Attribute&quot;}, {&quot;Cross-Plant Material Status&quot;, &quot;Cross-Plant Material Status (Descr)&quot;, &quot;Material&quot;, 
+				             &quot;Material (Descr FR)&quot;, &quot;Material (Descr NL)&quot;, &quot;Material (NN)&quot;, &quot;Product hierarchy&quot;}}
+				        })</code></pre></li>
+  <li><strong>Renamed Columns</strong>:
+<pre><code>Table.RenameColumns(#&quot;Added Items&quot;,{{&quot;Material&quot;, &quot;Material (Key)&quot;}})</code></pre></li>
 </ol>
 <hr>
-<h3 id="sec2-tbl-Design_DAX">2.8 Design DAX <a href="#sec2-tbl-Design_DAX" class="section-anchor">#</a></h3>
+<h3 id="sec2-tbl-DimMaterialAtPlantLevel">2.9 DimMaterialAtPlantLevel <a href="#sec2-tbl-DimMaterialAtPlantLevel" class="section-anchor">#</a></h3>
 <ol>
-  <li><strong>Source</strong>: <code>Table.FromRows(Json.Document(Binary.Decompress(Binary.FromText(&quot;i44FAA==&quot;, BinaryEncoding.Base64), Compression.Deflate)), let _t = ((type text) meta [Serialized.Text = true]) in type table [Column1 = _t])</code></li>
-  <li><strong>Changed Type</strong>: <code>Table.TransformColumnTypes(Source,{{&quot;Column1&quot;, type text}})</code></li>
-  <li><strong>Removed Columns</strong>: <code>Table.RemoveColumns(#&quot;Changed Type&quot;,{&quot;Column1&quot;})</code></li>
+  <li><strong>Source</strong>:
+<pre><code>SapHana.Database(HanaServer, [Implementation=&quot;2.0&quot;])</code></pre></li>
+  <li><strong>Contents</strong>:
+<pre><code>Source{[Name=&quot;Contents&quot;]}[Data],
+    infrabel.analytics.IAM.IAM4.LO_EXECUTION = Contents{[Name=&quot;infrabel.analytics.IAM.IAM4.LO_EXECUTION&quot;]}[Data]</code></pre></li>
+  <li><strong>DimMaterialAtPlantLevel1</strong>:
+<pre><code>infrabel.analytics.IAM.IAM4.LO_EXECUTION{[Name=&quot;DimMaterialAtPlantLevel&quot;]}[Data]</code></pre></li>
+  <li><strong>Added Items</strong>:
+<pre><code>Cube.Transform(DimMaterialAtPlantLevel1,
+        {
+            {Cube.AddAndExpandDimensionColumn, &quot;[DimMaterialAtPlantLevel]&quot;, {&quot;[0MAT_PLANT_KEY].[0MAT_PLANT_KEY].Attribute&quot;, &quot;[IMMSTA].[IMMSTA].Attribute&quot;, &quot;[IMMSTA___T].[IMMSTA___T].Attribute&quot;}, {&quot;Plant Material (Comp.Key)&quot;, &quot;Plant-Specific Material Status&quot;, &quot;Plant-Specific Material Status (Descr)&quot;}},
+            {Cube.AddMeasureColumn, &quot;Delivery time&quot;, &quot;[Measures].[0PLND_DELRY]&quot;}
+        })</code></pre></li>
+  <li><strong>Renamed Columns</strong>:
+<pre><code>Table.RenameColumns(#&quot;Added Items&quot;,{{&quot;Plant-Specific Material Status&quot;, &quot;Plant-Specific Material Status (Key)&quot;}})</code></pre></li>
+  <li><strong>Added Custom</strong>:
+<pre><code>Table.AddColumn(#&quot;Renamed Columns&quot;, &quot;Plant-Specific Material Status&quot;, each [#&quot;Plant-Specific Material Status (Key)&quot;] &amp; &quot; - &quot; &amp; [#&quot;Plant-Specific Material Status (Descr)&quot;])</code></pre></li>
 </ol>
 <hr>
-<h3 id="sec2-tbl-Customer">2.9 Customer <a href="#sec2-tbl-Customer" class="section-anchor">#</a></h3>
+<h3 id="sec2-tbl-DimPlant">2.10 DimPlant <a href="#sec2-tbl-DimPlant" class="section-anchor">#</a></h3>
 <ol>
-  <li><strong>Source</strong>: <code>Excel.Workbook(File.Contents(&quot;C:\Users\mimyersm\Desktop\Sales &amp; Marketing Datas.xlsx&quot;), null, true)</code></li>
-  <li><strong>Data_Sheet</strong>: <code>Source{[Item=&quot;Data&quot;,Kind=&quot;Sheet&quot;]}[Data]</code></li>
-  <li><strong>Promoted Headers</strong>: <code>Table.PromoteHeaders(Data_Sheet, [PromoteAllScalars=true])</code></li>
-  <li><strong>Changed Type</strong>: <code>Table.TransformColumnTypes(#&quot;Promoted Headers&quot;,{{&quot;ID&quot;, Int64.Type}, {&quot;ProductID&quot;, Int64.Type}, {&quot;StoreID&quot;, Int64.Type}, {&quot;Unit&quot;, Int64.Type}, {&quot;Week&quot;, Int64.Type}, {&quot;Gender&quot;, type text}, {&quot;Age&quot;, Int64.Type}, {&quot;Status&quot;, type text}})</code></li>
-  <li><strong>Removed Columns</strong>: <code>Table.RemoveColumns(#&quot;Changed Type&quot;,{&quot;Status&quot;})</code></li>
-  <li><strong>Merged Queries</strong>: <code>Table.NestedJoin(#&quot;Removed Columns&quot;, {&quot;ProductID&quot;}, Product, {&quot;ProductID&quot;}, &quot;Product&quot;, JoinKind.LeftOuter)</code></li>
-  <li><strong>Expanded Product</strong>: <code>Table.ExpandTableColumn(#&quot;Merged Queries&quot;, &quot;Product&quot;, {&quot;Product&quot;, &quot;Category&quot;, &quot;Segment&quot;, &quot;Price&quot;, &quot;Price Range&quot;}, {&quot;Product.1&quot;, &quot;Category&quot;, &quot;Segment&quot;, &quot;Price&quot;, &quot;Price Range&quot;})</code></li>
-  <li><strong>Renamed Columns</strong>: <code>Table.RenameColumns(#&quot;Expanded Product&quot;,{{&quot;Product.1&quot;, &quot;Product&quot;}})</code></li>
-  <li><strong>Removed Columns1</strong>: <code>Table.RemoveColumns(#&quot;Renamed Columns&quot;,{&quot;ProductID&quot;})</code></li>
-  <li><strong>Replaced Value</strong>: <code>Table.ReplaceValue(#&quot;Removed Columns1&quot;,&quot;M&quot;,&quot;Male&quot;,Replacer.ReplaceText,{&quot;Gender&quot;})</code></li>
-  <li><strong>Replaced Value1</strong>: <code>Table.ReplaceValue(#&quot;Replaced Value&quot;,&quot;F&quot;,&quot;Female&quot;,Replacer.ReplaceText,{&quot;Gender&quot;})</code></li>
-  <li><strong>Merged Queries1</strong>: <code>Table.NestedJoin(#&quot;Replaced Value1&quot;, {&quot;StoreID&quot;}, Store, {&quot;StoreID&quot;}, &quot;Store&quot;, JoinKind.LeftOuter)</code></li>
-  <li><strong>Expanded Store</strong>: <code>Table.ExpandTableColumn(#&quot;Merged Queries1&quot;, &quot;Store&quot;, {&quot;Store&quot;, &quot;Type&quot;}, {&quot;Store.1&quot;, &quot;Type&quot;})</code></li>
-  <li><strong>Renamed Columns1</strong>: <code>Table.RenameColumns(#&quot;Expanded Store&quot;,{{&quot;Store.1&quot;, &quot;Store&quot;}})</code></li>
-  <li><strong>Merged Queries2</strong>: <code>Table.NestedJoin(#&quot;Renamed Columns1&quot;, {&quot;ID&quot;}, #&quot;Issues and Promotions&quot;, {&quot;ID&quot;}, &quot;Issues and Promotions&quot;, JoinKind.LeftOuter)</code></li>
-  <li><strong>Removed Columns2</strong>: <code>Table.RemoveColumns(#&quot;Merged Queries2&quot;,{&quot;StoreID&quot;})</code></li>
-  <li><strong>Expanded Issues and Promotions</strong>: <code>Table.ExpandTableColumn(#&quot;Removed Columns2&quot;, &quot;Issues and Promotions&quot;, {&quot;Issue&quot;, &quot;Promotion&quot;}, {&quot;Issue&quot;, &quot;Promotion&quot;})</code></li>
-  <li><strong>Removed Columns3</strong>: <code>Table.RemoveColumns(#&quot;Expanded Issues and Promotions&quot;,{&quot;Week&quot;})</code></li>
-  <li><strong>Merged Queries3</strong>: <code>Table.NestedJoin(#&quot;Removed Columns3&quot;, {&quot;ID&quot;}, Sales, {&quot;ID&quot;}, &quot;Sales&quot;, JoinKind.LeftOuter)</code></li>
-  <li><strong>Expanded Sales</strong>: <code>Table.ExpandTableColumn(#&quot;Merged Queries3&quot;, &quot;Sales&quot;, {&quot;Amount&quot;}, {&quot;Amount&quot;})</code></li>
-  <li><strong>Merged Queries4</strong>: <code>Table.NestedJoin(#&quot;Expanded Sales&quot;, {&quot;Age&quot;}, Age, {&quot;Age&quot;}, &quot;Age.1&quot;, JoinKind.LeftOuter)</code></li>
-  <li><strong>Expanded Age.1</strong>: <code>Table.ExpandTableColumn(#&quot;Merged Queries4&quot;, &quot;Age.1&quot;, {&quot;Age Bucket&quot;}, {&quot;Age Bucket&quot;})</code></li>
-  <li><strong>Removed Columns4</strong>: <code>Table.RemoveColumns(#&quot;Expanded Age.1&quot;,{&quot;Age&quot;})</code></li>
-  <li><strong>Renamed Columns2</strong>: <code>Table.RenameColumns(#&quot;Removed Columns4&quot;,{{&quot;Age Bucket&quot;, &quot;Age&quot;}})</code></li>
-  <li><strong>Removed Columns5</strong>: <code>Table.RemoveColumns(#&quot;Renamed Columns2&quot;,{&quot;Price&quot;})</code></li>
+  <li><strong>Source</strong>:
+<pre><code>SapHana.Database(HanaServer, [Implementation=&quot;2.0&quot;])</code></pre></li>
+  <li><strong>Contents</strong>:
+<pre><code>Source{[Name=&quot;Contents&quot;]}[Data],
+    infrabel.analytics.IAM.IAM4.LO_EXECUTION = Contents{[Name=&quot;infrabel.analytics.IAM.IAM4.LO_EXECUTION&quot;]}[Data]</code></pre></li>
+  <li><strong>DimPlant1</strong>:
+<pre><code>infrabel.analytics.IAM.IAM4.LO_EXECUTION{[Name=&quot;DimPlant&quot;]}[Data]</code></pre></li>
+  <li><strong>Added Items</strong>:
+<pre><code>Cube.Transform(DimPlant1,
+        {
+            {Cube.AddAndExpandDimensionColumn, &quot;[DimPlant]&quot;, {&quot;[IPL_AREA].[IPL_AREA].Attribute&quot;, &quot;[IPL_AREA___TXTMD].[IPL_AREA___TXTMD].Attribute&quot;, &quot;[0PLANT].[0PLANT].Attribute&quot;, &quot;[0PLANT___T].[0PLANT___T].Attribute&quot;}, {&quot;Area&quot;, &quot;Area (Medium Descr)&quot;, &quot;Plant&quot;, &quot;Plant (Name)&quot;}}
+        })</code></pre></li>
+  <li><strong>Renamed Columns</strong>:
+<pre><code>Table.RenameColumns(#&quot;Added Items&quot;,{{&quot;Area&quot;, &quot;Area (Key)&quot;}, {&quot;Plant&quot;, &quot;Plant (Key)&quot;}})</code></pre></li>
+  <li><strong>Added Plant</strong>:
+<pre><code>Table.AddColumn(#&quot;Renamed Columns&quot;, &quot;Plant&quot;, each [#&quot;Plant (Key)&quot;] &amp; &quot; - &quot; &amp; [#&quot;Plant (Name)&quot;])</code></pre></li>
+  <li><strong>Added Area</strong>:
+<pre><code>Table.AddColumn(#&quot;Added Plant&quot;, &quot;Area&quot;, each [#&quot;Area (Key)&quot;] &amp; &quot; - &quot; &amp; [#&quot;Area (Medium Descr)&quot;])</code></pre></li>
 </ol>
 <hr>
-<h3 id="sec2-tbl-Issues_and_Promotions">2.10 Issues and Promotions <a href="#sec2-tbl-Issues_and_Promotions" class="section-anchor">#</a></h3>
+<h3 id="sec2-tbl-DimPurchaseContractHeader">2.11 DimPurchaseContractHeader <a href="#sec2-tbl-DimPurchaseContractHeader" class="section-anchor">#</a></h3>
 <ol>
-  <li><strong>Source</strong>: <code>Excel.Workbook(File.Contents(&quot;C:\Users\mimyersm\Desktop\Sales &amp; Marketing Datas.xlsx&quot;), null, true)</code></li>
-  <li><strong>Issues and Promotions_Sheet</strong>: <code>Source{[Item=&quot;Issues and Promotions&quot;,Kind=&quot;Sheet&quot;]}[Data]</code></li>
-  <li><strong>Promoted Headers</strong>: <code>Table.PromoteHeaders(#&quot;Issues and Promotions_Sheet&quot;, [PromoteAllScalars=true])</code></li>
-  <li><strong>Changed Type</strong>: <code>Table.TransformColumnTypes(#&quot;Promoted Headers&quot;,{{&quot;ID&quot;, Int64.Type}, {&quot;Issue&quot;, type text}, {&quot;Promotion&quot;, type text}})</code></li>
+  <li><strong>Source</strong>:
+<pre><code>SapHana.Database(HanaServer, [Implementation=&quot;2.0&quot;])</code></pre></li>
+  <li><strong>Contents</strong>:
+<pre><code>Source{[Name=&quot;Contents&quot;]}[Data],
+    infrabel.analytics.IFBA.IFBA5.PROCUREMENT = Contents{[Name=&quot;infrabel.analytics.IFBA.IFBA5.PROCUREMENT&quot;]}[Data]</code></pre></li>
+  <li><strong>DimPurchaseContractHeader1</strong>:
+<pre><code>infrabel.analytics.IFBA.IFBA5.PROCUREMENT{[Name=&quot;PurchaseContractHeader&quot;]}[Data]</code></pre></li>
+  <li><strong>Added Items</strong>:
+<pre><code>Cube.Transform(DimPurchaseContractHeader1,
+        {
+            {Cube.AddAndExpandDimensionColumn, &quot;[PurchaseContractHeader]&quot;, {&quot;[ICATGMGR].[ICATGMGR].Attribute&quot;, &quot;[ICONTRMGR].[ICONTRMGR].Attribute&quot;, &quot;[ICONTRMGR___T].[ICONTRMGR___T].Attribute&quot;, &quot;[DELETION_FLAG].[DELETION_FLAG].Attribute&quot;, &quot;[IDEL].[IDEL].Attribute&quot;, &quot;[0OI_EBELN].[0OI_EBELN].Attribute&quot;, &quot;[VALIDITY_END].[VALIDITY_END].Attribute&quot;, &quot;[ValidityPeriodEndDate].[ValidityPeriodEndDate].Attribute&quot;, &quot;[ValidityPeriodStartDate].[ValidityPeriodStartDate].Attribute&quot;, &quot;[VALIDITY_START].[VALIDITY_START].Attribute&quot;}, {&quot;Category manager&quot;, &quot;Contract Manager&quot;, &quot;Contract Manager (Descr)&quot;, &quot;Deletion Flag&quot;, &quot;Deletion Indicator (header)&quot;, &quot;Purchasing document number&quot;, &quot;Validity End Date&quot;, &quot;Validity period: End date&quot;, &quot;Validity period: Start date&quot;, &quot;Validity Start Date&quot;}}
+        })</code></pre></li>
+  <li><strong>Sorted Rows</strong>:
+<pre><code>Table.Sort(#&quot;Added Items&quot;,{{&quot;Purchasing document number&quot;, Order.Descending}})</code></pre></li>
 </ol>
 <hr>
-<h3 id="sec2-tbl-Age">2.11 Age <a href="#sec2-tbl-Age" class="section-anchor">#</a></h3>
+<h3 id="sec2-tbl-DimPurchaseContractItem">2.12 DimPurchaseContractItem <a href="#sec2-tbl-DimPurchaseContractItem" class="section-anchor">#</a></h3>
 <ol>
-  <li><strong>Source</strong>: <code>Table.FromRows(Json.Document(Binary.Decompress(Binary.FromText(&quot;dc8rDsAgEIThqxA0AnZZHmchCER1k7amty+gaMKYEZ/6pxTtRJs+6jkVWfUe7bp1Nd0D8Ag8Ac97JwvcdSc3XVYn4AzcAxfg4y+F4fzricAT8Lx3tsDHX549vPYwAWfgHrhsvH4=&quot;, BinaryEncoding.Base64), Compression.Deflate)), ...</code></li>
-  <li><strong>Changed Type</strong>: <code>Table.TransformColumnTypes(Source,{{&quot;Age&quot;, Int64.Type}, {&quot;Age Bucket&quot;, type text}})</code></li>
+  <li><strong>Source</strong>:
+<pre><code>SapHana.Database(HanaServer, [Implementation=&quot;2.0&quot;])</code></pre></li>
+  <li><strong>Contents</strong>:
+<pre><code>Source{[Name=&quot;Contents&quot;]}[Data],
+    infrabel.analytics.IFBA.IFBA5.PROCUREMENT = Contents{[Name=&quot;infrabel.analytics.IFBA.IFBA5.PROCUREMENT&quot;]}[Data]</code></pre></li>
+  <li><strong>PurchaseContractItem1</strong>:
+<pre><code>infrabel.analytics.IFBA.IFBA5.PROCUREMENT{[Name=&quot;PurchaseContractItem&quot;]}[Data]</code></pre></li>
+  <li><strong>Added Items</strong>:
+<pre><code>Cube.Transform(PurchaseContractItem1,
+        {
+            {Cube.AddAndExpandDimensionColumn, &quot;[PurchaseContractItem]&quot;, {&quot;[PurchaseContractItem].[IDEL]&quot;, &quot;[PurchaseContractItem].[IDELETI]&quot;, &quot;[PurchaseContractItem].[0MATERIAL]&quot;, &quot;[PurchaseContractItem].[IPDELTIME]&quot;, &quot;[PurchaseContractItem].[0PLANT]&quot;, &quot;[PurchaseContractItem].[0OI_EBELN]&quot;, &quot;[PurchaseContractItem].[0OI_EBELP]&quot;, &quot;[PurchaseContractItem].[PurchaseContractItemKey]&quot;, &quot;[PurchaseContractItem].[ValidityPeriodEndDate]&quot;, &quot;[PurchaseContractItem].[ValidityPeriodStartDate]&quot;, &quot;[PurchaseContractItem].[0VENDOR]&quot;, &quot;[PurchaseContractItem].[0VENDOR___T]&quot;}, {&quot;Deletion indicator (Header)&quot;, &quot;Deletion indicator (Item)&quot;, &quot;Material&quot;, &quot;Planned Delivery Time&quot;, &quot;Plant&quot;, &quot;Purchase contract&quot;, &quot;Purchase contract item&quot;, &quot;PurchaseContractItemKey&quot;, &quot;Validity period end date&quot;, &quot;Validity period start date&quot;, &quot;Vendor&quot;, &quot;Vendor (Name)&quot;}}
+        })</code></pre></li>
+  <li><strong>Filtered Rows</strong>:
+<pre><code>Table.SelectRows(#&quot;Added Items&quot;, each ([#&quot;Deletion indicator (Item)&quot;] = &quot;&quot;) and ([Material] &lt;&gt; &quot;&quot;))</code></pre></li>
+  <li><strong>Changed Type</strong>:
+<pre><code>Table.TransformColumnTypes(#&quot;Filtered Rows&quot;,{{&quot;Planned Delivery Time&quot;, Int64.Type}})</code></pre></li>
+  <li><strong>Added PlantMaterial</strong>:
+<pre><code>Table.AddColumn(#&quot;Changed Type&quot;, &quot;Plant Material (Comp.Key)&quot;, each [Plant] &amp; [Material])</code></pre></li>
+  <li><strong>Added PlantMaterialVendor</strong>:
+<pre><code>Table.AddColumn(#&quot;Added PlantMaterial&quot;, &quot;Plant Material Vendor (Comp.Key)&quot;, each [#&quot;Plant Material (Comp.Key)&quot;] &amp; [Vendor])</code></pre></li>
 </ol>
 <hr>
-<h3 id="sec2-tbl-STable">2.12 STable <a href="#sec2-tbl-STable" class="section-anchor">#</a></h3>
+<h3 id="sec2-tbl-HanaServer">2.13 HanaServer <a href="#sec2-tbl-HanaServer" class="section-anchor">#</a></h3>
+<pre><code>&quot;HANABIP.msnet.railb.be:30015&quot; meta [IsParameterQuery=true, List={&quot;HANABID.msnet.railb.be:30215&quot;, &quot;HANABIQ.msnet.railb.be:31215&quot;, &quot;HANABIP.msnet.railb.be:30015&quot;}, DefaultValue=&quot;HANABIP.msnet.railb.be:30015&quot;, Type=&quot;Text&quot;, IsParameterQueryRequired=true]</code></pre>
+<hr>
+<h3 id="sec2-tbl-ISO_Calendar">2.14 ISO Calendar <a href="#sec2-tbl-ISO_Calendar" class="section-anchor">#</a></h3>
 <ol>
-  <li><strong>Source</strong>: <code>Table.FromRows(Json.Document(Binary.Decompress(Binary.FromText(&quot;i45Wci4tKkrNK1HwSy1RCE7MSS1W0lEyVIrViVZyrSgpSlQIKMpPyywBChopxcYCAA==&quot;, BinaryEncoding.Base64), Compression.Deflate)), let _t = ((type text) meta [Serialized.Text = true]) in type table [...</code></li>
-  <li><strong>Changed Type</strong>: <code>Table.TransformColumnTypes(Source,{{&quot;Metric&quot;, type text}, {&quot;Sort&quot;, Int64.Type}})</code></li>
+  <li><strong>FxCurrentThursday</strong>:
+<pre><code>(DateValue as date ) as date =&gt; Date.AddDays( DateValue, 3 - Date.DayOfWeek( DateValue, Day.Monday))</code></pre></li>
+  <li><strong>FxFirstThursdayOfYear</strong>:
+<pre><code>(DateValue as date ) as date =&gt; [</code></pre></li>
+  <li><strong>CurrentThursday</strong>:
+<pre><code>FxCurrentThursday( DateValue )</code></pre></li>
+  <li><strong>YearCurrThursday</strong>:
+<pre><code>Date.Year( CurrentThursday )</code></pre></li>
+  <li><strong>FirstThursdayOfYear</strong>:
+<pre><code>Date.AddDays( #date( YearCurrThursday, 1, 7), - Date.DayOfWeek( #date( YearCurrThursday, 1, 1), Day.Friday))
+				        ][FirstThursdayOfYear]</code></pre></li>
+  <li><strong>FxIsoYear</strong>:
+<pre><code>( DateValue as date ) as number =&gt; [</code></pre></li>
+  <li><strong>DaysDifference</strong>:
+<pre><code>Duration.Days( FxCurrentThursday(DateValue) - FxFirstThursdayOfYear(DateValue ) )</code></pre></li>
+  <li><strong>WeekNumber</strong>:
+<pre><code>( DaysDifference / 7 ) + 1</code></pre></li>
+  <li><strong>ResultYear</strong>:
+<pre><code>Date.Year( Date.AddDays( DateValue, 26 - WeekNumber))
+				        ][ResultYear]</code></pre></li>
+  <li><strong>CurrentIsoYear</strong>:
+<pre><code>FxIsoYear( Today )</code></pre></li>
+  <li><strong>FxIsoWeek</strong>:
+<pre><code>( DateValue as date ) as number =&gt;  Duration.Days(FxCurrentThursday(DateValue) - FxFirstThursdayOfYear( DateValue )) / 7 + 1</code></pre></li>
+  <li><strong>CurrentIsoWeek</strong>:
+<pre><code>FxIsoWeek( Today )</code></pre></li>
+  <li><strong>ISOStartYears</strong>:
+<pre><code>[ StartYear = Date.Year( StartDate )</code></pre></li>
+  <li><strong>NumberOfYears</strong>:
+<pre><code>Date.Year( EndDate) - StartYear +1</code></pre></li>
+  <li><strong>Years</strong>:
+<pre><code>{ 0..NumberOfYears }</code></pre></li>
+  <li><strong>Dates</strong>:
+<pre><code>List.Transform( Years, each #date( StartYear + _, 6, 1  ) )</code></pre></li>
+  <li><strong>ISOStartYears</strong>:
+<pre><code>List.Buffer( List.Transform( Dates, each Date.StartOfWeek( FxFirstThursdayOfYear( _ ) ) ) )
+				] [ISOStartYears]</code></pre></li>
+  <li><strong>______________________StartCalendar___________</strong>:
+<pre><code>ISOStartYears,
+				
+				/* _________________________________________________________________________________________________ */</code></pre></li>
+  <li><strong>Today</strong>:
+<pre><code>Date.From(DateTime.LocalNow()),
+				
+				    // Sets the start date for your calendar</code></pre></li>
+  <li><strong>StartDate</strong>:
+<pre><code>Date.StartOfYear(Today)-#duration( 1096,0,0,0),
+				
+				    // The calendar runs until the end of the current year. Change this if you need your calendar to run to another date.</code></pre></li>
+  <li><strong>EndDate</strong>:
+<pre><code>Date.EndOfYear(Today)+#duration( 365,0,0,0)</code></pre></li>
+  <li><strong>ListOfDates</strong>:
+<pre><code>List.Dates(StartDate, Duration.Days(EndDate - StartDate) + 1, #duration(1, 0, 0, 0))</code></pre></li>
+  <li><strong>MyDateTable</strong>:
+<pre><code>Table.FromList(ListOfDates, Splitter.SplitByNothing(), type table[Date = date], null, ExtraValues.Error)</code></pre></li>
+  <li><strong>Add_DateAsInteger</strong>:
+<pre><code>Table.AddColumn(MyDateTable, &quot;DateAsInteger&quot;, each Number.From(Date.ToText([Date], &quot;yyyyMMdd&quot;)), Int64.Type)</code></pre></li>
+  <li><strong>Add_StartOfWeek</strong>:
+<pre><code>Table.AddColumn(Add_DateAsInteger, &quot;StartOfWeek&quot;, each Date.StartOfWeek([Date], Day.Monday), Date.Type)</code></pre></li>
+  <li><strong>Add_EndOfWeek</strong>:
+<pre><code>Table.AddColumn(Add_StartOfWeek, &quot;EndOfWeek&quot;, each Date.EndOfWeek([Date]), Date.Type),
+				    /* Start ISO Calendar Fields. Some of these make use of the functions defined at the start of this query */</code></pre></li>
+  <li><strong>Add_ISO_Year</strong>:
+<pre><code>Table.AddColumn( Add_EndOfWeek, &quot;ISO_Year&quot;, each FxIsoYear([Date]), Int64.Type)</code></pre></li>
+  <li><strong>Add_ISO_YearLabel</strong>:
+<pre><code>Table.AddColumn(Add_ISO_Year, &quot;ISO_YearLabel&quot;, each &quot;ISO &quot; &amp; Text.From( [ISO_Year] ), Text.Type)</code></pre></li>
+  <li><strong>Add_ISO_YearDefault</strong>:
+<pre><code>Table.AddColumn(Add_ISO_YearLabel, &quot;ISO_YearDefault&quot;, each if [ISO_Year] = CurrentIsoYear then &quot;Current&quot; else if [ISO_Year] = (CurrentIsoYear - 1) then &quot;Previous&quot; else [ISO_YearLabel], Text.Type)</code></pre></li>
+  <li><strong>Add_ISO_StartOfYear</strong>:
+<pre><code>Table.AddColumn(Add_ISO_YearDefault, &quot;ISO_StartOfYear&quot;, each Date.StartOfWeek( FxFirstThursdayOfYear([Date] ) ), Date.Type)</code></pre></li>
+  <li><strong>Add_ISO_EndOfYear</strong>:
+<pre><code>Table.AddColumn(Add_ISO_StartOfYear, &quot;ISO_EndOfYear&quot;, (x)=&gt; List.First( List.Select( ISOStartYears, each _ &gt; x[ISO_StartOfYear] ) ) - #duration(1,0,0,0), Date.Type)</code></pre></li>
+  <li><strong>Add_ISO_YearRangeLabel</strong>:
+<pre><code>Table.AddColumn( Add_ISO_EndOfYear, &quot;ISO_YearRangeLabel&quot;, each [ISO_YearLabel] &amp; &quot;: &quot; &amp; Date.ToText( [ISO_StartOfYear], &quot;d MMM yyyy&quot; ) &amp; &quot; - &quot; &amp; Date.ToText( [ISO_EndOfYear], &quot;d MMM yyyy&quot; ), type text )</code></pre></li>
+  <li><strong>Add_ISO_Week</strong>:
+<pre><code>Table.AddColumn(Add_ISO_YearRangeLabel, &quot;ISO_Week&quot;, each FxIsoWeek([Date]), Int64.Type)</code></pre></li>
+  <li><strong>Add_ISO_WeekLabel</strong>:
+<pre><code>Table.AddColumn(Add_ISO_Week, &quot;ISO_WeekLabel&quot;, each &quot;ISO W&quot; &amp; Text.PadStart( Text.From( [ISO_Week] ), 2, &quot;0&quot; ), Text.Type)</code></pre></li>
+  <li><strong>Add_ISO_WeekRangeLabel</strong>:
+<pre><code>Table.AddColumn(Add_ISO_WeekLabel, &quot;ISO_WeekRangeLabel&quot;, each [ISO_WeekLabel] &amp; &quot;: &quot; &amp; Date.ToText( [StartOfWeek], &quot;d MMM yyyy&quot; ) &amp; &quot; - &quot; &amp; Date.ToText( [EndOfWeek], &quot;d MMM yyyy&quot; ), type text )</code></pre></li>
+  <li><strong>Add_ISO_YearWeekLabel</strong>:
+<pre><code>Table.AddColumn(Add_ISO_WeekRangeLabel, &quot;ISO_YearWeekLabel&quot;, each [ISO_YearLabel] &amp; &quot; W&quot; &amp; Text.PadStart( Text.From( [ISO_Week] ), 2, &quot;0&quot; ), Text.Type)</code></pre></li>
+  <li><strong>Add_ISO_Quarter</strong>:
+<pre><code>Table.AddColumn(Add_ISO_YearWeekLabel, &quot;ISO_Quarter&quot;, each Number.RoundUp( List.Min( { [ISO_Week], 52 } ) / 13 ), Int64.Type )</code></pre></li>
+  <li><strong>Add_ISO_QuarterLabel</strong>:
+<pre><code>Table.AddColumn(Add_ISO_Quarter, &quot;ISO_QuarterLabel&quot;, each &quot;ISO Q&quot; &amp; Text.From([ISO_Quarter]), Text.Type)</code></pre></li>
+  <li><strong>Add_ISO_WeekOfQuarter</strong>:
+<pre><code>Table.AddColumn(Add_ISO_QuarterLabel, &quot;ISO_WeekOfQuarter&quot;, each [ISO_Week] - (( [ISO_Quarter] -1 ) * 13 ), Int64.Type )</code></pre></li>
+  <li><strong>Add_ISO_YearQuarterLabel</strong>:
+<pre><code>Table.AddColumn(Add_ISO_WeekOfQuarter, &quot;ISO_YearQuarterLabel&quot;, each [ISO_YearLabel] &amp; &quot; Q&quot; &amp; Text.From([ISO_Quarter]), Text.Type)</code></pre></li>
+  <li><strong>Add_ISO_YearOffset</strong>:
+<pre><code>Table.AddColumn(Add_ISO_YearQuarterLabel, &quot;ISO_YearOffset&quot;, each [ISO_Year] - CurrentIsoYear, Int64.Type)</code></pre></li>
+  <li><strong>Add_ISO_QuarterOffset</strong>:
+<pre><code>Table.AddColumn(Add_ISO_YearOffset, &quot;ISO_QuarterOffset&quot;, each (([ISO_Year] - CurrentIsoYear) * 4) + ([ISO_Quarter] - Number.RoundUp( List.Min( {CurrentIsoWeek, 52} ) / 13)), Int64.Type)</code></pre></li>
+  <li><strong>Add_ISO_TotalWeeks</strong>:
+<pre><code>Table.AddColumn(Add_ISO_QuarterOffset, &quot;ISO_TotalWeeks&quot;, each Number.RoundUp( Duration.Days( [ISO_EndOfYear] - [ISO_StartOfYear] ) / 7 ), Int64.Type )</code></pre></li>
+  <li><strong>Add_ISO_StartOfQuarter</strong>:
+<pre><code>Table.AddColumn(Add_ISO_TotalWeeks, &quot;ISO_StartOfQuarter&quot;, each Date.AddDays( FxFirstThursdayOfYear([Date]), ([ISO_Quarter] - 1) * 13 * 7  - 3 ), type date ),
+				  // To make ISO end of quarter dates for years with 53 weeks show correctly, we use the ISO_EndOfYear calculation</code></pre></li>
+  <li><strong>Add_ISO_EndOfQuarter</strong>:
+<pre><code>Table.AddColumn(Add_ISO_StartOfQuarter, &quot;ISO_EndOfQuarter&quot;, each if [ISO_Quarter] = 4 then [ISO_EndOfYear] else Date.AddDays( [ISO_StartOfQuarter], 7 * 13 -1 ), type date )</code></pre></li>
+  <li><strong>Add_ISO_DayOfQuarter</strong>:
+<pre><code>Table.AddColumn(Add_ISO_EndOfQuarter, &quot;ISO_DayOfQuarter&quot;, each Number.From( [Date] - [ISO_StartOfQuarter]  ) +1, Int64.Type )</code></pre></li>
+  <li><strong>Add_ISO_DayOfYear</strong>:
+<pre><code>Table.AddColumn(Add_ISO_DayOfQuarter, &quot;ISO_DayOfYear&quot;, each Number.From( [Date] - [ISO_StartOfYear]  ) +1, Int64.Type )</code></pre></li>
+  <li><strong>Add_ISO_QuarterRangeLabel</strong>:
+<pre><code>Table.AddColumn(Add_ISO_DayOfYear, &quot;ISO_QuarterRangeLabel&quot;, each &quot;ISO Q&quot; &amp; Text.From( [ISO_Quarter] ) &amp; &quot;: &quot; &amp; Date.ToText( [ISO_StartOfQuarter], &quot;d MMM yyyy&quot; ) &amp; &quot; - &quot; &amp; Date.ToText( [ISO_EndOfQuarter], &quot;d MMM yyyy&quot; ), type text ),
+				    // Renames all columns so they have spaces between words. Also removes underscores.</code></pre></li>
+  <li><strong>Rename Columns</strong>:
+<pre><code>Table.TransformColumnNames(Add_ISO_QuarterRangeLabel, each [</code></pre></li>
+  <li><strong>SplitTextByTransition</strong>:
+<pre><code>Splitter.SplitTextByCharacterTransition({&quot;a&quot;..&quot;z&quot;}, {&quot;A&quot;..&quot;Z&quot;})(_)</code></pre></li>
+  <li><strong>CombineValues</strong>:
+<pre><code>Text.Combine( SplitTextByTransition, &quot; &quot; )</code></pre></li>
+  <li><strong>RemoveUnderscores</strong>:
+<pre><code>Text.Replace( CombineValues, &quot;_&quot;, &quot; &quot;) ][RemoveUnderscores] )</code></pre></li>
 </ol>
 <hr>
-<h3 id="sec2-tbl-Tooltip_Info">2.13 Tooltip Info <a href="#sec2-tbl-Tooltip_Info" class="section-anchor">#</a></h3>
+<h3 id="sec2-tbl-ReceptionStatus">2.15 ReceptionStatus <a href="#sec2-tbl-ReceptionStatus" class="section-anchor">#</a></h3>
 <ol>
-  <li><strong>Source</strong>: <code>Table.FromRows(Json.Document(Binary.Decompress(Binary.FromText(&quot;pZJBT8IwGIb/SrMz8o2Wjs0bARLloEjkYAiHbpRtGWtnW8Dx651pQnBoCnprmqd93u/Nt1x6T9wgzbZcozuUMMNTqWoUK86KtTwIr+NlxlT6HiAvWZofuep+HbjOWFJ0E1k292mEMQQhjeCt3i/iXTfNN62H5zxUpeVSb9X5HkAbqfjt9j6QHgngMR...</code></li>
-  <li><strong>Changed Type</strong>: <code>Table.TransformColumnTypes(Source,{{&quot;nombre&quot;, type text}, {&quot;URL&quot;, type text}, {&quot;DLINK&quot;, type text}})</code></li>
+  <li><strong>Source</strong>:
+<pre><code>[binary payload omitted]</code></pre></li>
+  <li><strong>Changed Type</strong>:
+<pre><code>Table.TransformColumnTypes(Source,{{&quot;Key&quot;, type text}, {&quot;Reception Status&quot;, type text}})</code></pre></li>
 </ol>
 <hr>
-<h3 id="sec2-tbl-Tooltip_Info2">2.14 Tooltip Info2 <a href="#sec2-tbl-Tooltip_Info2" class="section-anchor">#</a></h3>
+<h3 id="sec2-tbl-SupplierDeliveriesOnTime">2.16 SupplierDeliveriesOnTime <a href="#sec2-tbl-SupplierDeliveriesOnTime" class="section-anchor">#</a></h3>
 <ol>
-  <li><strong>Source</strong>: <code>Table.FromRows(Json.Document(Binary.Decompress(Binary.FromText(&quot;i45W8kstUQhOzEktVtBVCIwpNTAwMnNU0lHKKCkpKLbS18/MTUxPLc5ITM7WS87P1c/UL8gPKC8IzyhIR1OUWZVapIeuOjfd0shE39zU0kAfoksvPTNNKVYnWikotaS0KI9oS3PDvXLyAlOJttRI38LM1EgfogtiaSwA&quot;, BinaryEncoding.Base...</code></li>
-  <li><strong>Changed Type</strong>: <code>Table.TransformColumnTypes(Source,{{&quot;Nombre&quot;, type text}, {&quot;URL&quot;, type text}, {&quot;DLINK&quot;, type text}})</code></li>
+  <li><strong>Source</strong>:
+<pre><code>SapHana.Database(&quot;hanabip.msnet.railb.be:30015&quot;, [Implementation=&quot;2.0&quot;])</code></pre></li>
+  <li><strong>Contents</strong>:
+<pre><code>Source{[Name=&quot;Contents&quot;]}[Data], 
+				    infrabel.analytics.IFBA.IFBA5.PROCUREMENT = Contents{[Name=&quot;infrabel.analytics.IFBA.IFBA5.PROCUREMENT&quot;]}[Data]</code></pre></li>
+  <li><strong>SupplierDeliveriesOnTime</strong>:
+<pre><code>infrabel.analytics.IFBA.IFBA5.PROCUREMENT{[Name=&quot;SupplierDeliveriesOnTime&quot;]}[Data]</code></pre></li>
+  <li><strong>Added Items</strong>:
+<pre><code>Cube.Transform(SupplierDeliveriesOnTime,
+				        {
+				            {Cube.AddAndExpandDimensionColumn, &quot;[SupplierDeliveriesOnTime]&quot;, {&quot;[NBR_D_L3].[NBR_D_L3].Attribute&quot;, &quot;[0BBP_ACCCAT].[0BBP_ACCCAT].Attribute&quot;, &quot;[IDELDATE].[IDELDATE].Attribute&quot;, &quot;[0BASE_UOM].[0BASE_UOM].Attribute&quot;, &quot;[0BATCH].[0BATCH].Attribute&quot;, &quot;[0DOC_ITEM].[0DOC_ITEM].Attribute&quot;, &quot;[0DOC_NUM].[0DOC_NUM].Attribute&quot;, &quot;[0CALMONTH].[0CALMONTH].Attribute&quot;, &quot;[ConfirmationTimingStatus].[ConfirmationTimingStatus].Attribute&quot;, &quot;[ConfirmationReceiptBeforeActualDelivery].[ConfirmationReceiptBeforeActualDelivery].Attribute&quot;, &quot;[ConfirmationReceiptDelay].[ConfirmationReceiptDelay].Attribute&quot;, &quot;[ILFDAT].[ILFDAT].Attribute&quot;, &quot;[ICDELDIND].[ICDELDIND].Attribute&quot;, &quot;[ConfirmedBeforePlannedDelivery].[ConfirmedBeforePlannedDelivery].Attribute&quot;, &quot;[ConfirmedDeliveryLeadTime].[ConfirmedDeliveryLeadTime].Attribute&quot;, &quot;[ConfirmedPlanDelay].[ConfirmedPlanDelay].Attribute&quot;, &quot;[I_ERNAM].[I_ERNAM].Attribute&quot;, &quot;[IDATEENT].[IDATEENT].Attribute&quot;, &quot;[IRECMPLD].[IRECMPLD].Attribute&quot;, &quot;[DaysOverdue].[DaysOverdue].Attribute&quot;, &quot;[IDELETI].[IDELETI].Attribute&quot;, &quot;[0DELIV_NUMB].[0DELIV_NUMB].Attribute&quot;, &quot;[0COMPL_DEL].[0COMPL_DEL].Attribute&quot;, &quot;[0DELIV_ITEM].[0DELIV_ITEM].Attribute&quot;, &quot;[ConfirmedDeliveryLeadTimeRemaining].[ConfirmedDeliveryLeadTimeRemaining].Attribute&quot;, &quot;[DeliveryLeadTimeRemaining].[DeliveryLeadTimeRemaining].Attribute&quot;, &quot;[ILIFEX].[ILIFEX].Attribute&quot;, &quot;[FirstNotificationDate].[FirstNotificationDate].Attribute&quot;, &quot;[FirstPrintDate].[FirstPrintDate].Attribute&quot;, &quot;[0CT_FLAG].[0CT_FLAG].Attribute&quot;, &quot;[0PUR_GROUP__IFLCNTRAL].[0PUR_GROUP__IFLCNTRAL].Attribute&quot;, &quot;[0PUR_GROUP__IFLCNTRAL___T].[0PUR_GROUP__IFLCNTRAL___T].Attribute&quot;, &quot;[0CPR_NOTREL].[0CPR_NOTREL].Attribute&quot;, &quot;[IFL_PT109].[IFL_PT109].Attribute&quot;, &quot;[IFL_RCPTN].[IFL_RCPTN].Attribute&quot;, &quot;[0INSP_LOT].[0INSP_LOT].Attribute&quot;, &quot;[0ITM_CAT].[0ITM_CAT].Attribute&quot;, &quot;[0ITEM_DEL].[0ITEM_DEL].Attribute&quot;, &quot;[0OI_EBELP].[0OI_EBELP].Attribute&quot;, &quot;[0CONT_ITEM].[0CONT_ITEM].Attribute&quot;, &quot;[0ERDAT].[0ERDAT].Attribute&quot;, &quot;[IFACT_DAT].[IFACT_DAT].Attribute&quot;, &quot;[0DF_LOAD_GR].[0DF_LOAD_GR].Attribute&quot;, &quot;[0LOC_CURRCY].[0LOC_CURRCY].Attribute&quot;, &quot;[0MPN_MATNR].[0MPN_MATNR].Attribute&quot;, &quot;[IMATY].[IMATY].Attribute&quot;, &quot;[0MATERIAL].[0MATERIAL].Attribute&quot;, &quot;[0MATL_CAT].[0MATL_CAT].Attribute&quot;, &quot;[0MATL_CAT___T].[0MATL_CAT___T].Attribute&quot;, &quot;[0MAT_DOC].[0MAT_DOC].Attribute&quot;, &quot;[0MAT_ITEM].[0MAT_ITEM].Attribute&quot;, &quot;[0MATL_GROUP].[0MATL_GROUP].Attribute&quot;, &quot;[0MATL_GROUP___T].[0MATL_GROUP___T].Attribute&quot;, &quot;[0MATL_TYPE].[0MATL_TYPE].Attribute&quot;, &quot;[0MATL_TYPE___TXTMD].[0MATL_TYPE___TXTMD].Attribute&quot;, &quot;[IDISPR].[IDISPR].Attribute&quot;, &quot;[IDISPR___T].[IDISPR___T].Attribute&quot;, &quot;[IMOVETYPE].[IMOVETYPE].Attribute&quot;, &quot;[0MRP_CONTRL].[0MRP_CONTRL].Attribute&quot;, &quot;[0MRP_CONTRL___T].[0MRP_CONTRL___T].Attribute&quot;, &quot;[0DISMM].[0DISMM].Attribute&quot;, &quot;[0DISMM___T].[0DISMM___T].Attribute&quot;, &quot;[0CONTRACT].[0CONTRACT].Attribute&quot;, &quot;[0PO_UNIT].[0PO_UNIT].Attribute&quot;, &quot;[0SCL_DELDAT].[0SCL_DELDAT].Attribute&quot;, &quot;[0PLANT].[0PLANT].Attribute&quot;, &quot;[0PLANT___T].[0PLANT___T].Attribute&quot;, &quot;[IPRODDESC].[IPRODDESC].Attribute&quot;, &quot;[POItemScheduleLine].[POItemScheduleLine].Attribute&quot;, &quot;[0PSTNG_DATE].[0PSTNG_DATE].Attribute&quot;, &quot;[0PRODSCHED].[0PRODSCHED].Attribute&quot;, &quot;[0DOC_CAT].[0DOC_CAT].Attribute&quot;, &quot;[0DOC_CAT___T].[0DOC_CAT___T].Attribute&quot;, &quot;[0ORDER_CURR].[0ORDER_CURR].Attribute&quot;, &quot;[IPRQ].[IPRQ].Attribute&quot;, &quot;[IPRQ_ITEM].[IPRQ_ITEM].Attribute&quot;, &quot;[IPRQ___T].[IPRQ___T].Attribute&quot;, &quot;[0OI_EBELN].[0OI_EBELN].Attribute&quot;, &quot;[0OI_EBELN___T].[0OI_EBELN___T].Attribute&quot;, &quot;[0DOCTYPE].[0DOCTYPE].Attribute&quot;, &quot;[0DOCTYPE___T].[0DOCTYPE___T].Attribute&quot;, &quot;[0PUR_GROUP].[0PUR_GROUP].Attribute&quot;, &quot;[0PUR_GROUP___T].[0PUR_GROUP___T].Attribute&quot;, &quot;[0PURCH_ORG].[0PURCH_ORG].Attribute&quot;, &quot;[0PURCH_ORG___T].[0PURCH_ORG___T].Attribute&quot;, &quot;[DateIREQDAT].[DateIREQDAT].Attribute&quot;, &quot;[IRSPOS].[IRSPOS].Attribute&quot;, &quot;[IRSNUM].[IRSNUM].Attribute&quot;, &quot;[0SCHED_LINE].[0SCHED_LINE].Attribute&quot;, &quot;[0STOR_LOC].[0STOR_LOC].Attribute&quot;, &quot;[0STOR_LOC___T].[0STOR_LOC___T].Attribute&quot;, &quot;[0SUPP_PLANT].[0SUPP_PLANT].Attribute&quot;, &quot;[0SUPP_PLANT___T].[0SUPP_PLANT___T].Attribute&quot;, &quot;[0VENDOR].[0VENDOR].Attribute&quot;, &quot;[0VENDOR___T].[0VENDOR___T].Attribute&quot;}, {&quot;# days delivery processing&quot;, &quot;Account Assignment Category&quot;, &quot;Actual Delivery Date&quot;, &quot;Base Unit of Measure&quot;, &quot;Batch number&quot;, &quot;BW: Document Line Number&quot;, &quot;BW: Document Number&quot;, &quot;Calendar year/month&quot;, &quot;Confirmation Timing Status&quot;, &quot;ConfirmationReceiptBeforeActualDelivery&quot;, &quot;ConfirmationReceiptDelay&quot;, &quot;Confirmed delivery date&quot;, &quot;Confirmed Delivery Date Indicator&quot;, &quot;ConfirmedBeforePlannedDelivery&quot;, &quot;ConfirmedDeliveryLeadTime&quot;, &quot;ConfirmedPlanDelay&quot;, &quot;Created by&quot;, &quot;Date entered&quot;, &quot;Date Reception Completed&quot;, &quot;DaysOverdue&quot;, &quot;Deletion Indicator (item)&quot;, &quot;Delivery&quot;, &quot;Delivery Complete&quot;, &quot;Delivery Item&quot;, &quot;DeliveryLeadTimeRemaining&quot;, &quot;DeliveryLeadTimeRemaining.1&quot;, &quot;External Identification of Delivery Note&quot;, &quot;First notification date&quot;, &quot;First print date&quot;, &quot;Flag for Contracts&quot;, &quot;Indicator: Central&quot;, &quot;Indicator: Central (Descr)&quot;, &quot;Indicator: Not Relevant&quot;, &quot;Indicator: Partial mvt 109&quot;, &quot;Indicator: Reception completed&quot;, &quot;Inspection Lot Number&quot;, &quot;Item Category in Purchasing Document&quot;, &quot;Item Deleted&quot;, &quot;Item number of purchasing document&quot;, &quot;Item of Principal Agreement&quot;, &quot;Last Confirmation Creation Date&quot;, &quot;Last Invoice Date&quot;, &quot;Loading Group&quot;, &quot;Local currency&quot;, &quot;Manufacturer part&quot;, &quot;Mat doc year&quot;, &quot;Material&quot;, &quot;Material Category&quot;, &quot;Material Category (Descr)&quot;, &quot;Material Document&quot;, &quot;Material Document Item&quot;, &quot;Material group&quot;, &quot;Material group (Descr)&quot;, &quot;Material type&quot;, &quot;Material type (Descr)&quot;, &quot;Material: MRP profile&quot;, &quot;Material: MRP profile (Descr)&quot;, &quot;Movement Type&quot;, &quot;MRP Controller&quot;, &quot;MRP Controller (Descr)&quot;, &quot;MRP Type&quot;, &quot;MRP Type (Descr)&quot;, &quot;Number of Principal Purchase Agreement&quot;, &quot;Order unit&quot;, &quot;Planned delivery date of document schedule line&quot;, &quot;Plant&quot;, &quot;Plant (Descr)&quot;, &quot;PO item descr alt&quot;, &quot;POItemScheduleLine&quot;, &quot;Posting date in the document&quot;, &quot;Production Scheduler&quot;, &quot;Puchasing document category&quot;, &quot;Puchasing document category (Descr)&quot;, &quot;Purchase Order Currency&quot;, &quot;Purchase Requisition&quot;, &quot;Purchase Requisition - Item&quot;, &quot;Purchase Requisition (Descr)&quot;, &quot;Purchasing document number&quot;, &quot;Purchasing document number (Descr)&quot;, &quot;Purchasing document type&quot;, &quot;Purchasing document type (Descr)&quot;, &quot;Purchasing Group&quot;, &quot;Purchasing Group (Descr)&quot;, &quot;Purchasing organization&quot;, &quot;Purchasing organization (Descr)&quot;, &quot;Requirement Date&quot;, &quot;Reservation item&quot;, &quot;Reservation number&quot;, &quot;Schedule line number&quot;, &quot;Storage location&quot;, &quot;Storage location (Descr)&quot;, &quot;Supplying Plant&quot;, &quot;Supplying Plant (Descr)&quot;, &quot;Vendor&quot;, &quot;Vendor (Descr)&quot;}},
+				            {Cube.AddMeasureColumn, &quot;Actual goods receipt quantity&quot;, &quot;[Measures].[0GR_QTY]&quot;},
+				            {Cube.AddMeasureColumn, &quot;Amount in local currency&quot;, &quot;[Measures].[0VALUE_LC]&quot;},
+				            {Cube.AddMeasureColumn, &quot;Confirmed Quantity in Purchase Order Unit&quot;, &quot;[Measures].[0BBP_ASGQOU]&quot;},
+				            {Cube.AddMeasureColumn, &quot;Delay in Days (Confirmed)&quot;, &quot;[Measures].[NBR_D_L]&quot;},
+				            {Cube.AddMeasureColumn, &quot;Delay in Days (Requested)&quot;, &quot;[Measures].[NBR_D_L2]&quot;},
+				            {Cube.AddMeasureColumn, &quot;EKET - quantity goods received&quot;, &quot;[Measures].[IWEMNG]&quot;},
+				            {Cube.AddMeasureColumn, &quot;Issued Quantity&quot;, &quot;[Measures].[IWAMNG]&quot;},
+				            {Cube.AddMeasureColumn, &quot;Number of Records&quot;, &quot;[Measures].[1ROWCOUNT]&quot;},
+				            {Cube.AddMeasureColumn, &quot;Order quantity&quot;, &quot;[Measures].[0ORDER_QUAN]&quot;},
+				            {Cube.AddMeasureColumn, &quot;Order quantity (with sign)&quot;, &quot;[Measures].[MATDOC_ORDERQUAN]&quot;},
+				            {Cube.AddMeasureColumn, &quot;Price unit&quot;, &quot;[Measures].[0PRICE_UNIT]&quot;},
+				            {Cube.AddMeasureColumn, &quot;PUR: Net purchase order value&quot;, &quot;[Measures].[0NET_PO_VAL]&quot;},
+				            {Cube.AddMeasureColumn, &quot;Quantity in order price quantity unit&quot;, &quot;[Measures].[0OI_BPMNG]&quot;},
+				            {Cube.AddMeasureColumn, &quot;Scheduled Quantity&quot;, &quot;[Measures].[IMENGE]&quot;},
+				            {Cube.AddMeasureColumn, &quot;Open Quantity (PO Unit)&quot;, &quot;[Measures].[IOPENQPOU]&quot;},
+				            {Cube.AddMeasureColumn, &quot;Actual delivery lead time&quot;, &quot;[Measures].[ActualDeliveryLeadTime]&quot;},
+				            {Cube.AddMeasureColumn, &quot;Planned Delivery Time&quot;, &quot;[Measures].[IPDELTIME]&quot;},
+				            {Cube.AddMeasureColumn, &quot;PUR: Net price&quot;, &quot;[Measures].[0NETPRICE]&quot;},
+				            {Cube.ApplyParameter, &quot;DELIVERYFROM&quot;, {&quot;20200101&quot;}},
+				            {Cube.ApplyParameter, &quot;DELIVERYTO&quot;, {&quot;20271231&quot;}},
+				            {Cube.AddMeasureColumn, &quot;Original Quantity&quot;, &quot;[Measures].[IORIGQTY]&quot;}
+				        })</code></pre></li>
+  <li><strong>Renamed Columns3</strong>:
+<pre><code>Table.RenameColumns(#&quot;Added Items&quot;,{{&quot;DeliveryLeadTimeRemaining&quot;, &quot;ConfirmedDeliveryLeadTimeRemaining&quot;}, {&quot;DeliveryLeadTimeRemaining.1&quot;, &quot;DeliveryLeadTimeRemaining&quot;}, {&quot;# days delivery processing&quot;, &quot;Reception Processing (Working Days)&quot;}, {&quot;External Identification of Delivery Note&quot;, &quot;Supplier&#x27;s Delivery Note&quot;}}),
+				    // #&quot;Filtered Rows&quot; = Table.SelectRows(#&quot;Renamed Columns3&quot;, each [Planned delivery date of document schedule line] &lt; DateTime.Date(DateTime.LocalNow()))</code></pre></li>
+  <li><strong>Filtered Rows1</strong>:
+<pre><code>Table.SelectRows(#&quot;Renamed Columns3&quot;, each ([Number of Records] = 1))</code></pre></li>
+  <li><strong>Renamed Columns</strong>:
+<pre><code>Table.RenameColumns(#&quot;Filtered Rows1&quot;,{{&quot;Number of Principal Purchase Agreement&quot;, &quot;Contract Nr&quot;}, {&quot;BW: Document Number&quot;, &quot;PO Nr&quot;}, {&quot;BW: Document Line Number&quot;, &quot;PO Item&quot;}, {&quot;Account Assignment Category&quot;, &quot;Account Assignment Category (Key)&quot;}, {&quot;Vendor&quot;, &quot;Vendor (Key)&quot;}, {&quot;Confirmed delivery date&quot;, &quot;Last Confirmed delivery date&quot;}, {&quot;Material type&quot;, &quot;Material type (Key)&quot;}, /* {&quot;Number of Principal Purchase Agreement (Descr)&quot;, &quot;Contract (Descr)&quot;},*/ {&quot;Open Quantity (PO Unit)&quot;, &quot;Open Quantity&quot;}, {&quot;Item of Principal Agreement&quot;, &quot;Contract Item&quot;}})</code></pre></li>
+  <li><strong>Added PlantMaterial</strong>:
+<pre><code>Table.AddColumn(#&quot;Renamed Columns&quot;, &quot;Plant Material (Comp.Key)&quot;, each [Plant]&amp;[Material])</code></pre></li>
+  <li><strong>Added POItemKey</strong>:
+<pre><code>Table.AddColumn(#&quot;Added PlantMaterial&quot;, &quot;POItemKey&quot;, each [PO Nr]&amp;[PO Item])</code></pre></li>
+  <li><strong>Added unique ScheduleLineID</strong>:
+<pre><code>Table.AddColumn(#&quot;Added POItemKey&quot;, &quot;ScheduleLineID&quot;, each [Purchasing document number]&amp;[Item number of purchasing document]&amp;[Schedule line number])</code></pre></li>
+  <li><strong>Added Full Vendor Name</strong>:
+<pre><code>Table.AddColumn(#&quot;Added unique ScheduleLineID&quot;, &quot;Supplier&quot;, each [#&quot;Vendor (Key)&quot;] &amp; &quot; - &quot; &amp; [#&quot;Vendor (Descr)&quot;])</code></pre></li>
+  <li><strong>Added Full Material Type</strong>:
+<pre><code>Table.AddColumn(#&quot;Added Full Vendor Name&quot;, &quot;Material Type&quot;, each [#&quot;Material type (Key)&quot;] &amp; &quot; - &quot; &amp; [#&quot;Material type (Descr)&quot;])</code></pre></li>
+  <li><strong>Merged Queries</strong>:
+<pre><code>Table.NestedJoin(#&quot;Added Full Material Type&quot;, {&quot;Material&quot;}, DimMaterial, {&quot;Material (Key)&quot;}, &quot;DimMaterial&quot;, JoinKind.LeftOuter)</code></pre></li>
+  <li><strong>Expanded DimMaterial</strong>:
+<pre><code>Table.ExpandTableColumn(#&quot;Merged Queries&quot;, &quot;DimMaterial&quot;, {&quot;Cross-Plant Material Status&quot;}, {&quot;Cross-Plant Material Status&quot;})</code></pre></li>
+  <li><strong>Filtered Rows2</strong>:
+<pre><code>Table.SelectRows(#&quot;Expanded DimMaterial&quot;, each ([#&quot;Cross-Plant Material Status&quot;] = &quot;Z1&quot; or [#&quot;Cross-Plant Material Status&quot;] = &quot;ZE&quot; or [#&quot;Cross-Plant Material Status&quot;] = &quot;ZL&quot;or [#&quot;Cross-Plant Material Status&quot;] = &quot;ZR&quot;))</code></pre></li>
+  <li><strong>Added Dlv Early</strong>:
+<pre><code>Table.AddColumn(#&quot;Filtered Rows2&quot;, &quot;Dlv Early&quot;, each if [#&quot;Delay in Days (Requested)&quot;] &lt; -7 and [Delivery Complete] = &quot;X&quot; then 1 else 0)</code></pre></li>
+  <li><strong>Added Dlv On-time</strong>:
+<pre><code>Table.AddColumn(#&quot;Added Dlv Early&quot;, &quot;Dlv On-time&quot;, each if [#&quot;Delay in Days (Requested)&quot;] &gt;= -7 and [#&quot;Delay in Days (Requested)&quot;] &lt;= 0 and [Delivery Complete] = &quot;X&quot; then 1 else 0)</code></pre></li>
+  <li><strong>Added Dlv Week Late</strong>:
+<pre><code>Table.AddColumn(#&quot;Added Dlv On-time&quot;, &quot;Dlv Week Late&quot;, each if [#&quot;Delay in Days (Requested)&quot;] &gt; 0 and [#&quot;Delay in Days (Requested)&quot;] &lt;= 7 and [Delivery Complete] = &quot;X&quot; then 1 else 0)</code></pre></li>
+  <li><strong>Added Dlv Month Late</strong>:
+<pre><code>Table.AddColumn(#&quot;Added Dlv Week Late&quot;, &quot;Dlv Month Late&quot;, each if [#&quot;Delay in Days (Requested)&quot;] &gt; 7 and [#&quot;Delay in Days (Requested)&quot;] &lt; 30 and [Delivery Complete] = &quot;X&quot; then 1 else 0)</code></pre></li>
+  <li><strong>Added Dlv Very Late</strong>:
+<pre><code>Table.AddColumn(#&quot;Added Dlv Month Late&quot;, &quot;Dlv Very Late&quot;, each if [#&quot;Delay in Days (Requested)&quot;] &gt;= 30 and [Delivery Complete] = &quot;X&quot; then 1 else 0)</code></pre></li>
+  <li><strong>Added Dlv Partially Delivered</strong>:
+<pre><code>Table.AddColumn(#&quot;Added Dlv Very Late&quot;, &quot;Dlv Partially Delivered&quot;, each if [Actual goods receipt quantity] &gt; 0 and [Delivery Complete] &lt;&gt; &quot;X&quot; then 1 else 0)</code></pre></li>
+  <li><strong>Added Dlv Not Delivered</strong>:
+<pre><code>Table.AddColumn(#&quot;Added Dlv Partially Delivered&quot;, &quot;Dlv Not Delivered&quot;, each if [Actual Delivery Date] = null and [Actual goods receipt quantity] = 0 and [Delivery Complete] &lt;&gt; &quot;X&quot; then 1 else 0)</code></pre></li>
+  <li><strong>Added Checker</strong>:
+<pre><code>Table.AddColumn(#&quot;Added Dlv Not Delivered&quot;, &quot;Checker&quot;, each [Dlv Early] + [#&quot;Dlv On-time&quot;] + [Dlv Week Late] + [Dlv Month Late] + [Dlv Very Late] + [Dlv Partially Delivered] + [Dlv Not Delivered])</code></pre></li>
+  <li><strong>Added Dlv Category</strong>:
+<pre><code>Table.AddColumn(#&quot;Added Checker&quot;, &quot;Dlv Category&quot;, each if [Dlv Early] = 1 then &quot;1. Early&quot; else if [#&quot;Dlv On-time&quot;] = 1 then &quot;2. On-time&quot; else if [Dlv Week Late] = 1 then &quot;3. &lt; 1 Week Late&quot; else if [Dlv Month Late] = 1 then &quot;4. &lt; 1 Month Late&quot; else if [Dlv Very Late] = 1 then &quot;5. Very Late&quot; else if [Dlv Partially Delivered] = 1 then &quot;6. Partial Delivery&quot; else if [Dlv Not Delivered] = 1 then &quot;7. No Delivery&quot; else &quot;0. Unknown&quot;)</code></pre></li>
+  <li><strong>Renamed Columns1</strong>:
+<pre><code>Table.RenameColumns(#&quot;Added Dlv Category&quot;,{{&quot;Purchasing document number (Descr)&quot;, &quot;PO internal Note&quot;}})</code></pre></li>
+  <li><strong>Added PlantMaterialVendor</strong>:
+<pre><code>Table.AddColumn(#&quot;Renamed Columns1&quot;, &quot;Plant Material Vendor (Comp.Key)&quot;, each [#&quot;Plant Material (Comp.Key)&quot;] &amp; [Material])</code></pre></li>
+  <li><strong>Added ContractDeviation Requested</strong>:
+<pre><code>Table.AddColumn(#&quot;Added PlantMaterialVendor&quot;, &quot;Deviation from Contract&quot;, each if [Flag for Contracts] = &quot;X&quot; then [Actual delivery lead time] - [Planned Delivery Time] else 99999)</code></pre></li>
+  <li><strong>Renamed Columns2</strong>:
+<pre><code>Table.RenameColumns(#&quot;Added ContractDeviation Requested&quot;,{{&quot;Planned Delivery Time&quot;, &quot;Contractual Delivery Time&quot;}, {&quot;Actual delivery lead time&quot;, &quot;Actual Delivery Time&quot;}})</code></pre></li>
+  <li><strong>Added Delivery Value</strong>:
+<pre><code>Table.AddColumn(#&quot;Renamed Columns2&quot;, &quot;Delivery Value&quot;, each [Original Quantity]*[#&quot;PUR: Net price&quot;]/[Price unit])</code></pre></li>
+  <li><strong>Reordered Columns</strong>:
+<pre><code>Table.ReorderColumns(#&quot;Added Delivery Value&quot;,{&quot;Reception Processing (Working Days)&quot;, &quot;Account Assignment Category (Key)&quot;, &quot;Actual Delivery Date&quot;, &quot;PO Item&quot;, &quot;Batch number&quot;, &quot;PO Nr&quot;, &quot;Calendar year/month&quot;, &quot;Confirmation Timing Status&quot;, &quot;ConfirmationReceiptBeforeActualDelivery&quot;, &quot;ConfirmationReceiptDelay&quot;, &quot;Last Confirmed delivery date&quot;, &quot;Confirmed Delivery Date Indicator&quot;, &quot;ConfirmedBeforePlannedDelivery&quot;, &quot;ConfirmedDeliveryLeadTime&quot;, &quot;ConfirmedPlanDelay&quot;, &quot;Created by&quot;, &quot;Date entered&quot;, &quot;Date Reception Completed&quot;, &quot;DaysOverdue&quot;, &quot;Deletion Indicator (item)&quot;, &quot;Delivery&quot;, &quot;Delivery Complete&quot;, &quot;Delivery Item&quot;, &quot;ConfirmedDeliveryLeadTimeRemaining&quot;, &quot;DeliveryLeadTimeRemaining&quot;, &quot;First notification date&quot;, &quot;First print date&quot;, &quot;Flag for Contracts&quot;, &quot;Indicator: Central&quot;, &quot;Indicator: Central (Descr)&quot;, &quot;Indicator: Not Relevant&quot;, &quot;Indicator: Reception completed&quot;, &quot;Indicator: Partial mvt 109&quot;, &quot;Inspection Lot Number&quot;, &quot;Item Category in Purchasing Document&quot;, &quot;Item Deleted&quot;, &quot;Item number of purchasing document&quot;, &quot;Contract Item&quot;, &quot;Last Confirmation Creation Date&quot;, &quot;Last Invoice Date&quot;, &quot;Loading Group&quot;, &quot;Manufacturer part&quot;, &quot;Mat doc year&quot;, &quot;Material&quot;, &quot;Material Category&quot;, &quot;Material Category (Descr)&quot;, &quot;Material Document&quot;, &quot;Material Document Item&quot;, &quot;Material group&quot;, &quot;Material group (Descr)&quot;, &quot;Material type (Key)&quot;, &quot;Material type (Descr)&quot;, &quot;Material: MRP profile&quot;, &quot;Material: MRP profile (Descr)&quot;, &quot;Movement Type&quot;, &quot;MRP Controller&quot;, &quot;MRP Controller (Descr)&quot;, &quot;MRP Type&quot;, &quot;MRP Type (Descr)&quot;, &quot;Contract Nr&quot;, &quot;Planned delivery date of document schedule line&quot;, &quot;Plant&quot;, &quot;Plant (Descr)&quot;, &quot;PO item descr alt&quot;, &quot;POItemScheduleLine&quot;, &quot;Posting date in the document&quot;, &quot;Production Scheduler&quot;, &quot;Puchasing document category&quot;, &quot;Puchasing document category (Descr)&quot;, &quot;Purchase Requisition&quot;, &quot;Purchase Requisition - Item&quot;, &quot;Purchase Requisition (Descr)&quot;, &quot;Purchasing document number&quot;, &quot;PO internal Note&quot;, &quot;Purchasing document type&quot;, &quot;Purchasing document type (Descr)&quot;, &quot;Purchasing Group&quot;, &quot;Purchasing Group (Descr)&quot;, &quot;Purchasing organization&quot;, &quot;Purchasing organization (Descr)&quot;, &quot;Schedule line number&quot;, &quot;Storage location&quot;, &quot;Storage location (Descr)&quot;, &quot;Supplying Plant&quot;, &quot;Supplying Plant (Descr)&quot;, &quot;Vendor (Key)&quot;, &quot;Vendor (Descr)&quot;, &quot;Number of Records&quot;, &quot;Delay in Days (Confirmed)&quot;, &quot;Delay in Days (Requested)&quot;, &quot;Base Unit of Measure&quot;, &quot;Order unit&quot;, &quot;Scheduled Quantity&quot;, &quot;Confirmed Quantity in Purchase Order Unit&quot;, &quot;Issued Quantity&quot;, &quot;Open Quantity&quot;, &quot;Quantity in order price quantity unit&quot;, &quot;EKET - quantity goods received&quot;, &quot;Actual goods receipt quantity&quot;, &quot;Order quantity&quot;, &quot;Order quantity (with sign)&quot;, &quot;Local currency&quot;, &quot;Purchase Order Currency&quot;, &quot;PUR: Net price&quot;, &quot;Price unit&quot;, &quot;PUR: Net purchase order value&quot;, &quot;Amount in local currency&quot;, &quot;Delivery Value&quot;, &quot;Plant Material (Comp.Key)&quot;, &quot;Original Quantity&quot;, &quot;POItemKey&quot;, &quot;ScheduleLineID&quot;, &quot;Supplier&quot;, &quot;Material Type&quot;, &quot;Cross-Plant Material Status&quot;, &quot;Actual Delivery Time&quot;, &quot;Contractual Delivery Time&quot;, &quot;Dlv Early&quot;, &quot;Dlv On-time&quot;, &quot;Dlv Week Late&quot;, &quot;Dlv Month Late&quot;, &quot;Dlv Very Late&quot;, &quot;Dlv Partially Delivered&quot;, &quot;Dlv Not Delivered&quot;, &quot;Checker&quot;, &quot;Dlv Category&quot;, &quot;Plant Material Vendor (Comp.Key)&quot;, &quot;Deviation from Contract&quot;})</code></pre></li>
+  <li><strong>Renamed Columns4</strong>:
+<pre><code>Table.RenameColumns(#&quot;Reordered Columns&quot;,{{&quot;Reception Processing (Working Days)&quot;, &quot;Reception (Working Days)&quot;}})</code></pre></li>
+</ol>
+<div class="alert alert-warning"><div class="alert-title">Warning</div>This table has a <strong>hardcoded</strong> HANA connection instead of using a parameter.</div>
+<hr>
+<h3 id="sec2-tbl-TextValueToday">2.17 TextValueToday <a href="#sec2-tbl-TextValueToday" class="section-anchor">#</a></h3>
+<ol>
+  <li><strong>Source</strong>:
+<pre><code>Xml.Document(Web.Contents(&quot;http://api.timezonedb.com/v2/get-time-zone?key=URP1KU545PGT&amp;format=xml&amp;by=zone&amp;zone=Europe/Brussels&quot;))</code></pre></li>
+  <li><strong>Value</strong>:
+<pre><code>Source{0}[Value]</code></pre></li>
+  <li><strong>Value1</strong>:
+<pre><code>Text.Replace(Text.Start(Value{14}[Value],10),&quot;-&quot;,&quot;&quot;)</code></pre></li>
 </ol>
 <hr>
-<h3 id="sec2-tbl-Details">2.15 Details <a href="#sec2-tbl-Details" class="section-anchor">#</a></h3>
-<ol>
-  <li><strong>Source</strong>: <code>Table.FromRows(Json.Document(Binary.Decompress(Binary.FromText(&quot;lVXbcpswEP0VDc/OxMF2mjzKgBtNsWEwzmXSPChY2JrIKCNEU/ep39JP65dUK18mDYEQZjxjpLO7hz1npft7By98Esy8wOk5Z+YXxUGCUxLNcGjeXOehV4Ngs3eXEs8iBhYRhzidRMnUhvScOLoJEjQmyA/m39IoNkvD93Bo/yTsWSqNrjl7QWZ51J...</code></li>
-  <li><strong>Changed Type</strong>: <code>Table.TransformColumnTypes(Source,{{&quot;DFSort&quot;, Int64.Type}, {&quot;TSort&quot;, Int64.Type}})</code></li>
-</ol>
+<h3 id="sec2-tbl-POLines_Filter">2.18 POLines Filter (DAX Calculated Table) <a href="#sec2-tbl-POLines_Filter" class="section-anchor">#</a></h3>
+<pre><code>GENERATESERIES(0, [PO Lines Count], 1 )</code></pre>
 <hr>
-<h3 id="sec2-tbl-__Return_Rate">2.16 % Return Rate (DAX Calculated Table) <a href="#sec2-tbl-__Return_Rate" class="section-anchor">#</a></h3>
-<pre><code>GENERATESERIES(0, 60, 1)</code></pre>
+<h3 id="sec2-tbl-Spent_Filter">2.19 Spent Filter (DAX Calculated Table) <a href="#sec2-tbl-Spent_Filter" class="section-anchor">#</a></h3>
+<pre><code>GENERATESERIES(0, [Spent Amount], 1000 )</code></pre>
+<hr>
+<h3 id="sec2-tbl-Vendor_PO_Lines">2.20 Vendor PO Lines (DAX Calculated Table) <a href="#sec2-tbl-Vendor_PO_Lines" class="section-anchor">#</a></h3>
+<pre><code>SUMMARIZE(FILTER(SupplierDeliveriesOnTime,SupplierDeliveriesOnTime[Vendor (Key)] &lt;&gt; BLANK() &amp;&amp; RIGHT(LEFT(SupplierDeliveriesOnTime[Vendor (Key)],2),1) &lt;&gt; &quot;-&quot;),SupplierDeliveriesOnTime[Vendor (Key)],&quot;PO Lines&quot;, [PO Lines Count])</code></pre>
+<hr>
+<h3 id="sec2-tbl-_Measures">2.21 _Measures (DAX Calculated Table) <a href="#sec2-tbl-_Measures" class="section-anchor">#</a></h3>
+<pre><code>Row(&quot;Column&quot;, BLANK())</code></pre>
 <hr>
 
 
 <h2 id="sec3">3. Relationships <a href="#sec3" class="section-anchor">#</a></h2>
 <table>
-<thead><tr><th>#</th><th>From Table</th><th>From Column</th><th>--</th><th>To Table</th><th>To Column</th><th>Cross-Filter</th></tr></thead>
+<thead><tr><th>#</th><th>From Table</th><th>From Column</th><th>→</th><th>To Table</th><th>To Column</th><th>Cross-Filter</th></tr></thead>
 <tbody>
-<tr><td>1</td><td>Association</td><td><code>RightItemSetId</code></td><td>--</td><td>Associated Product</td><td><code>ProductID</code></td><td>Single</td></tr>
-<tr><td>2</td><td>Sales</td><td><code>StoreID</code></td><td>--</td><td>Store</td><td><code>StoreID</code></td><td>Single</td></tr>
-<tr><td>3</td><td>Sales</td><td><code>ProductID</code></td><td>--</td><td>Product</td><td><code>ProductID</code></td><td>Single</td></tr>
-<tr><td>4</td><td>Sales</td><td><code>Date</code></td><td>--</td><td>Calendar</td><td><code>Date</code></td><td>Single</td></tr>
-<tr><td>5</td><td>Customer</td><td><code>ID</code></td><td>--</td><td>Sales</td><td><code>ID</code></td><td><strong>Both</strong></td></tr>
-<tr><td>6</td><td>Association</td><td><code>LeftItemSetId</code></td><td>--</td><td>Product</td><td><code>ProductID</code></td><td>Single</td></tr>
-<tr><td>7</td><td>Product</td><td><code>Product</code></td><td>--</td><td>Associated Product</td><td><code>Product</code></td><td><strong>Both</strong></td></tr>
-<tr><td>8</td><td>Customer</td><td><code>Product</code></td><td>--</td><td>Associated Product</td><td><code>Product</code></td><td>Single</td></tr>
+<tr><td>1</td><td>SupplierDeliveriesOnTime</td><td><code>Planned delivery date of document schedule line</code></td><td>→</td><td>DateRequired</td><td><code>Requirement Date</code></td><td><strong>Both</strong></td></tr>
+<tr><td>2</td><td>SupplierDeliveriesOnTime</td><td><code>Material</code></td><td>→</td><td>DimMaterial</td><td><code>Material (Key)</code></td><td><strong>Both</strong></td></tr>
+<tr><td>3</td><td>SupplierDeliveriesOnTime</td><td><code>Plant Material (Comp.Key)</code></td><td>→</td><td>DimMaterialAtPlantLevel</td><td><code>Plant Material (Comp.Key)</code></td><td>Single</td></tr>
+<tr><td>4</td><td>SupplierDeliveriesOnTime</td><td><code>Plant</code></td><td>→</td><td>DimPlant</td><td><code>Plant (Key)</code></td><td>Single</td></tr>
+<tr><td>5</td><td>SupplierDeliveriesOnTime</td><td><code>Last Confirmed delivery date</code></td><td>→</td><td>DateConfirmed</td><td><code>Confirmation Date</code></td><td>Single</td></tr>
+<tr><td>6</td><td>SupplierDeliveriesOnTime</td><td><code>Contract Nr</code></td><td>→</td><td>DimPurchaseContractHeader</td><td><code>Purchasing document number</code></td><td><strong>Both</strong></td></tr>
+<tr><td>7</td><td>DMContractConsumption</td><td><code>0CONTRACT</code></td><td>→</td><td>DimPurchaseContractHeader</td><td><code>Purchasing document number</code></td><td><strong>Both</strong></td></tr>
+<tr><td>8</td><td>DimPurchaseContractItem</td><td><code>Plant</code></td><td>→</td><td>DimPlant</td><td><code>Plant (Key)</code></td><td>Single</td></tr>
+<tr><td>9</td><td>SupplierDeliveriesOnTime</td><td><code>Vendor (Key)</code></td><td>→</td><td>Vendor PO Lines</td><td><code>Vendor (Key)</code></td><td><strong>Both</strong></td></tr>
+<tr><td>10</td><td>SupplierDeliveriesOnTime</td><td><code>Actual Delivery Date</code></td><td>→</td><td>DateDelivered</td><td><code>Delivery Date</code></td><td>Single</td></tr>
+<tr><td>11</td><td>SupplierDeliveriesOnTime</td><td><code>Indicator: Reception completed</code></td><td>→</td><td>ReceptionStatus</td><td><code>Key</code></td><td>Single</td></tr>
+<tr><td>12</td><td>SupplierDeliveriesOnTime</td><td><code>Delivery Complete</code></td><td>→</td><td>DeliveryStatus</td><td><code>Key</code></td><td>Single</td></tr>
 </tbody></table>
 <h4>Data Model Diagram</h4>
 <pre class="mermaid">
 graph LR
-    Associated_Product["Associated Product"]
-    Association["Association"]
-    Calendar["Calendar"]
-    Customer["Customer"]
-    Product["Product"]
-    Sales["Sales"]
-    Store["Store"]
-    Association -->|"RightItemSetId"| Associated_Product
-    Sales -->|"StoreID"| Store
-    Sales -->|"ProductID"| Product
-    Sales -->|"Date"| Calendar
-    Customer -->|"ID"| Sales
-    Association -->|"LeftItemSetId"| Product
-    Product -->|"Product"| Associated_Product
-    Customer -->|"Product"| Associated_Product
+    DMContractConsumption["DMContractConsumption"]
+    DateConfirmed["DateConfirmed"]
+    DateDelivered["DateDelivered"]
+    DateRequired["DateRequired"]
+    DeliveryStatus["DeliveryStatus"]
+    DimMaterial["DimMaterial"]
+    DimMaterialAtPlantLevel["DimMaterialAtPlantLevel"]
+    DimPlant["DimPlant"]
+    DimPurchaseContractHeader["DimPurchaseContractHeader"]
+    DimPurchaseContractItem["DimPurchaseContractItem"]
+    ReceptionStatus["ReceptionStatus"]
+    SupplierDeliveriesOnTime["SupplierDeliveriesOnTime"]
+    Vendor_PO_Lines["Vendor PO Lines"]
+    SupplierDeliveriesOnTime -->|"Planned delivery date of document schedule line"| DateRequired
+    SupplierDeliveriesOnTime -->|"Material"| DimMaterial
+    SupplierDeliveriesOnTime -->|"Plant Material (Comp.Key)"| DimMaterialAtPlantLevel
+    SupplierDeliveriesOnTime -->|"Plant"| DimPlant
+    SupplierDeliveriesOnTime -->|"Last Confirmed delivery date"| DateConfirmed
+    SupplierDeliveriesOnTime -->|"Contract Nr"| DimPurchaseContractHeader
+    DMContractConsumption -->|"0CONTRACT"| DimPurchaseContractHeader
+    DimPurchaseContractItem -->|"Plant"| DimPlant
+    SupplierDeliveriesOnTime -->|"Vendor (Key)"| Vendor_PO_Lines
+    SupplierDeliveriesOnTime -->|"Actual Delivery Date"| DateDelivered
+    SupplierDeliveriesOnTime -->|"Indicator: Reception completed"| ReceptionStatus
+    SupplierDeliveriesOnTime -->|"Delivery Complete"| DeliveryStatus
 </pre>
 
 
 <h2 id="sec4">4. DAX Measures <a href="#sec4" class="section-anchor">#</a></h2>
-<h3 id="sec4-1">4.1 Measures on % Return Rate <a href="#sec4-1" class="section-anchor">#</a></h3>
-<table>
-<thead><tr><th>Measure</th><th>DAX Expression</th></tr></thead>
-<tbody>
-<tr><td><strong>% Return Rate Value</strong></td><td><code>SELECTEDVALUE(&#x27;% Return Rate&#x27;[% Return Rate])/100</code></td></tr>
-</tbody></table>
-<h3 id="sec4-2">4.2 Measures on Analysis DAX <a href="#sec4-2" class="section-anchor">#</a></h3>
-<table>
-<thead><tr><th>Measure</th><th>DAX Expression</th></tr></thead>
-<tbody>
-<tr><td><strong>Net Sales</strong></td><td><code>CALCULATE(SUM(Sales[Amount]),Sales[Status]=&quot;Sold&quot;)</code></td></tr>
-<tr><td><strong>Net Sales PM</strong></td><td><code>CALCULATE([Net Sales],PREVIOUSMONTH(&#x27;Calendar&#x27;[Date]))</code></td></tr>
-<tr><td><strong>Last 2 Months Net Sales</strong></td><td><code>[Net Sales]+[Net Sales PM]</code></td></tr>
-<tr><td><strong>Net Sales Variance</strong></td><td><code>[Net Sales]-[Net Sales PM]</code></td></tr>
-<tr><td><strong>Net Sales Variance %</strong></td><td><code>DIVIDE([Net Sales],[Net Sales PM],0)-1</code></td></tr>
-<tr><td><strong>Units Sold</strong></td><td><code>CALCULATE(SUM(Sales[Unit]),Sales[Status]=&quot;Sold&quot;)</code></td></tr>
-<tr><td><strong>Units Sold PM</strong></td><td><code>CALCULATE([Units Sold],PREVIOUSMONTH(&#x27;Calendar&#x27;[Date]))</code></td></tr>
-<tr><td><strong>Units Sold Variance %</strong></td><td><code>DIVIDE([Units Sold],[Units Sold PM],0)-1</code></td></tr>
-<tr><td><strong>Returns</strong></td><td><code>CALCULATE(SUM(Sales[Amount]),Sales[Status]=&quot;Returned&quot;)</code></td></tr>
-<tr><td><strong>Returns PM</strong></td><td><code>CALCULATE([Returns],PREVIOUSMONTH(&#x27;Calendar&#x27;[Date]))</code></td></tr>
-<tr><td><strong>Last 2 Months Returns</strong></td><td><code>[Returns]+[Returns PM]</code></td></tr>
-<tr><td><strong>Returns Variance</strong></td><td><code>[Returns]-[Returns PM]</code></td></tr>
-<tr><td><strong>Returns Variance %</strong></td><td><code>(DIVIDE([Returns],[Returns PM],0)-1)</code></td></tr>
-<tr><td><strong>Units Returned</strong></td><td><code>CALCULATE(SUM(Sales[Unit]),Sales[Status]=&quot;Returned&quot;)</code></td></tr>
-<tr><td><strong>Units Returned PM</strong></td><td><code>CALCULATE([Units Returned],PREVIOUSMONTH(&#x27;Calendar&#x27;[Date]))</code></td></tr>
-<tr><td><strong>Units Returned Variance %</strong></td><td><code>DIVIDE([Units Returned],[Units Returned PM],0)-1</code></td></tr>
-<tr><td><strong>Return Rate</strong></td><td><code>DIVIDE((ROUND(((DIVIDE([Returns],SUM(Sales[Amount]),0))*100),0)),100,0)</code></td></tr>
-<tr><td><strong>WIF Units Returned</strong></td><td><code>IF([Units Returned]-[WIF Units Returned Average]&lt;0,0,[Units Returned]-[WIF Units Returned Average])</code></td></tr>
-<tr><td><strong>WIF Units Returned Average</strong></td><td><code>DIVIDE([WIF Units Returned Difference],CALCULATE(DISTINCTCOUNT(&#x27;Calendar&#x27;[Date]), ALL(&#x27;Calendar&#x27;)),0)</code></td></tr>
-<tr><td><strong>WIF Units Returned Difference</strong></td><td><code>[WIF Units Returned_1]-[WIF Units Returned_2]</code></td></tr>
-<tr><td><strong>WIF Units Returned_1</strong></td><td><code>CALCULATE([Units Returned], ALLSELECTED(&#x27;Calendar&#x27;[Date]))</code></td></tr>
-<tr><td><strong>WIF Units Returned_2</strong></td><td><code>CALCULATE([WIF Adjusted Units Returned], ALLSELECTED(&#x27;Calendar&#x27;[Date]))</code></td></tr>
-<tr><td><strong>WIF Adjusted Units Returned</strong></td><td><code>DIVIDE((SUM(Sales[Unit])*&#x27;% Return Rate&#x27;[% Return Rate Value]),1,0)</code></td></tr>
-<tr><td><strong>WIF Adjusted Net Sales</strong></td><td><code>(SUM(Sales[Unit])*[WIF Price per Unit])-DIVIDE((SUM(Sales[Unit])*&#x27;% Return Rate&#x27;[% Return Rate Value]),1,0)*[WIF Price per Unit]</code></td></tr>
-<tr><td><strong>WIF Price per Unit</strong></td><td><code>DIVIDE([Net Sales],[Units Sold],0)</code></td></tr>
-<tr><td><strong>WIF Profit</strong></td><td><code>IF([WIF Same]=0,0,IF(ROUNDDOWN([WIF Adjusted Net Sales]-[Net Sales],0)&lt;0,0,ROUNDDOWN([WIF Adjusted Net Sales]-[Net Sales],0)))</code></td></tr>
-<tr><td><strong>Profit Difference</strong></td><td><code>DIVIDE([WIF Adjusted Sales],[Net Sales],0)-1</code></td></tr>
-<tr><td><strong>WIF Adjusted Sales</strong></td><td><code>[WIF Units Returned_1]*[WIF Price per Unit]</code></td></tr>
-<tr><td><strong>WIF Sales</strong></td><td><code>CALCULATE([Net Sales],ALL(&#x27;Calendar&#x27;[Date].[Month]))</code></td></tr>
-<tr><td><strong>WIF Same</strong></td><td><code>IF([% Return Rate Value]&gt;=CALCULATE([Return Rate],ALL(Store[Type]),ALL(Store[Store])),0,1)</code></td></tr>
-<tr><td><strong>WIF Forecast</strong></td><td><code>[Net Sales]+[WIF Profit]</code></td></tr>
-<tr><td><strong>WIF Total Forecast</strong></td><td><code>CALCULATE([WIF Forecast],ALL(&#x27;Calendar&#x27;[Date].[Month]))</code></td></tr>
-<tr><td><strong>WIF Total Profit</strong></td><td><code>CALCULATE([WIF Profit],ALL(&#x27;Calendar&#x27;[Date].[Month]))</code></td></tr>
-<tr><td><strong>WIF Profit Difference</strong></td><td><code>DIVIDE([WIF Forecast],[Net Sales],0)-1</code></td></tr>
-<tr><td><strong>Total Return Rate</strong></td><td><code>CALCULATE([Return Rate],ALL(&#x27;Calendar&#x27;[Date].[Month]))</code></td></tr>
-</tbody></table>
-<h3 id="sec4-3">4.3 Measures on Design DAX <a href="#sec4-3" class="section-anchor">#</a></h3>
-<table>
-<thead><tr><th>Measure</th><th>DAX Expression</th></tr></thead>
-<tbody>
-<tr><td><strong>Product Top N</strong></td><td><code>SWITCH(
-    TRUE(),
-    ISINSCOPE(&#x27;Product&#x27;[Product]),
-    RANKX(ALL(&#x27;Product&#x27;[Product]),[Net Sales],,DESC),
-    ISINSCOPE(&#x27;Product&#x27;[Segment]),
-    RANKX(ALL(&#x27;Product&#x27;[Segment]),[Net Sales],,DESC),
-    RANKX(ALL(&#x27;Product&#x27;[Category]),[Net Sales],,DESC)
-)</code></td></tr>
-<tr><td><strong>Product Sales Top 3</strong></td><td><code>IF([Product Top N]&lt;4,[Net Sales],0)</code></td></tr>
-<tr><td><strong>Product Sales Other</strong></td><td><code>IF([Product Top N]&gt;3,[Net Sales],0)</code></td></tr>
-<tr><td><strong>Store Top N</strong></td><td><code>RANKX(ALL(&#x27;Store&#x27;[Store]),[Net Sales],,DESC)</code></td></tr>
-<tr><td><strong>Store Sales Other</strong></td><td><code>IF([Store Top N]&gt;3,[Net Sales],0)</code></td></tr>
-<tr><td><strong>Store Sales Top 3</strong></td><td><code>IF([Store Top N]&lt;4,[Net Sales],0)</code></td></tr>
-<tr><td><strong>Net Sales Indicator</strong></td><td><code>CONCATENATE(IF([Net Sales Variance %]&lt;=0,&quot;&quot;,&quot;+&quot;),FORMAT([Net Sales Variance %],&quot;0.0%&quot;))</code></td></tr>
-<tr><td><strong>Units Sold Indicator</strong></td><td><code>CONCATENATE(IF([Units Sold Variance %]&lt;=0,&quot;&quot;,&quot;+&quot;),FORMAT([Units Sold Variance %],&quot;0.0%&quot;))</code></td></tr>
-<tr><td><strong>Returns Indicator</strong></td><td><code>CONCATENATE(IF([Returns Variance %]&lt;=0,&quot;&quot;,&quot;+&quot;),FORMAT([Returns Variance %],&quot;0.0%&quot;))</code></td></tr>
-<tr><td><strong>ProductR Top N</strong></td><td><code>SWITCH(
-    TRUE(),
-    ISINSCOPE(&#x27;Product&#x27;[Product]),
-    RANKX(ALL(&#x27;Product&#x27;[Product]),[Returns],,DESC),
-    ISINSCOPE(&#x27;Product&#x27;[Segment]),
-    RANKX(ALL(&#x27;Product&#x27;[Segment]),[Returns],,DESC),
-    RANKX(ALL(&#x27;Product&#x27;[Category]),[Returns],,DESC)
-)</code></td></tr>
-<tr><td><strong>Product Returns Other</strong></td><td><code>IF([ProductR Top N]&gt;3,[Returns],0)</code></td></tr>
-<tr><td><strong>Product Returns Top 3</strong></td><td><code>IF([ProductR Top N]&lt;4,[Returns],0)</code></td></tr>
-<tr><td><strong>StoreR Top N</strong></td><td><code>RANKX(ALL(&#x27;Store&#x27;[Store]),[Returns],,DESC)</code></td></tr>
-<tr><td><strong>Store Returns Other</strong></td><td><code>IF([StoreR Top N]&gt;3,[Returns],0)</code></td></tr>
-<tr><td><strong>Returns Sales Top 3</strong></td><td><code>IF([StoreR Top N]&lt;4,[Returns],0)</code></td></tr>
-<tr><td><strong>Units Returned Indicator</strong></td><td><code>CONCATENATE(IF([Returns Variance %]&lt;=0,&quot;&quot;,&quot;+&quot;),FORMAT([Returns Variance %],&quot;0.0%&quot;))</code></td></tr>
-<tr><td><strong>Net Sales Label</strong></td><td><code>CONCATENATE(&quot;&quot;,FORMAT([Net Sales],&quot;$0,000&quot;))</code></td></tr>
-<tr><td><strong>Profit Indicator</strong></td><td><code>CONCATENATE(IF([WIF Profit Difference]&lt;=0,&quot;&quot;,&quot;+&quot;),FORMAT([WIF Profit Difference],&quot;0.0%&quot;))</code></td></tr>
-<tr><td><strong>Association</strong></td><td><code>VALUE(CONCATENATE([Product Top N],(SUM(Association[Importance]))))</code></td></tr>
-<tr><td><strong>Lift Label</strong></td><td><code>CONCATENATE(FORMAT(SUM(Association[Importance]),&quot;0.0&quot;),&quot;x&quot;)</code></td></tr>
-</tbody></table>
-<h3 id="sec4-4">4.4 Measures on Details <a href="#sec4-4" class="section-anchor">#</a></h3>
-<table>
-<thead><tr><th>Measure</th><th>DAX Expression</th></tr></thead>
-<tbody>
-<tr><td><strong>Info Tooltip</strong></td><td><code>&quot;https://imagizer.imageshack.com/img923/4052/lLHy3U.gif&quot;</code></td></tr>
-<tr><td><strong>Info Tooltip 2</strong></td><td><code>&quot;https://imagizer.imageshack.com/img921/2483/uMs9ZQ.gif&quot;</code></td></tr>
-</tbody></table>
+<h3 id="sec4-1">4.1 Measures on _Measures <a href="#sec4-1" class="section-anchor">#</a></h3>
+<h4>!Tooltip1</h4>
+<pre><code>&quot;WWWWWWWWWWWWWWWWWWWWWWW&quot;</code></pre>
+<h4>!Transparent</h4>
+<pre><code>&quot;#FFFFFF00&quot;</code></pre>
+<h4>% &lt; 1 Month Late Dlv</h4>
+<pre><code>DIVIDE((SUM(SupplierDeliveriesOnTime[Delivery Month Late])),[Total Deliveries])</code></pre>
+<h4>% &lt; 1 Week Late Dlv</h4>
+<pre><code>DIVIDE((SUM(SupplierDeliveriesOnTime[Delivery Week Late])),[Total Deliveries])</code></pre>
+<h4>% EOTIF</h4>
+<pre><code>[% Early Dlv] + [% On-time Dlv]</code></pre>
+<h4>% EOTIF (Confirmed)</h4>
+<pre><code>[% Early Dlv Conf.] + [% On-time Dlv Conf.]</code></pre>
+<h4>% Early Dlv</h4>
+<pre><code>DIVIDE(SUM(SupplierDeliveriesOnTime[Dlv Early]),[Total Deliveries])</code></pre>
+<h4>% Early Dlv Conf.</h4>
+<pre><code>DIVIDE(SUM(SupplierDeliveriesOnTime[Confirmed Delivery Early]),[Total Deliveries])</code></pre>
+<h4>% No Dlv</h4>
+<pre><code>DIVIDE((SUM(SupplierDeliveriesOnTime[Delivery Not Delivered])),[Total Deliveries])</code></pre>
+<h4>% OTIF</h4>
+<pre><code>[% On-time Dlv]</code></pre>
+<h4>% OTIF (Confirmed)</h4>
+<pre><code>[% On-time Dlv Conf.]</code></pre>
+<h4>% On-time Dlv</h4>
+<pre><code>DIVIDE((SUM(SupplierDeliveriesOnTime[Delivery On Time])),[Total Deliveries])</code></pre>
+<h4>% On-time Dlv Conf.</h4>
+<pre><code>DIVIDE((SUM(SupplierDeliveriesOnTime[Confirmed Delivery On Time])),[Total Deliveries])</code></pre>
+<h4>% Partial Dlv</h4>
+<pre><code>DIVIDE((SUM(SupplierDeliveriesOnTime[Delivery Partially Delivered])),[Total Deliveries])</code></pre>
+<h4>% Very Late Dlv</h4>
+<pre><code>DIVIDE((SUM(SupplierDeliveriesOnTime[Delivery Very Late])),[Total Deliveries])</code></pre>
+<h4>Average Reception all status</h4>
+<pre><code>CALCULATE(AVERAGE(SupplierDeliveriesOnTime[Reception (Working Days)]), SupplierDeliveriesOnTime[Indicator: Reception completed] = &quot;X&quot;,REMOVEFILTERS(SupplierDeliveriesOnTime[Reception Time Status]))</code></pre>
+<h4>Average Reception all status (151P)</h4>
+<pre><code>```
+			
+			    VAR AvgAllStatus = CALCULATE(AVERAGE(SupplierDeliveriesOnTime[Reception (Working Days)]), SupplierDeliveriesOnTime[Indicator: Reception completed] = &quot;X&quot;, SupplierDeliveriesOnTime[Plant]=&quot;151P&quot;, SupplierDeliveriesOnTime[Movement Type]=&quot;107&quot;, SupplierDeliveriesOnTime[Indicator: Not Relevant]=BLANK(), SupplierDeliveriesOnTime[Actual Delivery Date] &gt;= EOMONTH( TODAY (), -13 ), SupplierDeliveriesOnTime[Actual Delivery Date] &lt;= EOMONTH( TODAY (), -1 ), ALL(SupplierDeliveriesOnTime))
+			    RETURN
+			        IF(AvgAllStatus = BLANK(), &quot;N/A&quot;, AvgAllStatus)
+			```</code></pre>
+<h4>Average Reception all status (232P)</h4>
+<pre><code>CALCULATE(AVERAGE(SupplierDeliveriesOnTime[Reception (Working Days)]), SupplierDeliveriesOnTime[Indicator: Reception completed] = &quot;X&quot;, SupplierDeliveriesOnTime[Plant]=&quot;232P&quot;, SupplierDeliveriesOnTime[Movement Type]=&quot;107&quot;, SupplierDeliveriesOnTime[Indicator: Not Relevant]=BLANK(), SupplierDeliveriesOnTime[Actual Delivery Date] &gt;= EOMONTH( TODAY (), -13 ), SupplierDeliveriesOnTime[Actual Delivery Date] &lt;= EOMONTH( TODAY (), -1 ), ALL(SupplierDeliveriesOnTime))</code></pre>
+<h4>Average Reception all status (243P)</h4>
+<pre><code>CALCULATE(AVERAGE(SupplierDeliveriesOnTime[Reception (Working Days)]), SupplierDeliveriesOnTime[Indicator: Reception completed] = &quot;X&quot;, SupplierDeliveriesOnTime[Plant]=&quot;243P&quot;, SupplierDeliveriesOnTime[Movement Type]=&quot;107&quot;, SupplierDeliveriesOnTime[Indicator: Not Relevant]=BLANK(), SupplierDeliveriesOnTime[Actual Delivery Date] &gt;= EOMONTH( TODAY (), -13 ), SupplierDeliveriesOnTime[Actual Delivery Date] &lt;= EOMONTH( TODAY (), -1 ), ALL(SupplierDeliveriesOnTime))</code></pre>
+<h4>Average Reception all status (591P)</h4>
+<pre><code>CALCULATE(AVERAGE(SupplierDeliveriesOnTime[Reception (Working Days)]), SupplierDeliveriesOnTime[Indicator: Reception completed] = &quot;X&quot;, SupplierDeliveriesOnTime[Plant]=&quot;591P&quot;, SupplierDeliveriesOnTime[Movement Type]=&quot;107&quot;, SupplierDeliveriesOnTime[Indicator: Not Relevant]=BLANK(), SupplierDeliveriesOnTime[Actual Delivery Date] &gt;= EOMONTH( TODAY (), -13 ), SupplierDeliveriesOnTime[Actual Delivery Date] &lt;= EOMONTH( TODAY (), -1 ), ALL(SupplierDeliveriesOnTime))</code></pre>
+<h4>Average Reception all status (Overall)</h4>
+<pre><code>CALCULATE(AVERAGE(SupplierDeliveriesOnTime[Reception (Working Days)]), SupplierDeliveriesOnTime[Indicator: Reception completed] = &quot;X&quot;, SupplierDeliveriesOnTime[Movement Type]=&quot;107&quot;, SupplierDeliveriesOnTime[Indicator: Not Relevant]=BLANK(), SupplierDeliveriesOnTime[Actual Delivery Date] &gt;= EOMONTH( TODAY (), -13 ), SupplierDeliveriesOnTime[Actual Delivery Date] &lt;= EOMONTH( TODAY (), -1 ), ALL(SupplierDeliveriesOnTime))</code></pre>
+<h4>Average Reception processing Last 12 months</h4>
+<pre><code>```
+			
+			    VAR LastCalmonth = EOMONTH( TODAY (), -1 )
+			    VAR Previous12th = EOMONTH( TODAY (), -13 )
+			    RETURN
+			        CALCULATE([Average Reception all status], FILTER(ALL(DateDelivered),DateDelivered[Delivery Date] &gt; Previous12th &amp;&amp; DateDelivered[Delivery Date] &lt;= LastCalmonth)
+			)
+			```</code></pre>
+<h4>Average Reception time</h4>
+<pre><code>CALCULATE(AVERAGE(SupplierDeliveriesOnTime[Reception (Working Days)]), SupplierDeliveriesOnTime[Indicator: Reception completed] = &quot;X&quot;)</code></pre>
+<h4>BeginPeriod</h4>
+<pre><code>FORMAT(MIN(DateDelivered[Delivery Date]),&quot;dd/mm/yyyy&quot;)</code></pre>
+<h4>Delivery Count</h4>
+<pre><code>&quot;Number of deliveries: &quot;&amp;[Number of deliveries]</code></pre>
+<h4>EndPeriod</h4>
+<pre><code>FORMAT(MAX(DateDelivered[Delivery Date]),&quot;dd/mm/yyyy&quot;)</code></pre>
+<h4>InTimeReception</h4>
+<pre><code></code></pre>
+<h4>NrRecords</h4>
+<pre><code>SUM(SupplierDeliveriesOnTime[Number of Records])</code></pre>
+<h4>Number of Schedule Lines</h4>
+<pre><code>DISTINCTCOUNT(SupplierDeliveriesOnTime[ScheduleLineID])</code></pre>
+<h4>Number of deliveries</h4>
+<pre><code>DISTINCTCOUNT(SupplierDeliveriesOnTime[Delivery])</code></pre>
+<h4>PO Lines Count</h4>
+<pre><code>DISTINCTCOUNTNOBLANK(SupplierDeliveriesOnTime[POItemKey])</code></pre>
+<h4>POLineFilter Measure</h4>
+<pre><code>VAR MinValue = MIN(&#x27;POLines Filter&#x27;[POLineCount])
+VAR MaxValue = MAX(&#x27;POLines Filter&#x27;[POLineCount])
+VAR CurrentValue = [PO Lines Count]
+RETURN
+    IF(
+        CurrentValue &gt;= MinValue &amp;&amp; CurrentValue &lt;= MaxValue,
+        1,
+        0
+    )</code></pre>
+<h4>POLineSlicer Filter</h4>
+<pre><code>```
+			
+			VAR LocalTable =
+			SUMMARIZE(
+			    FILTER(SupplierDeliveriesOnTime,SupplierDeliveriesOnTime[Vendor (Key)] &lt;&gt; BLANK() &amp;&amp; RIGHT(LEFT(SupplierDeliveriesOnTime[Vendor (Key)],2),1) &lt;&gt; &quot;-&quot;),
+			    SupplierDeliveriesOnTime[Vendor (Key)],
+			    &quot;PO Lines&quot;, [PO Lines Count] 
+			)
+			VAR MinValue = MINX(LocalTable, [PO Lines])
+			VAR MaxValue = MAXX(LocalTable, [PO Lines])
+			VAR CurrentSlicerValue = SELECTEDVALUE(&#x27;POLines Filter&#x27;[POLineCount])
+			RETURN
+			IF(
+			    CurrentSlicerValue &gt;= MinValue &amp;&amp; CurrentSlicerValue &lt;= MaxValue,
+			    1,
+			    0
+			)
+			```</code></pre>
+<h4>Row Count</h4>
+<pre><code>&quot;Number of rows: &quot;&amp;SUM(SupplierDeliveriesOnTime[Number of Records])</code></pre>
+<h4>ServerString</h4>
+<pre><code>&quot;Server: &quot;&amp;SELECTEDVALUE(HanaServer[ServerName])</code></pre>
+<h4>Spent Amount</h4>
+<pre><code>SUM(DMContractConsumption[GR: Amount delivered])</code></pre>
+<h4>SpentFilter Measure</h4>
+<pre><code>VAR MinValue = MIN(&#x27;Spent Filter&#x27;[SpentValue])
+VAR MaxValue = MAX(&#x27;Spent Filter&#x27;[SpentValue])
+VAR CurrentValue = [Spent Amount]
+RETURN
+    IF(
+        CurrentValue &gt;= MinValue &amp;&amp; CurrentValue &lt;= MaxValue,
+        1,
+        0
+    )</code></pre>
+<h4>SpentSlicer Filter</h4>
+<pre><code>```
+			
+			VAR LocalTable =
+			SUMMARIZE(
+			    DMContractConsumption,
+			    DMContractConsumption[0CONTRACT],
+			    &quot;Spent&quot;, [Spent Amount] 
+			)
+			VAR MinValue = MINX(LocalTable, [Spent])
+			VAR MaxValue = MAXX(LocalTable, [Spent])
+			VAR CurrentSlicerValue = SELECTEDVALUE(&#x27;Spent Filter&#x27;[SpentValue])
+			RETURN
+			IF(
+			    CurrentSlicerValue &gt;= MinValue &amp;&amp; CurrentSlicerValue &lt;= MaxValue,
+			    1,
+			    0
+			)
+			```</code></pre>
+<h4>Supplier Confirmed Delivery EOTIF</h4>
+<pre><code>```
+			
+			    VAR ServiceLevel = DIVIDE(([TotalNrOnTimeConf] + [TotalNrEarlyConf]) , [TotalTableTotalDone], 0)
+			    VAR Result = IF(ServiceLevel = BLANK(), 0, ServiceLevel)
+			    RETURN Result
+			```</code></pre>
+<h4>Supplier Confirmed Delivery OTIF</h4>
+<pre><code>```
+			
+			    VAR ServiceLevel = DIVIDE([TotalNrOnTimeConf] , [TotalTableTotalDone], 0)
+			    VAR Result = IF(ServiceLevel = BLANK(), 0, ServiceLevel)
+			    RETURN Result
+			```</code></pre>
+<h4>Supplier Delivery EOTIF</h4>
+<pre><code>```
+			
+			    VAR ServiceLevel = DIVIDE(([TotalNrOnTime] + [TotalNrEarly]) , [TotalTableTotalDone], 0)
+			    VAR Result = IF(ServiceLevel = BLANK(), 0, ServiceLevel)
+			    RETURN Result
+			```</code></pre>
+<h4>Supplier Delivery OTIF</h4>
+<pre><code>```
+			
+			    VAR ServiceLevel = DIVIDE([TotalNrOnTime] , [TotalTableTotalDone], 0)
+			    VAR Result = IF(ServiceLevel = BLANK(), 0, ServiceLevel)
+			    RETURN Result
+			```</code></pre>
+<h4>Total Deliveries</h4>
+<pre><code>```
+			
+			    VAR totaltableDone = CALCULATE([NrRecords], ALL(SupplierDeliveriesOnTime[Dlv Category]), SupplierDeliveriesOnTime[Indicator: Not Relevant] &lt;&gt; &quot;X&quot;)
+			    RETURN totaltableDone
+			```</code></pre>
+<h4>TotalNrEarly</h4>
+<pre><code>VAR TableEarly = FILTER(SupplierDeliveriesOnTime, SupplierDeliveriesOnTime[Delivery Early] &gt;= 1 &amp;&amp; SupplierDeliveriesOnTime[StatusInFull] = &quot;X&quot;)
+RETURN
+    COUNTROWS(TableEarly)</code></pre>
+<h4>TotalNrEarlyConf</h4>
+<pre><code>VAR TableEarly = FILTER(SupplierDeliveriesOnTime, SupplierDeliveriesOnTime[Confirmed Delivery Early] &gt;= 1 &amp;&amp; SupplierDeliveriesOnTime[StatusInFull] = &quot;X&quot;)
+RETURN
+    COUNTROWS(TableEarly)</code></pre>
+<h4>TotalNrOnTime</h4>
+<pre><code>```
+			
+			 VAR TotalTableOnTime = FILTER(SupplierDeliveriesOnTime, SupplierDeliveriesOnTime[Delivery On Time] &gt;= 1 &amp;&amp; SupplierDeliveriesOnTime[StatusInFull] = &quot;X&quot;)
+			RETURN
+			    COUNTROWS(TotalTableOnTime)
+			```</code></pre>
+<h4>TotalNrOnTimeConf</h4>
+<pre><code>```
+			
+			 VAR TotalTableOnTime = FILTER(SupplierDeliveriesOnTime, SupplierDeliveriesOnTime[Confirmed Delivery On Time] &gt;= 1 &amp;&amp; SupplierDeliveriesOnTime[StatusInFull] = &quot;X&quot;)
+			RETURN
+			    COUNTROWS(TotalTableOnTime)
+			```</code></pre>
+<h4>TotalTableTotalDone</h4>
+<pre><code>VAR TotalTableTotal = FILTER(SupplierDeliveriesOnTime, SupplierDeliveriesOnTime[Planned delivery date of document schedule line] &lt;= TODAY())
+RETURN
+    COUNTROWS(TotalTableTotal)</code></pre>
+<h4>_12months (Bascoup)</h4>
+<pre><code>&quot;Bascoup (591P): &quot;&amp;FORMAT([Average Reception all status (591P)],&quot;0.0&quot;)&amp;&quot; WD&quot;</code></pre>
+<h4>_12months (GZH)</h4>
+<pre><code>&quot;GZH (232P): &quot;&amp;FORMAT([Average Reception all status (232P)],&quot;0.0&quot;)&amp;&quot; WD&quot;</code></pre>
+<h4>_12months (Overall)</h4>
+<pre><code>&quot;Overall: &quot;&amp;FORMAT([Average Reception all status (Overall)],&quot;0.0&quot;)&amp;&quot; WD&quot;</code></pre>
+<h4>_12months (Ronet)</h4>
+<pre><code>&quot;Ronet (243P): &quot;&amp;FORMAT([Average Reception all status (243P)],&quot;0.0&quot;)&amp;&quot; WD&quot;</code></pre>
+<h4>_12months (Schaarbeek)</h4>
+<pre><code>&quot;Schaarbeek (151P): &quot;&amp;IF([Average Reception all status (151P)] = &quot;N/A&quot;, &quot;N/A&quot;,FORMAT([Average Reception all status (151P)],&quot;0.0&quot;)&amp;&quot; WD&quot;)</code></pre>
 
 
 <h2 id="sec5">5. DAX Calculated Columns <a href="#sec5" class="section-anchor">#</a></h2>
-<h3 id="sec5-1">5.1 Associated Product <a href="#sec5-1" class="section-anchor">#</a></h3>
+<h3 id="sec5-1">5.1 CESTupdateTime <a href="#sec5-1" class="section-anchor">#</a></h3>
 <table>
 <thead><tr><th>Column</th><th>Expression</th></tr></thead>
 <tbody>
-<tr><td><strong>Segmented by</strong></td><td><code>&quot;#ffffff&quot;</code></td></tr>
+<tr><td><strong>Last Refreshed (Local)</strong></td><td><code>&quot;Refresh : &quot;&amp;FORMAT(CESTupdateTime[CESTupdateTime],&quot;dd/mm/yyyy hh:mm&quot;)</code></td></tr>
 </tbody></table>
-<h3 id="sec5-2">5.2 Calendar <a href="#sec5-2" class="section-anchor">#</a></h3>
+<h3 id="sec5-2">5.2 DimMaterial <a href="#sec5-2" class="section-anchor">#</a></h3>
 <table>
 <thead><tr><th>Column</th><th>Expression</th></tr></thead>
 <tbody>
-<tr><td><strong>Empty</strong></td><td><code>&quot;&quot;</code></td></tr>
+<tr><td><strong>Material</strong></td><td><code>DimMaterial[Material (NN)]&amp;&quot; - &quot;&amp;DimMaterial[Material (Descr FR)]&amp;&quot; / &quot;&amp;DimMaterial[Material (Descr NL)]</code></td></tr>
 </tbody></table>
-<h3 id="sec5-3">5.3 Tooltip Info <a href="#sec5-3" class="section-anchor">#</a></h3>
+<h3 id="sec5-3">5.3 HanaServer <a href="#sec5-3" class="section-anchor">#</a></h3>
 <table>
 <thead><tr><th>Column</th><th>Expression</th></tr></thead>
 <tbody>
-<tr><td><strong>Empty</strong></td><td><code>&quot; &quot;</code></td></tr>
+<tr><td><strong>ServerName</strong></td><td><code>LEFT([HanaServer],FIND(&quot;.&quot;,[HanaServer]) - 1)</code></td></tr>
+</tbody></table>
+<h3 id="sec5-4">5.4 SupplierDeliveriesOnTime <a href="#sec5-4" class="section-anchor">#</a></h3>
+<table>
+<thead><tr><th>Column</th><th>Expression</th></tr></thead>
+<tbody>
+<tr><td><strong>Flag Contract</strong></td><td><code>IF(SupplierDeliveriesOnTime[Flag for Contracts] = &quot;X&quot;, &quot;Y - Z2&quot;, &quot;N - Z1&quot;)</code></td></tr>
+<tr><td><strong>Flag Central</strong></td><td><code>IF(SupplierDeliveriesOnTime[Indicator: Central] = &quot;X&quot;, &quot;Y&quot;, &quot;N&quot;)</code></td></tr>
+<tr><td><strong>Purchasing Groups</strong></td><td><code>SupplierDeliveriesOnTime[Purchasing Group] &amp; &quot; - &quot; &amp;SupplierDeliveriesOnTime[Purchasing Group (Descr)]</code></td></tr>
+<tr><td><strong>Delivery Early</strong></td><td><code>IF(SupplierDeliveriesOnTime[Delay in Days (Requested)] &lt; -7 &amp;&amp; SupplierDeliveriesOnTime[Delivery Complete] = &quot;X&quot;, 1, 0)</code></td></tr>
+<tr><td><strong>Delivery Week Late</strong></td><td><code>IF(AND(SupplierDeliveriesOnTime[Delay in Days (Requested)] &gt; 0, SupplierDeliveriesOnTime[Delay in Days (Requested)] &lt;= 7) &amp;&amp; SupplierDeliveriesOnTime[Delivery Complete] = &quot;X&quot;, 1, 0)</code></td></tr>
+<tr><td><strong>Delivery On Time</strong></td><td><code>IF(AND(SupplierDeliveriesOnTime[Delay in Days (Requested)] &gt;= -7, SupplierDeliveriesOnTime[Delay in Days (Requested)] &lt;= 0) &amp;&amp; SupplierDeliveriesOnTime[Delivery Complete] = &quot;X&quot;, 1, 0)</code></td></tr>
+<tr><td><strong>Delivery Very Late</strong></td><td><code>IF(SupplierDeliveriesOnTime[Delay in Days (Requested)] &gt;= 30 &amp;&amp; SupplierDeliveriesOnTime[Delivery Complete] = &quot;X&quot;, 1, 0)</code></td></tr>
+<tr><td><strong>Amount Early</strong></td><td><code>SupplierDeliveriesOnTime[Amount in local currency] * SupplierDeliveriesOnTime[Delivery Early]</code></td></tr>
+<tr><td><strong>Amount Early (C)</strong></td><td><code>SupplierDeliveriesOnTime[Amount in local currency] * SupplierDeliveriesOnTime[Delivery Early]</code></td></tr>
+<tr><td><strong>Amount Late</strong></td><td><code>SupplierDeliveriesOnTime[Amount in local currency] * SupplierDeliveriesOnTime[Delivery Week Late]</code></td></tr>
+<tr><td><strong>Amount Late (C)</strong></td><td><code>SupplierDeliveriesOnTime[Amount in local currency] * (SupplierDeliveriesOnTime[Delivery Week Late] + SupplierDeliveriesOnTime[Delivery Month Late])</code></td></tr>
+<tr><td><strong>Amount On Time</strong></td><td><code>SupplierDeliveriesOnTime[Amount in local currency] * SupplierDeliveriesOnTime[Delivery On Time]</code></td></tr>
+<tr><td><strong>Amount On Time (C)</strong></td><td><code>SupplierDeliveriesOnTime[Amount in local currency] * SupplierDeliveriesOnTime[Delivery On Time]</code></td></tr>
+<tr><td><strong>Amount Very Late</strong></td><td><code>SupplierDeliveriesOnTime[Amount in local currency] * SupplierDeliveriesOnTime[Delivery Very Late]</code></td></tr>
+<tr><td><strong>Amount Very Late (C)</strong></td><td><code>SupplierDeliveriesOnTime[Amount in local currency] * SupplierDeliveriesOnTime[Delivery Very Late]</code></td></tr>
+<tr><td><strong>Delivery Month Late</strong></td><td><code>IF(AND(SupplierDeliveriesOnTime[Delay in Days (Requested)] &gt; 7 &amp;&amp; SupplierDeliveriesOnTime[Delivery Complete] = &quot;X&quot;, SupplierDeliveriesOnTime[Delay in Days (Requested)] &lt; 30), 1, 0)</code></td></tr>
+<tr><td><strong>Delivery Category</strong></td><td><code>IF(SupplierDeliveriesOnTime[Delivery Early] = 1, &quot;1. Early&quot;, IF(SupplierDeliveriesOnTime[Delivery On Time] = 1, &quot;2. On-time&quot;, IF(SupplierDeliveriesOnTime[Delivery Week Late] = 1, &quot;3. &lt; 1 Week Late&quot;, IF(SupplierDeliveriesOnTime[Delivery Month Late] = 1, &quot;4. &lt; 1 Month Late &quot;, IF(SupplierDeliveriesOnTime[Delivery Very Late] = 1, &quot;5. Very Late&quot;, IF(SupplierDeliveriesOnTime[Delivery Partially Delivered] = 1, &quot;6. Partial Delivery&quot;, IF(SupplierDeliveriesOnTime[Delivery Not Delivered] = 1, &quot;7. No Delivery&quot;)))))))</code></td></tr>
+<tr><td><strong>Delivery Not Delivered</strong></td><td><code>IF((((SupplierDeliveriesOnTime[Actual Delivery Date] = BLANK()) || (SupplierDeliveriesOnTime[Scheduled Quantity] = SupplierDeliveriesOnTime[Open Quantity] &amp;&amp; SupplierDeliveriesOnTime[Amount in local currency] = BLANK())) &amp;&amp; SupplierDeliveriesOnTime[Actual goods receipt quantity] = 0) &amp;&amp; SupplierDeliveriesOnTime[Indicator: Not Relevant] &lt;&gt; &quot;X&quot; &amp;&amp; SupplierDeliveriesOnTime[Delivery Complete] &lt;&gt; &quot;X&quot;, 1, 0)</code></td></tr>
+<tr><td><strong>Delivery Partially Delivered</strong></td><td><code>IF((SupplierDeliveriesOnTime[Actual goods receipt quantity] &gt; 0 || SupplierDeliveriesOnTime[Order quantity] &gt; 0 || SupplierDeliveriesOnTime[Amount in local currency] &lt;&gt; BLANK()) &amp;&amp; SupplierDeliveriesOnTime[Delivery Complete] &lt;&gt; &quot;X&quot; &amp;&amp; SupplierDeliveriesOnTime[Indicator: Not Relevant] &lt;&gt; &quot;X&quot;, 1, 0)</code></td></tr>
+<tr><td><strong>StatusInFull</strong></td><td><code>IF(SupplierDeliveriesOnTime[Actual goods receipt quantity] &gt;= SupplierDeliveriesOnTime[Scheduled Quantity], &quot;X&quot;, &quot; &quot;)</code></td></tr>
+<tr><td><strong>Account Assignment Category (Key) (groups)</strong></td><td><code>SWITCH(
+  TRUE,
+  ISBLANK(&#x27;SupplierDeliveriesOnTime&#x27;[Account Assignment Category (Key)]),
+  &quot;(Blank)&quot;,
+  &#x27;SupplierDeliveriesOnTime&#x27;[Account Assignment Category (Key)] IN {&quot;F&quot;,
+    &quot;K&quot;,
+    &quot;N&quot;,
+    &quot;P&quot;,
+    &quot;Q&quot;},
+  &quot;Non-Stock Material&quot;,
+  &#x27;SupplierDeliveriesOnTime&#x27;[Account Assignment Category (Key)] IN {&quot;&quot;},
+  &quot;Stock Material&quot;,
+  &#x27;SupplierDeliveriesOnTime&#x27;[Account Assignment Category (Key)]
+)</code></td></tr>
+<tr><td><strong>Confirmed Delivery Early</strong></td><td><code>IF(SupplierDeliveriesOnTime[Delay in Days (Confirmed)] &lt; -7 &amp;&amp; SupplierDeliveriesOnTime[Delivery Complete] = &quot;X&quot;, 1, 0)</code></td></tr>
+<tr><td><strong>Confirmed Delivery On Time</strong></td><td><code>IF(AND(SupplierDeliveriesOnTime[Delay in Days (Confirmed)] &gt;= -7, SupplierDeliveriesOnTime[Delay in Days (Confirmed)] &lt;= 0) &amp;&amp; SupplierDeliveriesOnTime[Delivery Complete] = &quot;X&quot;, 1, 0)</code></td></tr>
+<tr><td><strong>Confirmed Delivery Week Late</strong></td><td><code>IF(AND(SupplierDeliveriesOnTime[Delay in Days (Confirmed)] &gt; 0, SupplierDeliveriesOnTime[Delay in Days (Confirmed)] &lt;= 7) &amp;&amp; SupplierDeliveriesOnTime[Delivery Complete] = &quot;X&quot;, 1, 0)</code></td></tr>
+<tr><td><strong>Confirmed Delivery Month Late</strong></td><td><code>IF(AND(SupplierDeliveriesOnTime[Delay in Days (Confirmed)] &gt; 7 &amp;&amp; SupplierDeliveriesOnTime[Delivery Complete] = &quot;X&quot;, SupplierDeliveriesOnTime[Delay in Days (Confirmed)] &lt; 30), 1, 0)</code></td></tr>
+<tr><td><strong>Confirmed Delivery Very Late</strong></td><td><code>IF(SupplierDeliveriesOnTime[Delay in Days (Confirmed)] &gt;= 30 &amp;&amp; SupplierDeliveriesOnTime[Delivery Complete] = &quot;X&quot;, 1, 0)</code></td></tr>
+<tr><td><strong>Confirmed Delivery Category</strong></td><td><code>IF(SupplierDeliveriesOnTime[Confirmed Delivery Early] = 1, &quot;1. Early&quot;, IF(SupplierDeliveriesOnTime[Confirmed Delivery On Time] = 1, &quot;2. On-time&quot;, IF(SupplierDeliveriesOnTime[Confirmed Delivery Week Late] = 1, &quot;3. &lt; 1 Week Late&quot;, IF(SupplierDeliveriesOnTime[Confirmed Delivery Month Late] = 1, &quot;4. &lt; 1 Month Late &quot;, IF(SupplierDeliveriesOnTime[Confirmed Delivery Very Late] = 1, &quot;5. Very Late&quot;, IF(SupplierDeliveriesOnTime[Delivery Partially Delivered] = 1, &quot;6. Partial Delivery&quot;, IF(SupplierDeliveriesOnTime[Delivery Not Delivered] = 1, &quot;7. No Delivery&quot;)))))))</code></td></tr>
+<tr><td><strong>Number of PO Items</strong></td><td><code>COUNTX(
+    FILTER(
+        SupplierDeliveriesOnTime,
+        SupplierDeliveriesOnTime[Purchasing document number] = EARLIER(SupplierDeliveriesOnTime[Purchasing document number])
+    ),
+    SupplierDeliveriesOnTime[Purchasing document number]
+)</code></td></tr>
+<tr><td><strong>ReceptionOnTime</strong></td><td><code>IF(SupplierDeliveriesOnTime[Movement Type] = &quot;107&quot; &amp;&amp; SupplierDeliveriesOnTime[Indicator: Reception completed] = &quot;X&quot;, IF(SupplierDeliveriesOnTime[Reception (Working Days)] &lt;= 5, 1, 0), BLANK())</code></td></tr>
+<tr><td><strong>ReceptionLate</strong></td><td><code>IF(SupplierDeliveriesOnTime[Movement Type] = &quot;107&quot; &amp;&amp; SupplierDeliveriesOnTime[Indicator: Reception completed] = &quot;X&quot;, IF(SupplierDeliveriesOnTime[Reception (Working Days)] &gt; 5, 1, 0), BLANK())</code></td></tr>
+<tr><td><strong>ReceptionProcessingOngoing</strong></td><td><code>IF(SupplierDeliveriesOnTime[Indicator: Reception completed] = BLANK() &amp;&amp; SupplierDeliveriesOnTime[Movement Type] = &quot;107&quot;, IF(DATEDIFF(SupplierDeliveriesOnTime[Actual Delivery Date],TODAY(),DAY) &lt;= 5, 1, 0), BLANK())</code></td></tr>
+<tr><td><strong>ReceptionProcessingLate</strong></td><td><code>IF(SupplierDeliveriesOnTime[Indicator: Reception completed] = BLANK() &amp;&amp; SupplierDeliveriesOnTime[Movement Type] = &quot;107&quot;, IF(DATEDIFF(SupplierDeliveriesOnTime[Actual Delivery Date],TODAY(),DAY) &gt; 5, 1, 0), BLANK())</code></td></tr>
+<tr><td><strong>Reception Time Status</strong></td><td><code>IF(SupplierDeliveriesOnTime[ReceptionOnTime] = 1, &quot;1. Reception On-Time&quot;, IF(SupplierDeliveriesOnTime[ReceptionLate] = 1, &quot;2. Reception Late&quot;, IF(SupplierDeliveriesOnTime[ReceptionProcessingOngoing] = 1, &quot;3. Reception Processing Ongoing&quot;, IF(SupplierDeliveriesOnTime[ReceptionProcessingLate] = 1, &quot;4. Reception Processing Late&quot;, BLANK()))))</code></td></tr>
+<tr><td><strong>Reception Duration</strong></td><td><code>IF(SupplierDeliveriesOnTime[Indicator: Reception completed] = BLANK(),SupplierDeliveriesOnTime[Reception Processing (WDays)], SupplierDeliveriesOnTime[Reception (Working Days)])</code></td></tr>
+<tr><td><strong>Delivery Quantity</strong></td><td><code>IF(SupplierDeliveriesOnTime[Delivery Complete] = &quot;X&quot; || SupplierDeliveriesOnTime[Indicator: Partial mvt 109] = &quot;X&quot;, SupplierDeliveriesOnTime[Order quantity], SupplierDeliveriesOnTime[Original Quantity])</code></td></tr>
+<tr><td><strong>Reception Processing (WDays)</strong></td><td><code>```
+			
+			    VAR dlvDate = SupplierDeliveriesOnTime[Actual Delivery Date]
+			    VAR returnValue = CALCULATE(SUM(DateDelivered[IsWorkingDay]), DateDelivered[Delivery Date] &gt; dlvDate, DateDelivered[Delivery Date] &lt;= TODAY())
+			    RETURN IF(SupplierDeliveriesOnTime[Indicator: Reception completed] = BLANK(), returnValue, BLANK())
+			```</code></td></tr>
+<tr><td><strong>Reception (WDays)</strong></td><td><code>IF(SupplierDeliveriesOnTime[Indicator: Reception completed] = &quot;X&quot;, SupplierDeliveriesOnTime[Reception (Working Days)], BLANK())</code></td></tr>
 </tbody></table>
 
 
-<h2 id="sec6">6. Observations for Redevelopment <a href="#sec6" class="section-anchor">#</a></h2>
-<div class="alert alert-note"><div class="alert-title">Measure Count</div>This model contains <strong>58</strong> DAX measures. Consider Calculation Groups to reduce duplication.</div>
-<div class="alert alert-tip"><div class="alert-title">Calculated Columns</div>There are <strong>15</strong> DAX calculated columns. Consider moving transformations to Power Query for better performance.</div>
+<h2 id="sec6">Observations for Redevelopment <a href="#sec6" class="section-anchor">#</a></h2>
+<div class="alert alert-warning"><div class="alert-title">Hardcoded Connections</div>Tables with hardcoded HANA server: <strong>DimDate</strong>, <strong>SupplierDeliveriesOnTime</strong>. Consider using a parameter for environment switching.</div>
+<div class="alert alert-note"><div class="alert-title">Measure Count</div>This model contains <strong>53</strong> DAX measures. Consider Calculation Groups to reduce duplication.</div>
+<div class="alert alert-tip"><div class="alert-title">Calculated Columns</div>There are <strong>40</strong> DAX calculated columns. Consider moving transformations to Power Query for better performance.</div>
+<div class="alert alert-note"><div class="alert-title">Unused Measures</div>26 measures defined but not bound to any report visual: <strong>!Transparent</strong>, <strong>% &lt; 1 Month Late Dlv</strong>, <strong>% &lt; 1 Week Late Dlv</strong>, <strong>% Early Dlv Conf.</strong>, <strong>% No Dlv</strong>, <strong>% On-time Dlv Conf.</strong>, <strong>% Partial Dlv</strong>, <strong>% Very Late Dlv</strong>, <strong>Average Reception all status (151P)</strong>, <strong>Average Reception all status (232P)</strong> … and 16 more.</div>
 
 
-<h2 id="sec7">7. Measure Lineage <a href="#sec7" class="section-anchor">#</a></h2>
+<h2 id="sec7">Measure Lineage <a href="#sec7" class="section-anchor">#</a></h2>
 <h4>Dependency Diagram</h4>
 <pre class="mermaid">
 graph LR
     classDef measure fill:#0969da,stroke:#0550ae,color:#fff,rx:10,ry:10;
     classDef column fill:#f6f8fa,stroke:#d1d9e0,color:#1f2328;
-    __Return_Rate_Value("% Return Rate Value"):::measure
-    Association("Association"):::measure
-    Last_2_Months_Net_Sales("Last 2 Months Net Sales"):::measure
-    Last_2_Months_Returns("Last 2 Months Returns"):::measure
-    Lift_Label("Lift Label"):::measure
-    Net_Sales("Net Sales"):::measure
-    Net_Sales_Indicator("Net Sales Indicator"):::measure
-    Net_Sales_Label("Net Sales Label"):::measure
-    Net_Sales_PM("Net Sales PM"):::measure
-    Net_Sales_Variance("Net Sales Variance"):::measure
-    Net_Sales_Variance__("Net Sales Variance %"):::measure
-    Product_Returns_Other("Product Returns Other"):::measure
-    Product_Returns_Top_3("Product Returns Top 3"):::measure
-    Product_Sales_Other("Product Sales Other"):::measure
-    Product_Sales_Top_3("Product Sales Top 3"):::measure
-    Product_Top_N("Product Top N"):::measure
-    ProductR_Top_N("ProductR Top N"):::measure
-    Profit_Difference("Profit Difference"):::measure
-    Profit_Indicator("Profit Indicator"):::measure
-    Return_Rate("Return Rate"):::measure
-    Returns("Returns"):::measure
-    Returns_Indicator("Returns Indicator"):::measure
-    Returns_PM("Returns PM"):::measure
-    Returns_Sales_Top_3("Returns Sales Top 3"):::measure
-    Returns_Variance("Returns Variance"):::measure
-    Returns_Variance__("Returns Variance %"):::measure
-    Store_Returns_Other("Store Returns Other"):::measure
-    Store_Sales_Other("Store Sales Other"):::measure
-    Store_Sales_Top_3("Store Sales Top 3"):::measure
-    Store_Top_N("Store Top N"):::measure
-    StoreR_Top_N("StoreR Top N"):::measure
-    Total_Return_Rate("Total Return Rate"):::measure
-    Units_Returned("Units Returned"):::measure
-    Units_Returned_Indicator("Units Returned Indicator"):::measure
-    Units_Returned_PM("Units Returned PM"):::measure
-    Units_Returned_Variance__("Units Returned Variance %"):::measure
-    Units_Sold("Units Sold"):::measure
-    Units_Sold_Indicator("Units Sold Indicator"):::measure
-    Units_Sold_PM("Units Sold PM"):::measure
-    Units_Sold_Variance__("Units Sold Variance %"):::measure
-    WIF_Adjusted_Net_Sales("WIF Adjusted Net Sales"):::measure
-    WIF_Adjusted_Sales("WIF Adjusted Sales"):::measure
-    WIF_Adjusted_Units_Returned("WIF Adjusted Units Returned"):::measure
-    WIF_Forecast("WIF Forecast"):::measure
-    WIF_Price_per_Unit("WIF Price per Unit"):::measure
-    WIF_Profit("WIF Profit"):::measure
-    WIF_Profit_Difference("WIF Profit Difference"):::measure
-    WIF_Sales("WIF Sales"):::measure
-    WIF_Same("WIF Same"):::measure
-    WIF_Total_Forecast("WIF Total Forecast"):::measure
-    WIF_Total_Profit("WIF Total Profit"):::measure
-    WIF_Units_Returned("WIF Units Returned"):::measure
-    WIF_Units_Returned_Average("WIF Units Returned Average"):::measure
-    WIF_Units_Returned_Difference("WIF Units Returned Difference"):::measure
-    WIF_Units_Returned_1("WIF Units Returned_1"):::measure
-    WIF_Units_Returned_2("WIF Units Returned_2"):::measure
-    __Return_Rate["% Return Rate"]:::column
-    __Return_Rate_Value["% Return Rate Value"]:::column
-    Amount["Amount"]:::column
-    Category["Category"]:::column
-    Date["Date"]:::column
-    Importance["Importance"]:::column
-    Month["Month"]:::column
-    Product["Product"]:::column
-    Segment["Segment"]:::column
-    Status["Status"]:::column
-    Store["Store"]:::column
-    Type["Type"]:::column
-    Unit["Unit"]:::column
-    Amount -.-> Net_Sales
-    Status -.-> Net_Sales
-    Net_Sales --> Product_Top_N
-    Category -.-> Product_Top_N
-    Segment -.-> Product_Top_N
-    Product -.-> Product_Top_N
-    Net_Sales --> Product_Sales_Top_3
-    Product_Top_N --> Product_Sales_Top_3
-    Net_Sales --> Product_Sales_Other
-    Product_Top_N --> Product_Sales_Other
-    Net_Sales --> Net_Sales_PM
-    Date -.-> Net_Sales_PM
-    Net_Sales_PM --> Last_2_Months_Net_Sales
-    Net_Sales --> Last_2_Months_Net_Sales
-    Net_Sales --> Store_Top_N
-    Store -.-> Store_Top_N
-    Net_Sales --> Store_Sales_Other
-    Store_Top_N --> Store_Sales_Other
-    Net_Sales --> Store_Sales_Top_3
-    Store_Top_N --> Store_Sales_Top_3
-    Net_Sales_PM --> Net_Sales_Variance
-    Net_Sales --> Net_Sales_Variance
-    Net_Sales_PM --> Net_Sales_Variance__
-    Net_Sales --> Net_Sales_Variance__
-    Net_Sales_Variance__ --> Net_Sales_Indicator
-    Status -.-> Units_Sold
-    Unit -.-> Units_Sold
-    Units_Sold --> Units_Sold_PM
-    Date -.-> Units_Sold_PM
-    Units_Sold_PM --> Units_Sold_Variance__
-    Units_Sold --> Units_Sold_Variance__
-    Units_Sold_Variance__ --> Units_Sold_Indicator
-    Amount -.-> Returns
-    Status -.-> Returns
-    Returns --> Returns_PM
-    Date -.-> Returns_PM
-    Returns --> Last_2_Months_Returns
-    Returns_PM --> Last_2_Months_Returns
-    Returns --> Returns_Variance
-    Returns_PM --> Returns_Variance
-    Returns --> Returns_Variance__
-    Returns_PM --> Returns_Variance__
-    Status -.-> Units_Returned
-    Unit -.-> Units_Returned
-    Units_Returned --> Units_Returned_PM
-    Date -.-> Units_Returned_PM
-    Units_Returned --> Units_Returned_Variance__
-    Units_Returned_PM --> Units_Returned_Variance__
-    Returns_Variance__ --> Returns_Indicator
-    Returns --> ProductR_Top_N
-    Category -.-> ProductR_Top_N
-    Segment -.-> ProductR_Top_N
-    Product -.-> ProductR_Top_N
-    ProductR_Top_N --> Product_Returns_Other
-    Returns --> Product_Returns_Other
-    ProductR_Top_N --> Product_Returns_Top_3
-    Returns --> Product_Returns_Top_3
-    Returns --> StoreR_Top_N
-    Store -.-> StoreR_Top_N
-    Returns --> Store_Returns_Other
-    StoreR_Top_N --> Store_Returns_Other
-    Returns --> Returns_Sales_Top_3
-    StoreR_Top_N --> Returns_Sales_Top_3
-    Returns_Variance__ --> Units_Returned_Indicator
-    Returns --> Return_Rate
-    Amount -.-> Return_Rate
-    __Return_Rate -.-> __Return_Rate_Value
-    Units_Returned --> WIF_Units_Returned
-    WIF_Units_Returned_Average --> WIF_Units_Returned
-    WIF_Units_Returned_Difference --> WIF_Units_Returned_Average
-    Date -.-> WIF_Units_Returned_Average
-    WIF_Units_Returned_1 --> WIF_Units_Returned_Difference
-    WIF_Units_Returned_2 --> WIF_Units_Returned_Difference
-    Units_Returned --> WIF_Units_Returned_1
-    Date -.-> WIF_Units_Returned_1
-    WIF_Adjusted_Units_Returned --> WIF_Units_Returned_2
-    Date -.-> WIF_Units_Returned_2
-    __Return_Rate_Value -.-> WIF_Adjusted_Units_Returned
-    Unit -.-> WIF_Adjusted_Units_Returned
-    WIF_Price_per_Unit --> WIF_Adjusted_Net_Sales
-    __Return_Rate_Value -.-> WIF_Adjusted_Net_Sales
-    Unit -.-> WIF_Adjusted_Net_Sales
-    Net_Sales --> WIF_Price_per_Unit
-    Units_Sold --> WIF_Price_per_Unit
-    WIF_Adjusted_Net_Sales --> WIF_Profit
-    WIF_Same --> WIF_Profit
-    Net_Sales --> WIF_Profit
-    WIF_Adjusted_Sales --> Profit_Difference
-    Net_Sales --> Profit_Difference
-    WIF_Price_per_Unit --> WIF_Adjusted_Sales
-    WIF_Units_Returned_1 --> WIF_Adjusted_Sales
-    Net_Sales --> WIF_Sales
-    Date -.-> WIF_Sales
-    Month -.-> WIF_Sales
-    Return_Rate --> WIF_Same
-    __Return_Rate_Value --> WIF_Same
-    Store -.-> WIF_Same
-    Type -.-> WIF_Same
-    Net_Sales --> WIF_Forecast
-    WIF_Profit --> WIF_Forecast
-    WIF_Forecast --> WIF_Total_Forecast
-    Date -.-> WIF_Total_Forecast
-    Month -.-> WIF_Total_Forecast
-    WIF_Profit --> WIF_Total_Profit
-    Date -.-> WIF_Total_Profit
-    Month -.-> WIF_Total_Profit
-    Net_Sales --> Net_Sales_Label
-    WIF_Forecast --> WIF_Profit_Difference
-    Net_Sales --> WIF_Profit_Difference
-    WIF_Profit_Difference --> Profit_Indicator
-    Return_Rate --> Total_Return_Rate
-    Date -.-> Total_Return_Rate
-    Month -.-> Total_Return_Rate
-    Product_Top_N --> Association
-    Importance -.-> Association
-    Importance -.-> Lift_Label
+    ____1_Month_Late_Dlv("% &lt; 1 Month Late Dlv"):::measure
+    ____1_Week_Late_Dlv("% &lt; 1 Week Late Dlv"):::measure
+    __EOTIF("% EOTIF"):::measure
+    __EOTIF__Confirmed_("% EOTIF (Confirmed)"):::measure
+    __Early_Dlv("% Early Dlv"):::measure
+    __Early_Dlv_Conf_("% Early Dlv Conf."):::measure
+    __No_Dlv("% No Dlv"):::measure
+    __OTIF("% OTIF"):::measure
+    __OTIF__Confirmed_("% OTIF (Confirmed)"):::measure
+    __On_time_Dlv("% On-time Dlv"):::measure
+    __On_time_Dlv_Conf_("% On-time Dlv Conf."):::measure
+    __Partial_Dlv("% Partial Dlv"):::measure
+    __Very_Late_Dlv("% Very Late Dlv"):::measure
+    Average_Reception_all_status("Average Reception all status"):::measure
+    Average_Reception_all_status__151P_("Average Reception all status (151P)"):::measure
+    Average_Reception_all_status__232P_("Average Reception all status (232P)"):::measure
+    Average_Reception_all_status__243P_("Average Reception all status (243P)"):::measure
+    Average_Reception_all_status__591P_("Average Reception all status (591P)"):::measure
+    Average_Reception_all_status__Overall_("Average Reception all status (Overall)"):::measure
+    Average_Reception_processing_Last_12_months("Average Reception processing Last 12 months"):::measure
+    Average_Reception_time("Average Reception time"):::measure
+    BeginPeriod("BeginPeriod"):::measure
+    Delivery_Count("Delivery Count"):::measure
+    EndPeriod("EndPeriod"):::measure
+    NrRecords("NrRecords"):::measure
+    Number_of_Schedule_Lines("Number of Schedule Lines"):::measure
+    Number_of_deliveries("Number of deliveries"):::measure
+    PO_Lines_Count("PO Lines Count"):::measure
+    POLineFilter_Measure("POLineFilter Measure"):::measure
+    POLineSlicer_Filter("POLineSlicer Filter"):::measure
+    Row_Count("Row Count"):::measure
+    ServerString("ServerString"):::measure
+    Spent_Amount("Spent Amount"):::measure
+    SpentFilter_Measure("SpentFilter Measure"):::measure
+    SpentSlicer_Filter("SpentSlicer Filter"):::measure
+    Supplier_Confirmed_Delivery_EOTIF("Supplier Confirmed Delivery EOTIF"):::measure
+    Supplier_Confirmed_Delivery_OTIF("Supplier Confirmed Delivery OTIF"):::measure
+    Supplier_Delivery_EOTIF("Supplier Delivery EOTIF"):::measure
+    Supplier_Delivery_OTIF("Supplier Delivery OTIF"):::measure
+    Total_Deliveries("Total Deliveries"):::measure
+    TotalNrEarly("TotalNrEarly"):::measure
+    TotalNrEarlyConf("TotalNrEarlyConf"):::measure
+    TotalNrOnTime("TotalNrOnTime"):::measure
+    TotalNrOnTimeConf("TotalNrOnTimeConf"):::measure
+    TotalTableTotalDone("TotalTableTotalDone"):::measure
+    _12months__Bascoup_("_12months (Bascoup)"):::measure
+    _12months__GZH_("_12months (GZH)"):::measure
+    _12months__Overall_("_12months (Overall)"):::measure
+    _12months__Ronet_("_12months (Ronet)"):::measure
+    _12months__Schaarbeek_("_12months (Schaarbeek)"):::measure
+    0CONTRACT["0CONTRACT"]:::column
+    Actual_Delivery_Date["Actual Delivery Date"]:::column
+    Confirmed_Delivery_Early["Confirmed Delivery Early"]:::column
+    Confirmed_Delivery_On_Time["Confirmed Delivery On Time"]:::column
+    Delivery["Delivery"]:::column
+    Delivery_Date["Delivery Date"]:::column
+    Delivery_Early["Delivery Early"]:::column
+    Delivery_Month_Late["Delivery Month Late"]:::column
+    Delivery_Not_Delivered["Delivery Not Delivered"]:::column
+    Delivery_On_Time["Delivery On Time"]:::column
+    Delivery_Partially_Delivered["Delivery Partially Delivered"]:::column
+    Delivery_Very_Late["Delivery Very Late"]:::column
+    Delivery_Week_Late["Delivery Week Late"]:::column
+    Dlv_Category["Dlv Category"]:::column
+    Dlv_Early["Dlv Early"]:::column
+    GR__Amount_delivered["GR: Amount delivered"]:::column
+    Indicator__Not_Relevant["Indicator: Not Relevant"]:::column
+    Indicator__Reception_completed["Indicator: Reception completed"]:::column
+    Movement_Type["Movement Type"]:::column
+    Number_of_Records["Number of Records"]:::column
+    POItemKey["POItemKey"]:::column
+    POLineCount["POLineCount"]:::column
+    Planned_delivery_date_of_document_schedule_line["Planned delivery date of document schedule line"]:::column
+    Plant["Plant"]:::column
+    Reception__Working_Days_["Reception (Working Days)"]:::column
+    Reception_Time_Status["Reception Time Status"]:::column
+    ScheduleLineID["ScheduleLineID"]:::column
+    ServerName["ServerName"]:::column
+    SpentValue["SpentValue"]:::column
+    StatusInFull["StatusInFull"]:::column
+    Vendor__Key_["Vendor (Key)"]:::column
+    Total_Deliveries --> __On_time_Dlv
+    Delivery_On_Time -.-> __On_time_Dlv
+    Total_Deliveries --> ____1_Week_Late_Dlv
+    Delivery_Week_Late -.-> ____1_Week_Late_Dlv
+    Total_Deliveries --> ____1_Month_Late_Dlv
+    Delivery_Month_Late -.-> ____1_Month_Late_Dlv
+    Total_Deliveries --> __Early_Dlv
+    Dlv_Early -.-> __Early_Dlv
+    Total_Deliveries --> __Very_Late_Dlv
+    Delivery_Very_Late -.-> __Very_Late_Dlv
+    ServerName -.-> ServerString
+    Total_Deliveries --> __Partial_Dlv
+    Delivery_Partially_Delivered -.-> __Partial_Dlv
+    Total_Deliveries --> __No_Dlv
+    Delivery_Not_Delivered -.-> __No_Dlv
+    ScheduleLineID -.-> Number_of_Schedule_Lines
+    TotalNrOnTime --> Supplier_Delivery_OTIF
+    TotalTableTotalDone --> Supplier_Delivery_OTIF
+    StatusInFull -.-> TotalNrOnTime
+    Delivery_On_Time -.-> TotalNrOnTime
+    Planned_delivery_date_of_document_schedule_line -.-> TotalTableTotalDone
+    StatusInFull -.-> TotalNrEarly
+    Delivery_Early -.-> TotalNrEarly
+    TotalNrEarly --> Supplier_Delivery_EOTIF
+    TotalNrOnTime --> Supplier_Delivery_EOTIF
+    TotalTableTotalDone --> Supplier_Delivery_EOTIF
+    __Early_Dlv --> __EOTIF
+    __On_time_Dlv --> __EOTIF
+    NrRecords --> Total_Deliveries
+    Indicator__Not_Relevant -.-> Total_Deliveries
+    Dlv_Category -.-> Total_Deliveries
+    Number_of_Records -.-> NrRecords
+    __Early_Dlv_Conf_ --> __EOTIF__Confirmed_
+    __On_time_Dlv_Conf_ --> __EOTIF__Confirmed_
+    Total_Deliveries --> __Early_Dlv_Conf_
+    Confirmed_Delivery_Early -.-> __Early_Dlv_Conf_
+    Total_Deliveries --> __On_time_Dlv_Conf_
+    Confirmed_Delivery_On_Time -.-> __On_time_Dlv_Conf_
+    Confirmed_Delivery_On_Time -.-> TotalNrOnTimeConf
+    StatusInFull -.-> TotalNrOnTimeConf
+    Confirmed_Delivery_Early -.-> TotalNrEarlyConf
+    StatusInFull -.-> TotalNrEarlyConf
+    TotalNrOnTimeConf --> Supplier_Confirmed_Delivery_OTIF
+    TotalTableTotalDone --> Supplier_Confirmed_Delivery_OTIF
+    TotalNrOnTimeConf --> Supplier_Confirmed_Delivery_EOTIF
+    TotalNrEarlyConf --> Supplier_Confirmed_Delivery_EOTIF
+    TotalTableTotalDone --> Supplier_Confirmed_Delivery_EOTIF
+    __On_time_Dlv --> __OTIF
+    __On_time_Dlv_Conf_ --> __OTIF__Confirmed_
+    GR__Amount_delivered -.-> Spent_Amount
+    Spent_Amount --> SpentFilter_Measure
+    SpentValue -.-> SpentFilter_Measure
+    Spent_Amount --> SpentSlicer_Filter
+    SpentValue -.-> SpentSlicer_Filter
+    0CONTRACT -.-> SpentSlicer_Filter
+    POItemKey -.-> PO_Lines_Count
+    PO_Lines_Count --> POLineFilter_Measure
+    POLineCount -.-> POLineFilter_Measure
+    PO_Lines_Count --> POLineSlicer_Filter
+    Vendor__Key_ -.-> POLineSlicer_Filter
+    POLineCount -.-> POLineSlicer_Filter
+    Indicator__Reception_completed -.-> Average_Reception_time
+    Reception__Working_Days_ -.-> Average_Reception_time
+    Indicator__Reception_completed -.-> Average_Reception_all_status
+    Reception_Time_Status -.-> Average_Reception_all_status
+    Reception__Working_Days_ -.-> Average_Reception_all_status
+    Reception__Working_Days_ -.-> Average_Reception_all_status__Overall_
+    Indicator__Reception_completed -.-> Average_Reception_all_status__Overall_
+    Actual_Delivery_Date -.-> Average_Reception_all_status__Overall_
+    Movement_Type -.-> Average_Reception_all_status__Overall_
+    Indicator__Not_Relevant -.-> Average_Reception_all_status__Overall_
+    Delivery -.-> Number_of_deliveries
+    Average_Reception_all_status --> Average_Reception_processing_Last_12_months
+    Delivery_Date -.-> Average_Reception_processing_Last_12_months
+    Delivery_Date -.-> BeginPeriod
+    Delivery_Date -.-> EndPeriod
+    Average_Reception_all_status__Overall_ --> _12months__Overall_
+    Average_Reception_all_status__243P_ --> _12months__Ronet_
+    Average_Reception_all_status__151P_ --> _12months__Schaarbeek_
+    Average_Reception_all_status__232P_ --> _12months__GZH_
+    Average_Reception_all_status__591P_ --> _12months__Bascoup_
+    Plant -.-> Average_Reception_all_status__151P_
+    Reception__Working_Days_ -.-> Average_Reception_all_status__151P_
+    Indicator__Reception_completed -.-> Average_Reception_all_status__151P_
+    Actual_Delivery_Date -.-> Average_Reception_all_status__151P_
+    Movement_Type -.-> Average_Reception_all_status__151P_
+    Indicator__Not_Relevant -.-> Average_Reception_all_status__151P_
+    Plant -.-> Average_Reception_all_status__232P_
+    Reception__Working_Days_ -.-> Average_Reception_all_status__232P_
+    Indicator__Reception_completed -.-> Average_Reception_all_status__232P_
+    Actual_Delivery_Date -.-> Average_Reception_all_status__232P_
+    Movement_Type -.-> Average_Reception_all_status__232P_
+    Indicator__Not_Relevant -.-> Average_Reception_all_status__232P_
+    Plant -.-> Average_Reception_all_status__243P_
+    Reception__Working_Days_ -.-> Average_Reception_all_status__243P_
+    Indicator__Reception_completed -.-> Average_Reception_all_status__243P_
+    Actual_Delivery_Date -.-> Average_Reception_all_status__243P_
+    Movement_Type -.-> Average_Reception_all_status__243P_
+    Indicator__Not_Relevant -.-> Average_Reception_all_status__243P_
+    Plant -.-> Average_Reception_all_status__591P_
+    Reception__Working_Days_ -.-> Average_Reception_all_status__591P_
+    Indicator__Reception_completed -.-> Average_Reception_all_status__591P_
+    Actual_Delivery_Date -.-> Average_Reception_all_status__591P_
+    Movement_Type -.-> Average_Reception_all_status__591P_
+    Indicator__Not_Relevant -.-> Average_Reception_all_status__591P_
+    Number_of_deliveries --> Delivery_Count
+    Number_of_Records -.-> Row_Count
 </pre>
 <h4>Dependency Details</h4>
 <table>
 <thead><tr><th>Measure</th><th>Depends on Measures</th><th>Depends on Columns</th></tr></thead>
 <tbody>
-<tr><td><strong>% Return Rate Value</strong></td><td>--</td><td><code>% Return Rate</code></td></tr>
-<tr><td><strong>Association</strong></td><td><code>Product Top N</code></td><td><code>Importance</code></td></tr>
-<tr><td><strong>Last 2 Months Net Sales</strong></td><td><code>Net Sales</code>, <code>Net Sales PM</code></td><td>--</td></tr>
-<tr><td><strong>Last 2 Months Returns</strong></td><td><code>Returns</code>, <code>Returns PM</code></td><td>--</td></tr>
-<tr><td><strong>Lift Label</strong></td><td>--</td><td><code>Importance</code></td></tr>
-<tr><td><strong>Net Sales</strong></td><td>--</td><td><code>Amount</code>, <code>Status</code></td></tr>
-<tr><td><strong>Net Sales Indicator</strong></td><td><code>Net Sales Variance %</code></td><td>--</td></tr>
-<tr><td><strong>Net Sales Label</strong></td><td><code>Net Sales</code></td><td>--</td></tr>
-<tr><td><strong>Net Sales PM</strong></td><td><code>Net Sales</code></td><td><code>Date</code></td></tr>
-<tr><td><strong>Net Sales Variance</strong></td><td><code>Net Sales</code>, <code>Net Sales PM</code></td><td>--</td></tr>
-<tr><td><strong>Net Sales Variance %</strong></td><td><code>Net Sales</code>, <code>Net Sales PM</code></td><td>--</td></tr>
-<tr><td><strong>Product Returns Other</strong></td><td><code>ProductR Top N</code>, <code>Returns</code></td><td>--</td></tr>
-<tr><td><strong>Product Returns Top 3</strong></td><td><code>ProductR Top N</code>, <code>Returns</code></td><td>--</td></tr>
-<tr><td><strong>Product Sales Other</strong></td><td><code>Net Sales</code>, <code>Product Top N</code></td><td>--</td></tr>
-<tr><td><strong>Product Sales Top 3</strong></td><td><code>Net Sales</code>, <code>Product Top N</code></td><td>--</td></tr>
-<tr><td><strong>Product Top N</strong></td><td><code>Net Sales</code></td><td><code>Category</code>, <code>Product</code>, <code>Segment</code></td></tr>
-<tr><td><strong>ProductR Top N</strong></td><td><code>Returns</code></td><td><code>Category</code>, <code>Product</code>, <code>Segment</code></td></tr>
-<tr><td><strong>Profit Difference</strong></td><td><code>Net Sales</code>, <code>WIF Adjusted Sales</code></td><td>--</td></tr>
-<tr><td><strong>Profit Indicator</strong></td><td><code>WIF Profit Difference</code></td><td>--</td></tr>
-<tr><td><strong>Return Rate</strong></td><td><code>Returns</code></td><td><code>Amount</code></td></tr>
-<tr><td><strong>Returns</strong></td><td>--</td><td><code>Amount</code>, <code>Status</code></td></tr>
-<tr><td><strong>Returns Indicator</strong></td><td><code>Returns Variance %</code></td><td>--</td></tr>
-<tr><td><strong>Returns PM</strong></td><td><code>Returns</code></td><td><code>Date</code></td></tr>
-<tr><td><strong>Returns Sales Top 3</strong></td><td><code>Returns</code>, <code>StoreR Top N</code></td><td>--</td></tr>
-<tr><td><strong>Returns Variance</strong></td><td><code>Returns</code>, <code>Returns PM</code></td><td>--</td></tr>
-<tr><td><strong>Returns Variance %</strong></td><td><code>Returns</code>, <code>Returns PM</code></td><td>--</td></tr>
-<tr><td><strong>Store Returns Other</strong></td><td><code>Returns</code>, <code>StoreR Top N</code></td><td>--</td></tr>
-<tr><td><strong>Store Sales Other</strong></td><td><code>Net Sales</code>, <code>Store Top N</code></td><td>--</td></tr>
-<tr><td><strong>Store Sales Top 3</strong></td><td><code>Net Sales</code>, <code>Store Top N</code></td><td>--</td></tr>
-<tr><td><strong>Store Top N</strong></td><td><code>Net Sales</code></td><td><code>Store</code></td></tr>
-<tr><td><strong>StoreR Top N</strong></td><td><code>Returns</code></td><td><code>Store</code></td></tr>
-<tr><td><strong>Total Return Rate</strong></td><td><code>Return Rate</code></td><td><code>Date</code>, <code>Month</code></td></tr>
-<tr><td><strong>Units Returned</strong></td><td>--</td><td><code>Status</code>, <code>Unit</code></td></tr>
-<tr><td><strong>Units Returned Indicator</strong></td><td><code>Returns Variance %</code></td><td>--</td></tr>
-<tr><td><strong>Units Returned PM</strong></td><td><code>Units Returned</code></td><td><code>Date</code></td></tr>
-<tr><td><strong>Units Returned Variance %</strong></td><td><code>Units Returned</code>, <code>Units Returned PM</code></td><td>--</td></tr>
-<tr><td><strong>Units Sold</strong></td><td>--</td><td><code>Status</code>, <code>Unit</code></td></tr>
-<tr><td><strong>Units Sold Indicator</strong></td><td><code>Units Sold Variance %</code></td><td>--</td></tr>
-<tr><td><strong>Units Sold PM</strong></td><td><code>Units Sold</code></td><td><code>Date</code></td></tr>
-<tr><td><strong>Units Sold Variance %</strong></td><td><code>Units Sold</code>, <code>Units Sold PM</code></td><td>--</td></tr>
-<tr><td><strong>WIF Adjusted Net Sales</strong></td><td><code>WIF Price per Unit</code></td><td><code>% Return Rate Value</code>, <code>Unit</code></td></tr>
-<tr><td><strong>WIF Adjusted Sales</strong></td><td><code>WIF Price per Unit</code>, <code>WIF Units Returned_1</code></td><td>--</td></tr>
-<tr><td><strong>WIF Adjusted Units Returned</strong></td><td>--</td><td><code>% Return Rate Value</code>, <code>Unit</code></td></tr>
-<tr><td><strong>WIF Forecast</strong></td><td><code>Net Sales</code>, <code>WIF Profit</code></td><td>--</td></tr>
-<tr><td><strong>WIF Price per Unit</strong></td><td><code>Net Sales</code>, <code>Units Sold</code></td><td>--</td></tr>
-<tr><td><strong>WIF Profit</strong></td><td><code>Net Sales</code>, <code>WIF Adjusted Net Sales</code>, <code>WIF Same</code></td><td>--</td></tr>
-<tr><td><strong>WIF Profit Difference</strong></td><td><code>Net Sales</code>, <code>WIF Forecast</code></td><td>--</td></tr>
-<tr><td><strong>WIF Sales</strong></td><td><code>Net Sales</code></td><td><code>Date</code>, <code>Month</code></td></tr>
-<tr><td><strong>WIF Same</strong></td><td><code>% Return Rate Value</code>, <code>Return Rate</code></td><td><code>Store</code>, <code>Type</code></td></tr>
-<tr><td><strong>WIF Total Forecast</strong></td><td><code>WIF Forecast</code></td><td><code>Date</code>, <code>Month</code></td></tr>
-<tr><td><strong>WIF Total Profit</strong></td><td><code>WIF Profit</code></td><td><code>Date</code>, <code>Month</code></td></tr>
-<tr><td><strong>WIF Units Returned</strong></td><td><code>Units Returned</code>, <code>WIF Units Returned Average</code></td><td>--</td></tr>
-<tr><td><strong>WIF Units Returned Average</strong></td><td><code>WIF Units Returned Difference</code></td><td><code>Date</code></td></tr>
-<tr><td><strong>WIF Units Returned Difference</strong></td><td><code>WIF Units Returned_1</code>, <code>WIF Units Returned_2</code></td><td>--</td></tr>
-<tr><td><strong>WIF Units Returned_1</strong></td><td><code>Units Returned</code></td><td><code>Date</code></td></tr>
-<tr><td><strong>WIF Units Returned_2</strong></td><td><code>WIF Adjusted Units Returned</code></td><td><code>Date</code></td></tr>
+<tr><td><strong>% &lt; 1 Month Late Dlv</strong></td><td><code>Total Deliveries</code></td><td><code>Delivery Month Late</code></td></tr>
+<tr><td><strong>% &lt; 1 Week Late Dlv</strong></td><td><code>Total Deliveries</code></td><td><code>Delivery Week Late</code></td></tr>
+<tr><td><strong>% EOTIF</strong></td><td><code>% Early Dlv</code>, <code>% On-time Dlv</code></td><td>--</td></tr>
+<tr><td><strong>% EOTIF (Confirmed)</strong></td><td><code>% Early Dlv Conf.</code>, <code>% On-time Dlv Conf.</code></td><td>--</td></tr>
+<tr><td><strong>% Early Dlv</strong></td><td><code>Total Deliveries</code></td><td><code>Dlv Early</code></td></tr>
+<tr><td><strong>% Early Dlv Conf.</strong></td><td><code>Total Deliveries</code></td><td><code>Confirmed Delivery Early</code></td></tr>
+<tr><td><strong>% No Dlv</strong></td><td><code>Total Deliveries</code></td><td><code>Delivery Not Delivered</code></td></tr>
+<tr><td><strong>% OTIF</strong></td><td><code>% On-time Dlv</code></td><td>--</td></tr>
+<tr><td><strong>% OTIF (Confirmed)</strong></td><td><code>% On-time Dlv Conf.</code></td><td>--</td></tr>
+<tr><td><strong>% On-time Dlv</strong></td><td><code>Total Deliveries</code></td><td><code>Delivery On Time</code></td></tr>
+<tr><td><strong>% On-time Dlv Conf.</strong></td><td><code>Total Deliveries</code></td><td><code>Confirmed Delivery On Time</code></td></tr>
+<tr><td><strong>% Partial Dlv</strong></td><td><code>Total Deliveries</code></td><td><code>Delivery Partially Delivered</code></td></tr>
+<tr><td><strong>% Very Late Dlv</strong></td><td><code>Total Deliveries</code></td><td><code>Delivery Very Late</code></td></tr>
+<tr><td><strong>Average Reception all status</strong></td><td>--</td><td><code>Indicator: Reception completed</code>, <code>Reception (Working Days)</code>, <code>Reception Time Status</code></td></tr>
+<tr><td><strong>Average Reception all status (151P)</strong></td><td>--</td><td><code>Actual Delivery Date</code>, <code>Indicator: Not Relevant</code>, <code>Indicator: Reception completed</code>, <code>Movement Type</code>, <code>Plant</code>, <code>Reception (Working Days)</code></td></tr>
+<tr><td><strong>Average Reception all status (232P)</strong></td><td>--</td><td><code>Actual Delivery Date</code>, <code>Indicator: Not Relevant</code>, <code>Indicator: Reception completed</code>, <code>Movement Type</code>, <code>Plant</code>, <code>Reception (Working Days)</code></td></tr>
+<tr><td><strong>Average Reception all status (243P)</strong></td><td>--</td><td><code>Actual Delivery Date</code>, <code>Indicator: Not Relevant</code>, <code>Indicator: Reception completed</code>, <code>Movement Type</code>, <code>Plant</code>, <code>Reception (Working Days)</code></td></tr>
+<tr><td><strong>Average Reception all status (591P)</strong></td><td>--</td><td><code>Actual Delivery Date</code>, <code>Indicator: Not Relevant</code>, <code>Indicator: Reception completed</code>, <code>Movement Type</code>, <code>Plant</code>, <code>Reception (Working Days)</code></td></tr>
+<tr><td><strong>Average Reception all status (Overall)</strong></td><td>--</td><td><code>Actual Delivery Date</code>, <code>Indicator: Not Relevant</code>, <code>Indicator: Reception completed</code>, <code>Movement Type</code>, <code>Reception (Working Days)</code></td></tr>
+<tr><td><strong>Average Reception processing Last 12 months</strong></td><td><code>Average Reception all status</code></td><td><code>Delivery Date</code></td></tr>
+<tr><td><strong>Average Reception time</strong></td><td>--</td><td><code>Indicator: Reception completed</code>, <code>Reception (Working Days)</code></td></tr>
+<tr><td><strong>BeginPeriod</strong></td><td>--</td><td><code>Delivery Date</code></td></tr>
+<tr><td><strong>Delivery Count</strong></td><td><code>Number of deliveries</code></td><td>--</td></tr>
+<tr><td><strong>EndPeriod</strong></td><td>--</td><td><code>Delivery Date</code></td></tr>
+<tr><td><strong>NrRecords</strong></td><td>--</td><td><code>Number of Records</code></td></tr>
+<tr><td><strong>Number of Schedule Lines</strong></td><td>--</td><td><code>ScheduleLineID</code></td></tr>
+<tr><td><strong>Number of deliveries</strong></td><td>--</td><td><code>Delivery</code></td></tr>
+<tr><td><strong>PO Lines Count</strong></td><td>--</td><td><code>POItemKey</code></td></tr>
+<tr><td><strong>POLineFilter Measure</strong></td><td><code>PO Lines Count</code></td><td><code>POLineCount</code></td></tr>
+<tr><td><strong>POLineSlicer Filter</strong></td><td><code>PO Lines Count</code></td><td><code>POLineCount</code>, <code>Vendor (Key)</code></td></tr>
+<tr><td><strong>Row Count</strong></td><td>--</td><td><code>Number of Records</code></td></tr>
+<tr><td><strong>ServerString</strong></td><td>--</td><td><code>ServerName</code></td></tr>
+<tr><td><strong>Spent Amount</strong></td><td>--</td><td><code>GR: Amount delivered</code></td></tr>
+<tr><td><strong>SpentFilter Measure</strong></td><td><code>Spent Amount</code></td><td><code>SpentValue</code></td></tr>
+<tr><td><strong>SpentSlicer Filter</strong></td><td><code>Spent Amount</code></td><td><code>0CONTRACT</code>, <code>SpentValue</code></td></tr>
+<tr><td><strong>Supplier Confirmed Delivery EOTIF</strong></td><td><code>TotalNrEarlyConf</code>, <code>TotalNrOnTimeConf</code>, <code>TotalTableTotalDone</code></td><td>--</td></tr>
+<tr><td><strong>Supplier Confirmed Delivery OTIF</strong></td><td><code>TotalNrOnTimeConf</code>, <code>TotalTableTotalDone</code></td><td>--</td></tr>
+<tr><td><strong>Supplier Delivery EOTIF</strong></td><td><code>TotalNrEarly</code>, <code>TotalNrOnTime</code>, <code>TotalTableTotalDone</code></td><td>--</td></tr>
+<tr><td><strong>Supplier Delivery OTIF</strong></td><td><code>TotalNrOnTime</code>, <code>TotalTableTotalDone</code></td><td>--</td></tr>
+<tr><td><strong>Total Deliveries</strong></td><td><code>NrRecords</code></td><td><code>Dlv Category</code>, <code>Indicator: Not Relevant</code></td></tr>
+<tr><td><strong>TotalNrEarly</strong></td><td>--</td><td><code>Delivery Early</code>, <code>StatusInFull</code></td></tr>
+<tr><td><strong>TotalNrEarlyConf</strong></td><td>--</td><td><code>Confirmed Delivery Early</code>, <code>StatusInFull</code></td></tr>
+<tr><td><strong>TotalNrOnTime</strong></td><td>--</td><td><code>Delivery On Time</code>, <code>StatusInFull</code></td></tr>
+<tr><td><strong>TotalNrOnTimeConf</strong></td><td>--</td><td><code>Confirmed Delivery On Time</code>, <code>StatusInFull</code></td></tr>
+<tr><td><strong>TotalTableTotalDone</strong></td><td>--</td><td><code>Planned delivery date of document schedule line</code></td></tr>
+<tr><td><strong>_12months (Bascoup)</strong></td><td><code>Average Reception all status (591P)</code></td><td>--</td></tr>
+<tr><td><strong>_12months (GZH)</strong></td><td><code>Average Reception all status (232P)</code></td><td>--</td></tr>
+<tr><td><strong>_12months (Overall)</strong></td><td><code>Average Reception all status (Overall)</code></td><td>--</td></tr>
+<tr><td><strong>_12months (Ronet)</strong></td><td><code>Average Reception all status (243P)</code></td><td>--</td></tr>
+<tr><td><strong>_12months (Schaarbeek)</strong></td><td><code>Average Reception all status (151P)</code></td><td>--</td></tr>
 </tbody></table>
+
+
+<h2 id="sec-pages">8. Report Pages &amp; Visuals <a href="#sec-pages" class="section-anchor">#</a></h2>
+<h3 id="sec-page-1">8.1 Operational Report 2-steps Reception Info <a href="#sec-page-1" class="section-anchor">#</a></h3>
+<p>0 functional visuals.</p>
+<details><summary>+ 1 technical objects (1 shapes/buttons)</summary>
+<ul>
+<li>textbox: textbox</li>
+</ul></details>
+<h3 id="sec-page-2">8.2 2-steps Reception Time KPI Info <a href="#sec-page-2" class="section-anchor">#</a></h3>
+<p>0 functional visuals.</p>
+<details><summary>+ 1 technical objects (1 shapes/buttons)</summary>
+<ul>
+<li>textbox: textbox</li>
+</ul></details>
+<h3 id="sec-page-3">8.3 Drill PO Details <a href="#sec-page-3" class="section-anchor">#</a></h3>
+<p>1 functional visuals.</p>
+<ul>
+<li><strong>Table</strong>
+<br><span style="color:var(--fg-muted);">Columns (16): PO Nr, PO Item, Schedule line number, Delivery, Delivery Item, …</span>
+</li>
+</ul>
+<details><summary>+ 1 technical objects (1 shapes/buttons)</summary>
+<ul>
+<li>actionButton: actionButton</li>
+</ul></details>
+<h3 id="sec-page-4">8.4 2-steps Receipt Color Info <a href="#sec-page-4" class="section-anchor">#</a></h3>
+<p>0 functional visuals.</p>
+<details><summary>+ 1 technical objects (1 shapes/buttons)</summary>
+<ul>
+<li>textbox: textbox</li>
+</ul></details>
+<h3 id="sec-page-5">8.5 Operational Report 2-steps reception <a href="#sec-page-5" class="section-anchor">#</a></h3>
+<p>1 functional visuals, 6 slicers.</p>
+<p>Filters: <code>Material</code>, <code>Supplier</code>, <code>Plant</code>, <code>PO Nr</code>, <code>Delivery Date</code>, <code>Reception Status</code></p>
+<ul>
+<li><strong>Table</strong>
+<br><span style="color:var(--fg-muted);">Columns (23): Delivery, Delivery Item, PO Nr, PO Item, Actual Delivery Date, …</span>
+</li>
+</ul>
+<details><summary>+ 8 technical objects (3 helper cards, 5 shapes/buttons)</summary>
+<ul>
+<li>card: InfoCard</li>
+<li>card: card</li>
+<li>card: card</li>
+<li>textbox: Out of Order</li>
+<li>actionButton: InfoButton</li>
+<li>basicShape: Header - Backing</li>
+<li>image: image</li>
+<li>textbox: textbox</li>
+</ul></details>
+<h3 id="sec-page-6">8.6 2-steps GR - Reception Time KPI <a href="#sec-page-6" class="section-anchor">#</a></h3>
+<p>7 functional visuals, 5 slicers.</p>
+<p>Filters: <code>Delivery Date</code>, <code>Material</code>, <code>Supplier</code>, <code>Plant</code>, <code>PO Nr</code></p>
+<ul>
+<li><strong>Card</strong>
+<br><span style="color:var(--fg-muted);">Value: _12months (Bascoup) (measure)</span>
+</li>
+<li><strong>Card</strong>
+<br><span style="color:var(--fg-muted);">Value: _12months (GZH) (measure)</span>
+</li>
+<li><strong>Card</strong>
+<br><span style="color:var(--fg-muted);">Value: _12months (Ronet) (measure)</span>
+</li>
+<li><strong>Table</strong>
+<br><span style="color:var(--fg-muted);">Columns (16): Delivery, Delivery Item, Actual Delivery Date, Date Reception Completed, Indicator: Reception completed, …</span>
+</li>
+<li><strong>Line + stacked column</strong> — Reception lines by Calendar Week and Reception Time Status
+<br><span style="color:var(--fg-muted);">X-axis: CalWeek &middot; Y-axis: Number of Records (measure) &middot; Tooltips: BeginPeriod (measure), EndPeriod (measure), Average Reception processing Last 12 months (measure), Average Reception time (measure), Average Reception all status (measure)</span>
+</li>
+<li><strong>Card</strong>
+<br><span style="color:var(--fg-muted);">Value: _12months (Schaarbeek) (measure)</span>
+</li>
+<li><strong>Card</strong>
+<br><span style="color:var(--fg-muted);">Value: _12months (Overall) (measure)</span>
+</li>
+</ul>
+<details><summary>+ 12 technical objects (4 helper cards, 8 shapes/buttons)</summary>
+<ul>
+<li>card: card</li>
+<li>card: card</li>
+<li>card: card</li>
+<li>card: card</li>
+<li>actionButton: actionButton</li>
+<li>textbox: textbox</li>
+<li>basicShape: Header - Backing</li>
+<li>textbox: textbox</li>
+<li>actionButton: Slicers - Button PopOut</li>
+<li>actionButton: actionButton</li>
+<li>image: image</li>
+<li>textbox: Out of Order</li>
+</ul></details>
+<h3 id="sec-page-7">8.7 Deviation from Contractual Delivery Time <a href="#sec-page-7" class="section-anchor">#</a></h3>
+<p>2 functional visuals, 7 slicers.</p>
+<p>Filters: <code>{&#x27;Column&#x27;: {&#x27;Expression&#x27;: {&#x27;SourceRef&#x27;: {&#x27;Entity&#x27;: &#x27;SupplierDeliveriesOnTime&#x27;}}, &#x27;Property&#x27;: &#x27;Account Assignment Category (Key)&#x27;}}</code>, <code>Contract Nr</code>, <code>Contract Manager (Descr)</code>, <code>Flag Central</code>, <code>Purchasing Groups</code>, <code>Supplier</code>, <code>Planned delivery date of document schedule line</code></p>
+<ul>
+<li><strong>Table</strong>
+<br><span style="color:var(--fg-muted);">Columns (9): Contract Nr, Contract Item, Supplier, Contractual Delivery Time, Actual Delivery Time, …</span>
+</li>
+<li><strong>Line chart</strong> — Deviation from Contract
+<br><span style="color:var(--fg-muted);">X-axis: Deviation from Contract &middot; Y-axis: NrRecords (measure)</span>
+</li>
+</ul>
+<details><summary>+ 8 technical objects (3 helper cards, 5 shapes/buttons)</summary>
+<ul>
+<li>card: card</li>
+<li>card: card</li>
+<li>card: card</li>
+<li>basicShape: Header - Backing</li>
+<li>actionButton: Slicers - Button PopOut</li>
+<li>textbox: textbox</li>
+<li>actionButton: actionButton</li>
+<li>image: image</li>
+</ul></details>
+<h3 id="sec-page-8">8.8 Deviation Info <a href="#sec-page-8" class="section-anchor">#</a></h3>
+<p>0 functional visuals.</p>
+<details><summary>+ 1 technical objects (1 shapes/buttons)</summary>
+<ul>
+<li>textbox: textbox</li>
+</ul></details>
+<h3 id="sec-page-9">8.9 Detail Info (Confirmed) <a href="#sec-page-9" class="section-anchor">#</a></h3>
+<p>0 functional visuals.</p>
+<details><summary>+ 1 technical objects (1 shapes/buttons)</summary>
+<ul>
+<li>textbox: textbox</li>
+</ul></details>
+<h3 id="sec-page-10">8.10 Duplicate of OTIF by Vendor <a href="#sec-page-10" class="section-anchor">#</a></h3>
+<p>3 functional visuals, 7 slicers.</p>
+<p>Filters: <code>Supplier</code>, <code>Planned delivery date of document schedule line</code>, <code>Flag Contract</code>, <code>{&#x27;Column&#x27;: {&#x27;Expression&#x27;: {&#x27;SourceRef&#x27;: {&#x27;Entity&#x27;: &#x27;SupplierDeliveriesOnTime&#x27;}}, &#x27;Property&#x27;: &#x27;Account Assignment Category (Key)&#x27;}}</code>, <code>Flag Central</code>, <code>Purchasing Groups</code>, <code>Dlv Category</code></p>
+<ul>
+<li><strong>Bar chart</strong> — OTIF by Vendor
+<br><span style="color:var(--fg-muted);">X-axis: Supplier &middot; Y-axis: % On-time Dlv (measure)</span>
+</li>
+<li><strong>100% stacked bar chart</strong>
+<br><span style="color:var(--fg-muted);">X-axis: Supplier &middot; Y-axis: Number of Records (measure)</span>
+</li>
+<li><strong>Card</strong>
+<br><span style="color:var(--fg-muted);">Value: Total Deliveries (measure)</span>
+</li>
+</ul>
+<details><summary>+ 9 technical objects (4 helper cards, 5 shapes/buttons)</summary>
+<ul>
+<li>card: card</li>
+<li>card: card</li>
+<li>card: card</li>
+<li>card: card</li>
+<li>textbox: textbox</li>
+<li>image: image</li>
+<li>basicShape: Header - Backing</li>
+<li>actionButton: actionButton</li>
+<li>actionButton: Slicers - Button PopOut</li>
+</ul></details>
+<h3 id="sec-page-11">8.11 EOTIF by Vendor Info <a href="#sec-page-11" class="section-anchor">#</a></h3>
+<p>0 functional visuals.</p>
+<details><summary>+ 1 technical objects (1 shapes/buttons)</summary>
+<ul>
+<li>textbox: textbox</li>
+</ul></details>
+<h3 id="sec-page-12">8.12 Service Level Info (Confirmed) <a href="#sec-page-12" class="section-anchor">#</a></h3>
+<p>0 functional visuals.</p>
+<details><summary>+ 1 technical objects (1 shapes/buttons)</summary>
+<ul>
+<li>textbox: textbox</li>
+</ul></details>
+<h3 id="sec-page-13">8.13 Confirmed Delivery <a href="#sec-page-13" class="section-anchor">#</a></h3>
+<p>2 functional visuals, 9 slicers.</p>
+<p>Filters: <code>Flag Contract</code>, <code>Last Confirmed delivery date</code>, <code>Purchasing Groups</code>, <code>Supplier</code>, <code>Flag Central</code>, <code>PO Nr</code>, <code>{&#x27;Column&#x27;: {&#x27;Expression&#x27;: {&#x27;SourceRef&#x27;: {&#x27;Entity&#x27;: &#x27;SupplierDeliveriesOnTime&#x27;}}, &#x27;Property&#x27;: &#x27;Account Assignment Category (Key)&#x27;}}</code>, <code>Contract Nr</code>, <code>Confirmed Delivery Category</code></p>
+<ul>
+<li><strong>Line + stacked column</strong> — Delay Categories by Confirmed Delivery Date
+<br><span style="color:var(--fg-muted);">X-axis: CalmonNameEN &middot; Y-axis: Number of Schedule Lines (measure)</span>
+</li>
+<li><strong>Table</strong>
+<br><span style="color:var(--fg-muted);">Columns (43): Plant, Plant (Descr), Storage location, Storage location (Descr), Material (NN), …</span>
+</li>
+</ul>
+<details><summary>+ 10 technical objects (4 helper cards, 6 shapes/buttons)</summary>
+<ul>
+<li>card: card</li>
+<li>card: card</li>
+<li>card: card</li>
+<li>card: card</li>
+<li>textbox: textbox</li>
+<li>basicShape: Header - Backing</li>
+<li>actionButton: Slicers - Button PopOut</li>
+<li>actionButton: actionButton</li>
+<li>actionButton: actionButton</li>
+<li>image: image</li>
+</ul></details>
+<h3 id="sec-page-14">8.14 Detail Info <a href="#sec-page-14" class="section-anchor">#</a></h3>
+<p>0 functional visuals.</p>
+<details><summary>+ 1 technical objects (1 shapes/buttons)</summary>
+<ul>
+<li>textbox: textbox</li>
+</ul></details>
+<h3 id="sec-page-15">8.15 Legend Info <a href="#sec-page-15" class="section-anchor">#</a></h3>
+<p>0 functional visuals.</p>
+<details><summary>+ 1 technical objects (1 shapes/buttons)</summary>
+<ul>
+<li>textbox: textbox</li>
+</ul></details>
+<h3 id="sec-page-16">8.16 OTIF Supplier PO&#x27;s <a href="#sec-page-16" class="section-anchor">#</a></h3>
+<p>5 functional visuals, 3 slicers.</p>
+<p>Filters: <code>Flag Contract</code>, <code>{&#x27;Column&#x27;: {&#x27;Expression&#x27;: {&#x27;SourceRef&#x27;: {&#x27;Entity&#x27;: &#x27;SupplierDeliveriesOnTime&#x27;}}, &#x27;Property&#x27;: &#x27;Account Assignment Category (Key)&#x27;}}</code>, <code>Supplier</code></p>
+<ul>
+<li><strong>Card</strong> — Service Level previous months
+<br><span style="color:var(--fg-muted);">Value: Supplier Delivery EOTIF (measure)</span>
+</li>
+<li><strong>Card</strong> — Service Level last 12 months
+<br><span style="color:var(--fg-muted);">Value: Supplier Delivery OTIF (measure)</span>
+</li>
+<li><strong>Line + stacked column</strong> — Service Level Last 12 Months
+<br><span style="color:var(--fg-muted);">X-axis: CalmonNameEN &middot; Y-axis: Number of Schedule Lines (measure)</span>
+</li>
+<li><strong>Card</strong> — Service Level previous months
+<br><span style="color:var(--fg-muted);">Value: Supplier Delivery OTIF (measure)</span>
+</li>
+<li><strong>Card</strong> — Service Level last 12 months
+<br><span style="color:var(--fg-muted);">Value: Supplier Delivery EOTIF (measure)</span>
+</li>
+</ul>
+<details><summary>+ 10 technical objects (4 helper cards, 6 shapes/buttons)</summary>
+<ul>
+<li>card: card</li>
+<li>card: card</li>
+<li>card: card</li>
+<li>card: card</li>
+<li>textbox: textbox</li>
+<li>actionButton: actionButton</li>
+<li>actionButton: actionButton</li>
+<li>image: image</li>
+<li>basicShape: Header - Backing</li>
+<li>actionButton: Slicers - Button PopOut</li>
+</ul></details>
+<h3 id="sec-page-17">8.17 EOTIF by Supplier <a href="#sec-page-17" class="section-anchor">#</a></h3>
+<p>2 functional visuals, 10 slicers.</p>
+<p>Filters: <code>Purchasing Groups</code>, <code>POLineCount</code>, <code>Contract Manager (Descr)</code>, <code>Flag Central</code>, <code>{&#x27;Column&#x27;: {&#x27;Expression&#x27;: {&#x27;SourceRef&#x27;: {&#x27;Entity&#x27;: &#x27;SupplierDeliveriesOnTime&#x27;}}, &#x27;Property&#x27;: &#x27;Account Assignment Category (Key)&#x27;}}</code>, <code>Flag Contract</code>, <code>SpentValue</code>, <code>Contract Nr</code>, <code>Planned delivery date of document schedule line</code>, <code>Supplier</code></p>
+<ul>
+<li><strong>Table</strong>
+<br><span style="color:var(--fg-muted);">Columns (7): Supplier, % Early Dlv, % On-time Dlv, % EOTIF, % EOTIF (Confirmed), PO Lines Count, Spent Amount</span>
+</li>
+<li><strong>Bar chart</strong> — EOTIF by Vendor
+<br><span style="color:var(--fg-muted);">X-axis: Supplier &middot; Y-axis: % Early Dlv (measure), % On-time Dlv (measure) &middot; Tooltips: % EOTIF (measure)</span>
+</li>
+</ul>
+<details><summary>+ 10 technical objects (3 helper cards, 7 shapes/buttons)</summary>
+<ul>
+<li>card: card</li>
+<li>card: card</li>
+<li>card: card</li>
+<li>textbox: textbox</li>
+<li>actionButton: actionButton</li>
+<li>image: image</li>
+<li>textbox: textbox</li>
+<li>basicShape: Header - Backing</li>
+<li>textbox: textbox</li>
+<li>actionButton: Slicers - Button PopOut</li>
+</ul></details>
+<h3 id="sec-page-18">8.18 Service Level Info <a href="#sec-page-18" class="section-anchor">#</a></h3>
+<p>0 functional visuals.</p>
+<details><summary>+ 1 technical objects (1 shapes/buttons)</summary>
+<ul>
+<li>textbox: textbox</li>
+</ul></details>
+<h3 id="sec-page-19">8.19 OTIF Supplier PO&#x27;s (Confirmed) <a href="#sec-page-19" class="section-anchor">#</a></h3>
+<p>5 functional visuals, 3 slicers.</p>
+<p>Filters: <code>{&#x27;Column&#x27;: {&#x27;Expression&#x27;: {&#x27;SourceRef&#x27;: {&#x27;Entity&#x27;: &#x27;SupplierDeliveriesOnTime&#x27;}}, &#x27;Property&#x27;: &#x27;Account Assignment Category (Key)&#x27;}}</code>, <code>Flag Contract</code>, <code>Supplier</code></p>
+<ul>
+<li><strong>Card</strong> — Service Level previous months
+<br><span style="color:var(--fg-muted);">Value: Supplier Confirmed Delivery OTIF (measure)</span>
+</li>
+<li><strong>Card</strong> — Service Level previous months
+<br><span style="color:var(--fg-muted);">Value: Supplier Confirmed Delivery EOTIF (measure)</span>
+</li>
+<li><strong>Card</strong> — Service Level last 12 months
+<br><span style="color:var(--fg-muted);">Value: Supplier Confirmed Delivery OTIF (measure)</span>
+</li>
+<li><strong>Line + stacked column</strong> — Service Level Last 12 Months
+<br><span style="color:var(--fg-muted);">X-axis: CalmonNameEN &middot; Y-axis: Number of Schedule Lines (measure)</span>
+</li>
+<li><strong>Card</strong> — Service Level last 12 months
+<br><span style="color:var(--fg-muted);">Value: Supplier Confirmed Delivery EOTIF (measure)</span>
+</li>
+</ul>
+<details><summary>+ 10 technical objects (4 helper cards, 6 shapes/buttons)</summary>
+<ul>
+<li>card: card</li>
+<li>card: card</li>
+<li>card: card</li>
+<li>card: card</li>
+<li>basicShape: Header - Backing</li>
+<li>textbox: textbox</li>
+<li>actionButton: actionButton</li>
+<li>actionButton: actionButton</li>
+<li>actionButton: Slicers - Button PopOut</li>
+<li>image: image</li>
+</ul></details>
+<h3 id="sec-page-20">8.20 OTIF by Supplier <a href="#sec-page-20" class="section-anchor">#</a></h3>
+<p>2 functional visuals, 8 slicers.</p>
+<p>Filters: <code>Contract Manager (Descr)</code>, <code>Purchasing Groups</code>, <code>{&#x27;Column&#x27;: {&#x27;Expression&#x27;: {&#x27;SourceRef&#x27;: {&#x27;Entity&#x27;: &#x27;SupplierDeliveriesOnTime&#x27;}}, &#x27;Property&#x27;: &#x27;Account Assignment Category (Key)&#x27;}}</code>, <code>Planned delivery date of document schedule line</code>, <code>Contract Nr</code>, <code>Flag Contract</code>, <code>Flag Central</code>, <code>Supplier</code></p>
+<ul>
+<li><strong>Table</strong>
+<br><span style="color:var(--fg-muted);">Columns (5): Supplier, % Early Dlv, % On-time Dlv, % OTIF, % OTIF (Confirmed)</span>
+</li>
+<li><strong>Bar chart</strong> — OTIF by Vendor
+<br><span style="color:var(--fg-muted);">X-axis: Supplier &middot; Y-axis: % On-time Dlv (measure)</span>
+</li>
+</ul>
+<details><summary>+ 8 technical objects (3 helper cards, 5 shapes/buttons)</summary>
+<ul>
+<li>card: card</li>
+<li>card: card</li>
+<li>card: card</li>
+<li>textbox: textbox</li>
+<li>image: image</li>
+<li>actionButton: actionButton</li>
+<li>actionButton: Slicers - Button PopOut</li>
+<li>basicShape: Header - Backing</li>
+</ul></details>
+<h3 id="sec-page-21">8.21 Contractual Delivery <a href="#sec-page-21" class="section-anchor">#</a></h3>
+<p>2 functional visuals, 9 slicers.</p>
+<p>Filters: <code>Flag Contract</code>, <code>Supplier</code>, <code>Planned delivery date of document schedule line</code>, <code>Flag Central</code>, <code>Contract Nr</code>, <code>Delivery Category</code>, <code>PO Nr</code>, <code>Purchasing Groups</code>, <code>{&#x27;Column&#x27;: {&#x27;Expression&#x27;: {&#x27;SourceRef&#x27;: {&#x27;Entity&#x27;: &#x27;SupplierDeliveriesOnTime&#x27;}}, &#x27;Property&#x27;: &#x27;Account Assignment Category (Key)&#x27;}}</code></p>
+<ul>
+<li><strong>Line + stacked column</strong> — Delay Categories by Contractual Delivery Date
+<br><span style="color:var(--fg-muted);">X-axis: CalmonNameEN &middot; Y-axis: Number of Schedule Lines (measure)</span>
+</li>
+<li><strong>Table</strong>
+<br><span style="color:var(--fg-muted);">Columns (46): Plant, Plant (Descr), Storage location, Storage location (Descr), Material (NN), …</span>
+</li>
+</ul>
+<details><summary>+ 10 technical objects (4 helper cards, 6 shapes/buttons)</summary>
+<ul>
+<li>card: card</li>
+<li>card: card</li>
+<li>card: card</li>
+<li>card: card</li>
+<li>actionButton: actionButton</li>
+<li>textbox: textbox</li>
+<li>actionButton: actionButton</li>
+<li>basicShape: Header - Backing</li>
+<li>actionButton: Slicers - Button PopOut</li>
+<li>image: image</li>
+</ul></details>
 
     </main>
 
