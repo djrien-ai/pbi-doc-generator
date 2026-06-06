@@ -1,6 +1,6 @@
 # Roadmap
 
-## v0.5 Current Release ✅
+## v0.5 Upcoming Release 🚀
 
 ### Native DAX-to-English Translation
 A custom shape-aware parser that auto-translates complex DAX measures into plain, readable English sentences. It understands variables (`VAR`/`RETURN`), iterators (`SUMX`, `FILTER`), and nested `CALCULATE` blocks, formatting them automatically into clean bullet points.
