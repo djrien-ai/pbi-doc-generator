@@ -9,13 +9,14 @@ back-to-top button.
 
 from mermaid_js import MERMAID_JS
 
-def generate_html(report_name: str, sections_html: str, sidebar_html: str) -> str:
+def generate_html(report_name: str, sections_html: str, sidebar_html: str, metadata_html: str = "") -> str:
     """Returns a complete standalone HTML document string.
 
     Args:
         report_name:   Display name of the Power BI report.
         sections_html: Pre-built HTML for every content section.
         sidebar_html:  Pre-built HTML for the sidebar ``<ul>`` tree.
+        metadata_html: Pre-built HTML for generation metadata.
 
     Returns:
         A full ``<!DOCTYPE html>`` string ready to be written to a file.
@@ -51,6 +52,25 @@ def generate_html(report_name: str, sections_html: str, sidebar_html: str) -> st
     --sidebar-width: 280px;
 }}
 
+@media (prefers-color-scheme: dark) {{
+  :root:not([data-theme="light"]) {{
+    --bg:#0d1117; --fg:#e6edf3; --fg-muted:#8b949e;
+    --border:#30363d; --border-light:#21262d;
+    --accent:#4493f8; --accent-hover:#58a6ff;
+    --code-bg:#161b22; --table-stripe:#161b22; --sidebar-bg:#0d1117;
+    --note-bg:#0c2d4a; --tip-bg:#102a16; --important-bg:#241a3a;
+    --warning-bg:#2d2410; --caution-bg:#3a1416;
+  }}
+}}
+[data-theme="dark"] {{
+  --bg:#0d1117; --fg:#e6edf3; --fg-muted:#8b949e;
+  --border:#30363d; --border-light:#21262d;
+  --accent:#4493f8; --accent-hover:#58a6ff;
+  --code-bg:#161b22; --table-stripe:#161b22; --sidebar-bg:#0d1117;
+  --note-bg:#0c2d4a; --tip-bg:#102a16; --important-bg:#241a3a;
+  --warning-bg:#2d2410; --caution-bg:#3a1416;
+}}
+
 /* ── Reset ─────────────────────────────────────────────────────── */
 * {{
     box-sizing: border-box;
@@ -71,6 +91,21 @@ body {{
 .page-wrapper {{
     display: flex;
     min-height: 100vh;
+}}
+
+.dax-explanation {{
+    margin-top: -10px;
+    margin-bottom: 16px;
+    padding: 12px 16px;
+    background-color: var(--note-bg);
+    border-left: 4px solid var(--note-border);
+    border-radius: 0 0 6px 6px;
+    font-size: 13.5px;
+    color: var(--fg);
+}}
+.dax-explanation ul {{
+    margin-left: 20px;
+    margin-top: 6px;
 }}
 
 /* ── Sidebar ───────────────────────────────────────────────────── */
@@ -102,7 +137,7 @@ body {{
     list-style: none;
 }}
 
-.sidebar > ul > li {{
+.sidebar .toc > li {{
     margin-bottom: 4px;
 }}
 
@@ -361,10 +396,15 @@ li {{
 .mermaid {{
     margin: 16px 0;
     text-align: center;
+    overflow-x: auto;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    background: var(--bg);
 }}
 
 .mermaid svg {{
-    max-width: 100%;
+    max-width: none !important;
     height: auto;
 }}
 
@@ -415,41 +455,83 @@ strong {{
     h2 {{
         page-break-before: always;
     }}
-    h2:first-of-type {{
+    h2:first-of-type {{{{
         page-break-before: avoid;
-    }}
-    pre {{
+    }}}}
+    pre {{{{
         white-space: pre-wrap;
         word-break: break-all;
-    }}
-}}
+    }}}}
+}}}}
 
 /* ── Responsive ────────────────────────────────────────────────── */
-@media (max-width: 800px) {{
-    .sidebar {{
+@media (max-width: 800px) {{{{
+    .sidebar {{{{
         display: none;
-    }}
-    .content {{
+    }}}}
+    .content {{{{
         margin-left: 0;
         padding: 20px;
-    }}
+    }}}}
+}}}}
+.copy-btn {{
+  position: absolute; top: 8px; right: 8px;
+  font-size: 11px; padding: 2px 8px;
+  border: 1px solid var(--border); border-radius: 6px;
+  background: var(--bg); color: var(--fg-muted);
+  cursor: pointer; opacity: 0; transition: opacity .15s;
 }}
+pre:hover .copy-btn {{ opacity: 1; }}
+.copy-btn:hover {{ color: var(--accent); border-color: var(--accent); }}
+
+.theme-toggle {{
+    position: absolute;
+    top: 40px;
+    right: 48px;
+    background: none;
+    border: none;
+    font-size: 20px;
+    cursor: pointer;
+    color: var(--fg-muted);
+}}
+.theme-toggle:hover {{ color: var(--accent); }}
+@media print {{ .theme-toggle {{ display: none; }} }}
+/* Wireframe SVG */
+.page-wf {{ width:100%; height:auto; max-width:720px; display:block;
+           border:1px solid var(--border); border-radius:8px;
+           background:var(--code-bg); margin:12px 0; }}
+.wf-canvas {{ fill: var(--bg); stroke: var(--border); stroke-width:2; }}
+.wf-visual rect {{ fill: var(--accent); fill-opacity:.14; stroke: var(--accent); stroke-width:2; }}
+.wf-visual:hover rect {{ fill-opacity:.30; }}
+.wf-hidden rect {{ stroke-dasharray:8 6; opacity:.55; }}
+.wf-label {{ fill: var(--fg); font-family: sans-serif; font-size:18px; pointer-events:none; }}
+@media print {{ .page-wf {{ max-width:100%; }} }}
 </style>
+<script>
+(function () {{
+  var saved = localStorage.getItem('pbidoc-theme');
+  if (saved) document.documentElement.setAttribute('data-theme', saved);
+}})();
+</script>
 </head>
 <body>
 <div class="page-wrapper">
 
     <!-- Sidebar navigation -->
     <nav class="sidebar">
+        <input id="toc-search" type="search" placeholder="Filter... (Ctrl/Cmd+K)" autocomplete="off">
         <h2>Contents</h2>
+        <ul class="toc">
         {sidebar_html}
+        </ul>
     </nav>
 
     <!-- Main content -->
     <main class="content">
+        <button id="theme-toggle" class="theme-toggle" aria-label="Toggle Dark Mode">◑</button>
         <h1>{report_name}</h1>
-        <p style="font-size: 12px; color: var(--fg-muted); margin-bottom: 4px;">Generated by <a href="https://github.com/djrien-ai/pbi-doc-generator" style="color: var(--fg-muted);"><strong>PBI Doc Generator</strong></a> v0.4 &mdash; by Rien Scheerlinck</p>
-        <p class="subtitle">Data layer reference for redevelopment. Complete data model and report page reference for redevelopment.</p>
+            <p style="font-size: 12px; color: var(--fg-muted); margin-bottom: 4px;">Generated by <a href="https://github.com/djrien-ai/pbi-doc-generator" style="color: var(--fg-muted);"><strong>PBI Doc Generator</strong></a> v{__import__('extract').__version__} &mdash; by <a href="https://www.linkedin.com/in/rienscheerlinck/" target="_blank" rel="noopener" style="color: var(--fg-muted);">Rien Scheerlinck</a></p>
+        {metadata_html}
         {sections_html}
     </main>
 
@@ -474,40 +556,152 @@ strong {{
                 btn.classList.add("visible");
             }} else {{
                 btn.classList.remove("visible");
-            }}
-        }});
-        btn.addEventListener("click", function () {{
-            window.scrollTo({{ top: 0, behavior: "smooth" }});
-        }});
+            }}}}
+        }}}});
+        btn.addEventListener("click", function () {{{{
+            window.scrollTo({{{{ top: 0, behavior: "smooth" }}}});
+        }}}});
     }})();
 
     // ── Scroll-based sidebar highlighting ─────────────────────────
-    (function () {{
+    (function () {{{{
         var links = document.querySelectorAll(".sidebar a[href^='#']");
         if (!links.length) return;
 
         var sections = [];
-        links.forEach(function (link) {{
+        links.forEach(function (link) {{{{
             var id = link.getAttribute("href").slice(1);
             var el = document.getElementById(id);
-            if (el) sections.push({{ el: el, link: link }});
-        }});
+            if (el) sections.push({{{{ el: el, link: link }}}});
+        }}}});
 
-        function highlight() {{
+        function highlight() {{{{
             var scrollY = window.scrollY + 40;
             var current = null;
-            for (var i = 0; i < sections.length; i++) {{
-                if (sections[i].el.offsetTop <= scrollY) {{
+            for (var i = 0; i < sections.length; i++) {{{{
+                if (sections[i].el.offsetTop <= scrollY) {{{{
                     current = sections[i];
-                }}
-            }}
-            links.forEach(function (l) {{ l.classList.remove("active"); }});
-            if (current) current.link.classList.add("active");
-        }}
+                }}}}
+            }}}}
+            links.forEach(function (l) {{{{ l.classList.remove("active"); }}}});
+            if (current) {{{{
+                current.link.classList.add("active");
+                let parentUl = current.link.closest('ul');
+                if (parentUl && parentUl.parentElement.tagName === 'LI' && !parentUl.classList.contains('toc')) {{{{
+                    parentUl.style.display = 'block';
+                    let toggle = parentUl.parentElement.querySelector('span.toggle-icon');
+                    if (toggle) toggle.innerHTML = '&#9650;';
+                }}}}
+            }}}}
+        }}}}
 
         window.addEventListener("scroll", highlight);
         highlight();
     }})();
+
+    // ── Sidebar collapsible groups ──────────────────────────────────
+    document.querySelectorAll('.sidebar .toc > li').forEach(li => {{{{
+      const ul = li.querySelector('ul');
+      if (ul) {{{{
+        li.style.position = 'relative';
+        const toggle = document.createElement('span');
+        toggle.className = 'toggle-icon';
+        toggle.innerHTML = '&#9660;';
+        toggle.style.cssText = 'position:absolute; right:8px; top:8px; font-size:10px; cursor:pointer; color:var(--fg-muted); transition: transform 0.2s;';
+        li.insertBefore(toggle, li.firstChild);
+        ul.style.display = 'none';
+        
+        const toggleMenu = (e) => {{{{
+          e.preventDefault();
+          const isClosed = ul.style.display === 'none';
+          ul.style.display = isClosed ? 'block' : 'none';
+          toggle.innerHTML = isClosed ? '&#9650;' : '&#9660;';
+        }};
+        toggle.addEventListener('click', toggleMenu);
+      }}}}
+    }}}});
+
+    // ── Sidebar search ──────────────────────────────────────────────
+    (function () {{
+      const input = document.getElementById('toc-search');
+      if (!input) return;
+      const allLi = Array.from(document.querySelectorAll('.sidebar li'));
+      input.addEventListener('input', () => {{
+        const q = input.value.toLowerCase().trim();
+        if (!q) {{ 
+            allLi.forEach(li => li.style.display = ''); 
+            window.dispatchEvent(new Event('scroll')); // trigger scroll to reset collapsible state
+            return; 
+        }}
+        allLi.forEach(li => li.style.display = 'none');
+        allLi.forEach(li => {{
+          const a = li.querySelector(':scope > a');
+          if (a && a.textContent.toLowerCase().includes(q)) {{
+            li.style.display = '';
+            let p = li.parentElement;
+            while (p && !p.classList.contains('sidebar')) {{
+              if (p.tagName === 'LI') p.style.display = '';
+              if (p.tagName === 'UL' && !p.classList.contains('toc')) {{
+                  p.style.display = 'block';
+                  let toggle = p.parentElement.querySelector('span.toggle-icon');
+                  if (toggle) toggle.innerHTML = '&#9650;';
+              }}
+              p = p.parentElement;
+            }}
+          }}
+        }});
+      }});
+      document.addEventListener('keydown', e => {{
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {{ e.preventDefault(); input.focus(); }}
+      }});
+    }})();
+
+    // ── Copy buttons ────────────────────────────────────────────────
+    document.querySelectorAll('pre').forEach(pre => {{
+      if (pre.classList.contains('mermaid')) return;
+      pre.style.position = 'relative';
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'copy-btn';
+      btn.textContent = 'Copy';
+      btn.addEventListener('click', () => {{
+        const code = pre.querySelector('code') || pre;
+        navigator.clipboard.writeText(code.innerText).then(() => {{
+          btn.textContent = 'Copied';
+          setTimeout(() => (btn.textContent = 'Copy'), 1500);
+        }});
+      }});
+      pre.appendChild(btn);
+    }});
+
+    // ── Theme toggle logic ──────────────────────────────────────────
+    (function () {{
+      const KEY = 'pbidoc-theme';
+      const btn = document.getElementById('theme-toggle');
+      if (!btn) return;
+      btn.addEventListener('click', () => {{
+        let cur = document.documentElement.getAttribute('data-theme');
+        if (!cur) {{
+            cur = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        }}
+        const next = cur === 'dark' ? 'light' : 'dark';
+        document.documentElement.setAttribute('data-theme', next);
+        localStorage.setItem(KEY, next);
+      }});
+    }})();
+
+    // ── Auto-open anchored details ──────────────────────────────────
+    function openTargetDetails() {{
+      if (!location.hash) return;
+      const el = document.querySelector(location.hash);
+      if (!el) return;
+      let p = el;
+      while (p) {{ if (p.tagName === 'DETAILS') p.open = true; p = p.parentElement; }}
+      el.scrollIntoView();
+    }}
+    window.addEventListener('load', openTargetDetails);
+    window.addEventListener('hashchange', openTargetDetails);
 </script>
 </body>
-</html>"""
+</html>
+"""
