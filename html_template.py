@@ -273,10 +273,15 @@ pre:hover .copy-btn { opacity: 1; }
 .wf-container { position:relative; width:100%; padding-top:56.25%; /* 16:9 aspect ratio */ }
 .wf-svg { position:absolute; top:0; left:0; width:100%; height:100%; }
 .wf-canvas { fill: var(--bg); stroke: var(--border); stroke-width:2; }
-.wf-visual rect { fill: var(--accent); fill-opacity:.14; stroke: var(--accent); stroke-width:2; }
-.wf-visual:hover rect { fill-opacity:.30; }
+.wf-visual rect { fill: var(--accent); fill-opacity:.10; stroke: var(--accent); stroke-width:2; }
+.wf-ctrl   rect { fill: var(--fg-muted); fill-opacity:.10; stroke: var(--fg-muted); stroke-width:2; }
+.wf-bg     rect { fill: none; stroke: var(--border); stroke-width:1.5; stroke-dasharray:3 4; }
 .wf-hidden rect { stroke-dasharray:8 6; opacity:.55; }
-.wf-label { fill: var(--fg); font-family: sans-serif; font-size:18px; pointer-events:none; }
+.wf-visual:hover rect, .wf-ctrl:hover rect { fill-opacity:.26; }
+.wf-num   { fill: var(--fg-muted); font:12px sans-serif;
+            paint-order:stroke; stroke:var(--code-bg); stroke-width:3px; stroke-linejoin:round; }
+.wf-label { fill: var(--fg); font:14px sans-serif; pointer-events:none;
+            paint-order:stroke; stroke:var(--code-bg); stroke-width:3px; stroke-linejoin:round; }
 @media print { .page-wf { max-width:100%; } }
 """
 

@@ -799,6 +799,26 @@ def _card_is_technical(v):
         return True
     return False
 
+
+def _fit_label(text, width, px_per_char=11, min_chars=4):
+    budget = int(width / px_per_char)
+    if budget < min_chars:
+        return None                      # number only
+    return text if len(text) <= budget else text[:budget - 1] + "…"
+
+def _assign_badge_offsets(visuals, tol=6):
+    seen = {}                            # (xbucket, ybucket) -> count
+    offsets = []
+    for v in visuals:                    # already z-ordered
+        kx, ky = round(v.get("x", 0) / tol), round(v.get("y", 0) / tol)
+        k = seen.get((kx, ky), 0)
+        offsets.append(k * 20)           # horizontal nudge in page units
+        seen[(kx, ky)] = k + 1
+    return offsets
+
+def _is_control(vtype):
+    return vtype.lower() in ('button', 'slicer', 'shape', 'textbox', 'actionbutton')
+
 def build_report_pages(pages, sec_num):
     """Section N: Report Pages & Visuals. sec_num is the section number."""
     h = ""
@@ -834,26 +854,40 @@ def build_report_pages(pages, sec_num):
         ]
         
         sorted_visuals = sorted(visuals, key=lambda v: v.get('z', 0))
-        for v in sorted_visuals:
+        offsets = _assign_badge_offsets(sorted_visuals)
+        
+        for n, v in enumerate(sorted_visuals, 1):
+            v['wf_num'] = n  # store for the table later
+            
             x, y = v.get("x", 0), v.get("y", 0)
             vw, vh = v.get("width", 0), v.get("height", 0)
             vtype = v.get("visualType") or v.get("type") or "visual"
-            label = (v.get("title") or vtype)
-            label = label if len(label) <= 24 else label[:23] + "…"
-            cls = "wf-visual" + (" wf-hidden" if v.get("hidden") else "")
+            
+            area_ratio = (vw * vh) / (pw * ph) if pw and ph else 0
+            outline_only = area_ratio > 0.70
+            
+            cls = "wf-bg" if outline_only else ("wf-ctrl" if _is_control(vtype) else "wf-visual")
+            cls += " wf-hidden" if v.get("hidden") else ""
+            
+            label_raw = (v.get("title") or vtype)
+            label = None if outline_only else _fit_label(label_raw, vw)
+            
             tip = f'{vtype} — {int(vw)}×{int(vh)} @ ({int(x)},{int(y)})'
-            svg.append(
-                f'<g class="{cls}">'
-                f'<rect x="{x}" y="{y}" width="{vw}" height="{vh}" rx="6"><title>{_esc(tip)}</title></rect>'
-                f'<text class="wf-label" x="{x + 12}" y="{y + 28}">{_esc(label)}</text>'
-                f'</g>'
-            )
+            badge_off = offsets[n - 1]
+            
+            svg.append(f'<g class="{cls}">')
+            svg.append(f'<rect x="{x}" y="{y}" width="{vw}" height="{vh}" rx="6"><title>{_esc(tip)}</title></rect>')
+            svg.append(f'<text class="wf-num" x="{x + 6 + badge_off}" y="{y + 18}">{n}</text>')
+            if label:
+                svg.append(f'<text class="wf-label" x="{x + 6 + badge_off}" y="{y + 36}">{_esc(label)}</text>')
+            svg.append('</g>')
+            
         svg.append('</svg>')
         h += "".join(svg) + "\n"
         
         # 2. Geometry Table
         h += '<div class="table-container">\n'
-        h += '<table>\n<thead><tr><th>Visual</th><th>Type</th><th>Geometry</th><th>Visible</th><th>Data Fields</th></tr></thead>\n<tbody>\n'
+        h += '<table>\n<thead><tr><th>#</th><th>Visual</th><th>Type</th><th>Geometry</th><th>Visible</th><th>Data Fields</th></tr></thead>\n<tbody>\n'
         
         for v in sorted_visuals:
             vtype = v.get("visualType") or v.get("type") or "visual"
@@ -887,7 +921,7 @@ def build_report_pages(pages, sec_num):
             else:
                 fields_html = "<span style='color:var(--fg-muted);font-size:12px;'>--</span>"
             
-            h += f'<tr><td><strong>{_esc(title)}</strong></td><td><code>{_esc(vtype)}</code></td><td>{geo}</td><td>{vis}</td><td>{fields_html}</td></tr>\n'
+            h += f'<tr><td>{v.get("wf_num", "")}</td><td><strong>{_esc(title)}</strong></td><td><code>{_esc(vtype)}</code></td><td>{geo}</td><td>{vis}</td><td>{fields_html}</td></tr>\n'
             
         h += '</tbody>\n</table>\n</div>\n'
             
