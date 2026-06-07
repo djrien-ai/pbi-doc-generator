@@ -283,6 +283,11 @@ pre:hover .copy-btn { opacity: 1; }
 .wf-label { fill: var(--fg); font:14px sans-serif; pointer-events:none;
             paint-order:stroke; stroke:var(--code-bg); stroke-width:3px; stroke-linejoin:round; }
 @media print { .page-wf { max-width:100%; } }
+
+  /* Semantic Layer Controls */
+  .layer-controls { font-family: sans-serif; font-size: 13px; margin-bottom: 8px; display: flex; gap: 15px; color: var(--fg); }
+  .layer-controls label { cursor: pointer; display: flex; align-items: center; gap: 5px; user-select: none; }
+  .hidden-layer { opacity: 0 !important; pointer-events: none !important; transition: opacity 0.2s ease-in-out; }
 """
 
 JS_THEME_INIT = r"""
@@ -453,6 +458,30 @@ JS_THEME_TOGGLE = r"""
 })();
 """
 
+
+JS_WIREFRAME_TOGGLES = r'''
+(function () {
+    document.querySelectorAll('.layer-toggle').forEach(function(checkbox) {
+        checkbox.addEventListener('change', function(e) {
+            var target = e.target.getAttribute('data-target');
+            // Find the sibling SVG element to only toggle layers for THIS specific wireframe
+            var controlsDiv = e.target.closest('.layer-controls');
+            if (!controlsDiv) return;
+            var svg = controlsDiv.nextElementSibling;
+            if (svg && svg.tagName.toLowerCase() === 'svg') {
+                svg.querySelectorAll('[data-layer="' + target + '"]').forEach(function(g) {
+                    if (e.target.checked) {
+                        g.classList.remove('hidden-layer');
+                    } else {
+                        g.classList.add('hidden-layer');
+                    }
+                });
+            }
+        });
+    });
+})();
+'''
+
 JS_AUTO_OPEN_DETAILS = r"""
 (function () {
     function openTargetDetails() {
@@ -544,7 +573,8 @@ def generate_html(report_name: str, sections_html: str, sidebar_html: str, metad
         JS_SEARCH,
         JS_COPY_BUTTONS,
         JS_THEME_TOGGLE,
-        JS_AUTO_OPEN_DETAILS
+        JS_AUTO_OPEN_DETAILS,
+        JS_WIREFRAME_TOGGLES
     ]
     
     for js_block in js_blocks:

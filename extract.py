@@ -800,6 +800,53 @@ def _card_is_technical(v):
     return False
 
 
+def calculate_ioa(box_a, box_b):
+    x_left = max(box_a.get('x',0), box_b.get('x',0))
+    y_top = max(box_a.get('y',0), box_b.get('y',0))
+    x_right = min(box_a.get('x',0) + box_a.get('width',0), box_b.get('x',0) + box_b.get('width',0))
+    y_bottom = min(box_a.get('y',0) + box_a.get('height',0), box_b.get('y',0) + box_b.get('height',0))
+    
+    if x_right < x_left or y_bottom < y_top:
+        return 0.0
+        
+    intersection_area = (x_right - x_left) * (y_bottom - y_top)
+    area_a = box_a.get('width',0) * box_a.get('height',0)
+    area_b = box_b.get('width',0) * box_b.get('height',0)
+    
+    smaller_area = min(area_a, area_b)
+    if smaller_area == 0:
+        return 0.0
+    return intersection_area / smaller_area
+
+def consolidate_layered_elements(visuals, ioa_threshold=0.95):
+    sorted_elems = sorted(visuals, key=lambda v: v.get('z', 0))
+    consolidated = []
+    processed = set()
+    
+    for i, base in enumerate(sorted_elems):
+        uid = id(base)
+        if uid in processed:
+            continue
+            
+        processed.add(uid)
+        
+        # We only absorb invisible buttons or texts that are perfectly over a background shape or another visual
+        for j in range(i + 1, len(sorted_elems)):
+            test = sorted_elems[j]
+            test_uid = id(test)
+            if test_uid in processed:
+                continue
+            
+            ioa = calculate_ioa(base, test)
+            if ioa >= ioa_threshold:
+                vtype = (test.get("visualType") or test.get("type") or "visual").lower()
+                # If test is invisible or text over base, we can absorb it
+                if vtype in ('actionbutton', 'button', 'text', 'textbox'):
+                    processed.add(test_uid)
+                    
+        consolidated.append(base)
+    return consolidated
+
 def _fit_label(text, width, px_per_char=11, min_chars=4):
     budget = int(width / px_per_char)
     if budget < min_chars:
@@ -848,12 +895,21 @@ def build_report_pages(pages, sec_num):
         pw = page.get('width', 1280)
         ph = page.get('height', 720)
         
+        controls_html = (
+            '<div class="layer-controls">'
+            '<label><input type="checkbox" class="layer-toggle" data-target="backgrounds" checked> Backgrounds</label>'
+            '<label><input type="checkbox" class="layer-toggle" data-target="ui-controls" checked> UI Controls</label>'
+            '<label><input type="checkbox" class="layer-toggle" data-target="data-visuals" checked> Data Visuals</label>'
+            '</div>'
+        )
         svg = [
+            controls_html,
             f'<svg class="page-wf" viewBox="0 0 {pw} {ph}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Layout preview of {_esc(page_name)}">',
-            f'<rect class="wf-canvas" x="0" y="0" width="{pw}" height="{ph}" rx="6"/>',
+            f'<g data-layer="backgrounds"><rect class="wf-canvas" x="0" y="0" width="{pw}" height="{ph}" rx="6"/></g>',
         ]
         
-        sorted_visuals = sorted(visuals, key=lambda v: v.get('z', 0))
+        consolidated_visuals = consolidate_layered_elements(visuals)
+        sorted_visuals = sorted(consolidated_visuals, key=lambda v: v.get('z', 0))
         offsets = _assign_badge_offsets(sorted_visuals)
         
         for n, v in enumerate(sorted_visuals, 1):
@@ -875,7 +931,8 @@ def build_report_pages(pages, sec_num):
             tip = f'{vtype} — {int(vw)}×{int(vh)} @ ({int(x)},{int(y)})'
             badge_off = offsets[n - 1]
             
-            svg.append(f'<g class="{cls}">')
+            layer_name = "backgrounds" if outline_only else ("ui-controls" if _is_control(vtype) else "data-visuals")
+            svg.append(f'<g class="{cls}" data-layer="{layer_name}">')
             svg.append(f'<rect x="{x}" y="{y}" width="{vw}" height="{vh}" rx="6"><title>{_esc(tip)}</title></rect>')
             svg.append(f'<text class="wf-num" x="{x + 6 + badge_off}" y="{y + 18}">{n}</text>')
             if label:
