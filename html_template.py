@@ -1,39 +1,8 @@
-"""
-HTML template module for Power BI data documentation.
+import os
 
-Generates a standalone HTML page with GitHub-style CSS, left sidebar
-navigation, Mermaid.js relationship diagrams, alert boxes, and a
-back-to-top button.
-"""
-
-
-from mermaid_js import MERMAID_JS
-
-def generate_html(report_name: str, sections_html: str, sidebar_html: str, metadata_html: str = "") -> str:
-    """Returns a complete standalone HTML document string.
-
-    Args:
-        report_name:   Display name of the Power BI report.
-        sections_html: Pre-built HTML for every content section.
-        sidebar_html:  Pre-built HTML for the sidebar ``<ul>`` tree.
-        metadata_html: Pre-built HTML for generation metadata.
-
-    Returns:
-        A full ``<!DOCTYPE html>`` string ready to be written to a file.
-    """
-
-    return f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>{report_name} — Data Documentation</title>
-<script>
-{MERMAID_JS}
-</script>
-<style>
+CSS_STYLES = r"""
 /* ── CSS Variables ─────────────────────────────────────────────── */
-:root {{
+:root {
     --bg: #ffffff;
     --fg: #1f2328;
     --fg-muted: #636c76;
@@ -50,50 +19,50 @@ def generate_html(report_name: str, sections_html: str, sidebar_html: str, metad
     --caution-bg: #ffebe9; --caution-border: #ff8182; --caution-fg: #d1242f;
     --sidebar-bg: #f6f8fa;
     --sidebar-width: 280px;
-}}
+}
 
-@media (prefers-color-scheme: dark) {{
-  :root:not([data-theme="light"]) {{
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
     --bg:#0d1117; --fg:#e6edf3; --fg-muted:#8b949e;
     --border:#30363d; --border-light:#21262d;
     --accent:#4493f8; --accent-hover:#58a6ff;
     --code-bg:#161b22; --table-stripe:#161b22; --sidebar-bg:#0d1117;
     --note-bg:#0c2d4a; --tip-bg:#102a16; --important-bg:#241a3a;
     --warning-bg:#2d2410; --caution-bg:#3a1416;
-  }}
-}}
-[data-theme="dark"] {{
+  }
+}
+[data-theme="dark"] {
   --bg:#0d1117; --fg:#e6edf3; --fg-muted:#8b949e;
   --border:#30363d; --border-light:#21262d;
   --accent:#4493f8; --accent-hover:#58a6ff;
   --code-bg:#161b22; --table-stripe:#161b22; --sidebar-bg:#0d1117;
   --note-bg:#0c2d4a; --tip-bg:#102a16; --important-bg:#241a3a;
   --warning-bg:#2d2410; --caution-bg:#3a1416;
-}}
+}
 
 /* ── Reset ─────────────────────────────────────────────────────── */
-* {{
+* {
     box-sizing: border-box;
     margin: 0;
     padding: 0;
-}}
+}
 
 /* ── Body ──────────────────────────────────────────────────────── */
-body {{
+body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
     font-size: 15px;
     line-height: 1.6;
     color: var(--fg);
     background: var(--bg);
-}}
+}
 
 /* ── Layout ────────────────────────────────────────────────────── */
-.page-wrapper {{
+.page-wrapper {
     display: flex;
     min-height: 100vh;
-}}
+}
 
-.dax-explanation {{
+.dax-explanation {
     margin-top: -10px;
     margin-bottom: 16px;
     padding: 12px 16px;
@@ -102,14 +71,14 @@ body {{
     border-radius: 0 0 6px 6px;
     font-size: 13.5px;
     color: var(--fg);
-}}
-.dax-explanation ul {{
+}
+.dax-explanation ul {
     margin-left: 20px;
     margin-top: 6px;
-}}
+}
 
 /* ── Sidebar ───────────────────────────────────────────────────── */
-.sidebar {{
+.sidebar {
     position: fixed;
     top: 0;
     left: 0;
@@ -121,9 +90,9 @@ body {{
     padding: 20px 14px;
     font-size: 13px;
     z-index: 100;
-}}
+}
 
-.sidebar h2 {{
+.sidebar h2 {
     font-size: 13px;
     text-transform: uppercase;
     letter-spacing: 0.05em;
@@ -131,59 +100,59 @@ body {{
     margin-bottom: 12px;
     padding-bottom: 8px;
     border-bottom: 1px solid var(--border);
-}}
+}
 
-.sidebar ul {{
+.sidebar ul {
     list-style: none;
-}}
+}
 
-.sidebar .toc > li {{
+.sidebar .toc > li {
     margin-bottom: 4px;
-}}
+}
 
-.sidebar li a {{
+.sidebar li a {
     display: block;
     padding: 4px 8px;
     border-radius: 6px;
     color: var(--fg);
     text-decoration: none;
     transition: background 0.15s;
-}}
+}
 
-.sidebar li a:hover {{
+.sidebar li a:hover {
     background: var(--border-light);
     color: var(--accent);
-}}
+}
 
-.sidebar li a.active {{
+.sidebar li a.active {
     background: var(--note-bg);
     color: var(--accent);
     font-weight: 600;
-}}
+}
 
-.sidebar ul ul {{
+.sidebar ul ul {
     padding-left: 14px;
-}}
+}
 
-.sidebar ul ul li a {{
+.sidebar ul ul li a {
     font-size: 12px;
     color: var(--fg-muted);
     padding: 2px 8px;
-}}
+}
 
-.sidebar ul ul li a:hover {{
+.sidebar ul ul li a:hover {
     color: var(--accent);
-}}
+}
 
 /* ── Content ───────────────────────────────────────────────────── */
-.content {{
+.content {
     margin-left: var(--sidebar-width);
     max-width: 960px;
     padding: 40px 48px 80px;
-}}
+}
 
 /* ── Back-to-top button ────────────────────────────────────────── */
-.back-to-top {{
+.back-to-top {
     position: fixed;
     bottom: 24px;
     right: 24px;
@@ -202,407 +171,189 @@ body {{
     transition: opacity 0.3s;
     z-index: 200;
     box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-}}
+}
 
-.back-to-top.visible {{
+.back-to-top.visible {
     opacity: 1;
-}}
+}
 
-.back-to-top:hover {{
+.back-to-top:hover {
     background: var(--accent-hover);
-}}
-
-/* ── Typography ────────────────────────────────────────────────── */
-h1 {{
-    font-size: 28px;
-    font-weight: 700;
-    margin: 0 0 8px;
-    padding-bottom: 12px;
-    border-bottom: 2px solid var(--border);
-}}
-
-h2 {{
-    font-size: 22px;
-    font-weight: 600;
-    margin: 40px 0 16px;
-    padding-bottom: 8px;
-    border-bottom: 1px solid var(--border);
-    scroll-margin-top: 20px;
-}}
-
-h3 {{
-    font-size: 17px;
-    font-weight: 600;
-    margin: 28px 0 12px;
-    scroll-margin-top: 20px;
-}}
-
-h4 {{
-    font-size: 15px;
-    font-weight: 600;
-    margin: 20px 0 8px;
-    scroll-margin-top: 20px;
-}}
-
-p {{
-    margin: 0 0 12px;
-}}
-
-a {{
-    color: var(--accent);
-    text-decoration: none;
-}}
-
-a:hover {{
-    text-decoration: underline;
-}}
-
-hr {{
-    border: none;
-    border-top: 1px solid var(--border);
-    margin: 32px 0;
-}}
-
-/* ── Code ──────────────────────────────────────────────────────── */
-code {{
-    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
-    font-size: 13px;
-    background: var(--code-bg);
-    padding: 2px 6px;
-    border-radius: 4px;
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
-}}
-
-pre {{
-    background: var(--code-bg);
-    border: 1px solid var(--border-light);
-    border-radius: 6px;
-    padding: 16px;
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
-    overflow-x: hidden;
-    margin: 0 0 16px;
-}}
-
-pre code {{
-    background: none;
-    padding: 0;
-    font-size: 13px;
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
-}}
+}
 
 /* ── Tables ────────────────────────────────────────────────────── */
-table {{
+table {
     width: 100%;
     border-collapse: collapse;
-    margin: 0 0 16px;
+    margin: 16px 0 24px;
     font-size: 14px;
-    table-layout: fixed;
-}}
+    table-layout: auto;
+}
 
-th, td {{
+th, td {
+    padding: 10px 12px;
     border: 1px solid var(--border);
-    padding: 8px 12px;
     text-align: left;
-    vertical-align: top;
-    white-space: normal;
-    overflow-wrap: anywhere;
-}}
+    word-break: normal;
+}
 
-th {{
-    background: var(--code-bg);
+th {
+    background: var(--bg);
+    color: var(--fg);
     font-weight: 600;
-}}
+}
 
-tr:nth-child(even) td {{
+tr:nth-child(even) {
     background: var(--table-stripe);
-}}
+}
 
-/* ── Alerts ────────────────────────────────────────────────────── */
-.alert {{
+/* ── Typography & Elements ─────────────────────────────────────── */
+h1 { font-size: 28px; margin-bottom: 24px; font-weight: 600; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+h2 { font-size: 22px; margin: 32px 0 16px; font-weight: 600; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+h3 { font-size: 18px; margin: 24px 0 12px; font-weight: 600; }
+h4 { font-size: 16px; margin: 20px 0 10px; font-weight: 600; }
+
+code {
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    font-size: 13px;
+    background: var(--code-bg);
+    padding: 2px 5px;
+    border-radius: 4px;
+}
+
+pre {
+    background: var(--code-bg);
+    padding: 16px;
+    border-radius: 8px;
+    overflow-x: auto;
+    margin: 16px 0;
+    border: 1px solid var(--border);
+}
+
+pre code {
+    background: transparent;
+    padding: 0;
+    border-radius: 0;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+.copy-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    padding: 4px 8px;
+    font-size: 12px;
+    color: var(--fg-muted);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.2s, color 0.2s, border-color 0.2s;
+}
+pre:hover .copy-btn { opacity: 1; }
+.copy-btn:hover { color: var(--accent); border-color: var(--accent); }
+
+.alert {
+    padding: 16px;
     border-left: 4px solid;
     border-radius: 6px;
-    padding: 14px 16px;
     margin: 16px 0;
-    font-size: 14px;
-}}
+}
+.alert p { margin: 0; }
+.alert-note { background: var(--note-bg); border-color: var(--note-border); color: var(--note-fg); }
+.alert-tip { background: var(--tip-bg); border-color: var(--tip-border); color: var(--tip-fg); }
+.alert-important { background: var(--important-bg); border-color: var(--important-border); color: var(--important-fg); }
+.alert-warning { background: var(--warning-bg); border-color: var(--warning-border); color: var(--warning-fg); }
+.alert-caution { background: var(--caution-bg); border-color: var(--caution-border); color: var(--caution-fg); }
 
-.alert .alert-title {{
-    font-weight: 600;
-    margin-bottom: 6px;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-}}
+/* SVG Wireframe CSS */
+.page-wf { max-width:800px; display:block; margin:20px 0; border:1px solid var(--border); border-radius:8px; background:var(--code-bg); overflow:hidden; }
+.wf-container { position:relative; width:100%; padding-top:56.25%; /* 16:9 aspect ratio */ }
+.wf-svg { position:absolute; top:0; left:0; width:100%; height:100%; }
+.wf-canvas { fill: var(--bg); stroke: var(--border); stroke-width:2; }
+.wf-visual rect { fill: var(--accent); fill-opacity:.14; stroke: var(--accent); stroke-width:2; }
+.wf-visual:hover rect { fill-opacity:.30; }
+.wf-hidden rect { stroke-dasharray:8 6; opacity:.55; }
+.wf-label { fill: var(--fg); font-family: sans-serif; font-size:18px; pointer-events:none; }
+@media print { .page-wf { max-width:100%; } }
+"""
 
-.alert-note {{
-    background: var(--note-bg);
-    border-color: var(--note-border);
-}}
+JS_THEME_INIT = r"""
+(function () {
+    var saved = localStorage.getItem('pbidoc-theme');
+    if (saved) document.documentElement.setAttribute('data-theme', saved);
+})();
+"""
 
-.alert-note .alert-title {{
-    color: var(--note-fg);
-}}
+JS_MERMAID_INIT = r"""
+document.addEventListener("DOMContentLoaded", function () {
+    if (typeof mermaid !== "undefined") {
+        mermaid.initialize({ startOnLoad: true, theme: "neutral" });
+    }
+});
+"""
 
-.alert-tip {{
-    background: var(--tip-bg);
-    border-color: var(--tip-border);
-}}
+JS_BACK_TO_TOP = r"""
+(function () {
+    var btn = document.getElementById("backToTop");
+    if (!btn) return;
+    window.addEventListener("scroll", function () {
+        if (window.scrollY > 300) {
+            btn.classList.add("visible");
+        } else {
+            btn.classList.remove("visible");
+        }
+    });
+    btn.addEventListener("click", function () {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+    });
+})();
+"""
 
-.alert-tip .alert-title {{
-    color: var(--tip-fg);
-}}
+JS_SCROLL_SPY = r"""
+(function () {
+    var links = document.querySelectorAll(".sidebar a[href^='#']");
+    if (!links.length) return;
 
-.alert-important {{
-    background: var(--important-bg);
-    border-color: var(--important-border);
-}}
+    var sections = [];
+    links.forEach(function (link) {
+        var id = link.getAttribute("href").slice(1);
+        var el = document.getElementById(id);
+        if (el) sections.push({ el: el, link: link });
+    });
 
-.alert-important .alert-title {{
-    color: var(--important-fg);
-}}
+    function highlight() {
+        var scrollY = window.scrollY + 40;
+        var current = null;
+        for (var i = 0; i < sections.length; i++) {
+            if (sections[i].el.offsetTop <= scrollY) {
+                current = sections[i];
+            }
+        }
+        links.forEach(function (l) { l.classList.remove("active"); });
+        if (current) {
+            current.link.classList.add("active");
+            let parentUl = current.link.closest('ul');
+            if (parentUl && parentUl.parentElement.tagName === 'LI' && !parentUl.classList.contains('toc')) {
+                parentUl.style.display = 'block';
+                let toggle = parentUl.parentElement.querySelector('span.toggle-icon');
+                if (toggle) toggle.innerHTML = '&#9650;';
+            }
+        }
+    }
 
-.alert-warning {{
-    background: var(--warning-bg);
-    border-color: var(--warning-border);
-}}
+    window.addEventListener("scroll", highlight);
+    highlight();
+})();
+"""
 
-.alert-warning .alert-title {{
-    color: var(--warning-fg);
-}}
-
-.alert-caution {{
-    background: var(--caution-bg);
-    border-color: var(--caution-border);
-}}
-
-.alert-caution .alert-title {{
-    color: var(--caution-fg);
-}}
-
-/* ── Lists ─────────────────────────────────────────────────────── */
-ul, ol {{
-    margin: 0 0 12px;
-    padding-left: 24px;
-}}
-
-li {{
-    margin-bottom: 4px;
-}}
-
-/* ── Mermaid ───────────────────────────────────────────────────── */
-.mermaid {{
-    margin: 16px 0;
-    text-align: center;
-    overflow-x: auto;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 16px;
-    background: var(--bg);
-}}
-
-.mermaid svg {{
-    max-width: none !important;
-    height: auto;
-}}
-
-/* ── Misc ──────────────────────────────────────────────────────── */
-.subtitle {{
-    color: var(--fg-muted);
-    font-size: 15px;
-    margin-bottom: 24px;
-}}
-
-.section-anchor {{
-    color: var(--fg-muted);
-    text-decoration: none;
-    font-weight: 400;
-    margin-left: 6px;
-    opacity: 0;
-    transition: opacity 0.15s;
-    font-size: 0.85em;
-}}
-
-h2:hover .section-anchor,
-h3:hover .section-anchor {{
-    opacity: 1;
-}}
-
-.section-anchor:hover {{
-    color: var(--accent);
-    text-decoration: none;
-}}
-
-strong {{
-    font-weight: 600;
-}}
-
-/* ── Print ─────────────────────────────────────────────────────── */
-@media print {{
-    .sidebar, .back-to-top {{
-        display: none !important;
-    }}
-    .content {{
-        margin-left: 0;
-        max-width: 100%;
-        padding: 20px;
-    }}
-    table {{
-        font-size: 11px;
-    }}
-    h2 {{
-        page-break-before: always;
-    }}
-    h2:first-of-type {{{{
-        page-break-before: avoid;
-    }}}}
-    pre {{{{
-        white-space: pre-wrap;
-        word-break: break-all;
-    }}}}
-}}}}
-
-/* ── Responsive ────────────────────────────────────────────────── */
-@media (max-width: 800px) {{{{
-    .sidebar {{{{
-        display: none;
-    }}}}
-    .content {{{{
-        margin-left: 0;
-        padding: 20px;
-    }}}}
-}}}}
-.copy-btn {{
-  position: absolute; top: 8px; right: 8px;
-  font-size: 11px; padding: 2px 8px;
-  border: 1px solid var(--border); border-radius: 6px;
-  background: var(--bg); color: var(--fg-muted);
-  cursor: pointer; opacity: 0; transition: opacity .15s;
-}}
-pre:hover .copy-btn {{ opacity: 1; }}
-.copy-btn:hover {{ color: var(--accent); border-color: var(--accent); }}
-
-.theme-toggle {{
-    position: absolute;
-    top: 40px;
-    right: 48px;
-    background: none;
-    border: none;
-    font-size: 20px;
-    cursor: pointer;
-    color: var(--fg-muted);
-}}
-.theme-toggle:hover {{ color: var(--accent); }}
-@media print {{ .theme-toggle {{ display: none; }} }}
-/* Wireframe SVG */
-.page-wf {{ width:100%; height:auto; max-width:720px; display:block;
-           border:1px solid var(--border); border-radius:8px;
-           background:var(--code-bg); margin:12px 0; }}
-.wf-canvas {{ fill: var(--bg); stroke: var(--border); stroke-width:2; }}
-.wf-visual rect {{ fill: var(--accent); fill-opacity:.14; stroke: var(--accent); stroke-width:2; }}
-.wf-visual:hover rect {{ fill-opacity:.30; }}
-.wf-hidden rect {{ stroke-dasharray:8 6; opacity:.55; }}
-.wf-label {{ fill: var(--fg); font-family: sans-serif; font-size:18px; pointer-events:none; }}
-@media print {{ .page-wf {{ max-width:100%; }} }}
-</style>
-<script>
-(function () {{
-  var saved = localStorage.getItem('pbidoc-theme');
-  if (saved) document.documentElement.setAttribute('data-theme', saved);
-}})();
-</script>
-</head>
-<body>
-<div class="page-wrapper">
-
-    <!-- Sidebar navigation -->
-    <nav class="sidebar">
-        <input id="toc-search" type="search" placeholder="Filter... (Ctrl/Cmd+K)" autocomplete="off">
-        <h2>Contents</h2>
-        <ul class="toc">
-        {sidebar_html}
-        </ul>
-    </nav>
-
-    <!-- Main content -->
-    <main class="content">
-        <button id="theme-toggle" class="theme-toggle" aria-label="Toggle Dark Mode">◑</button>
-        <h1>{report_name}</h1>
-            <p style="font-size: 12px; color: var(--fg-muted); margin-bottom: 4px;">Generated by <a href="https://github.com/djrien-ai/pbi-doc-generator" style="color: var(--fg-muted);"><strong>PBI Doc Generator</strong></a> v{__import__('extract').__version__} &mdash; by <a href="https://www.linkedin.com/in/rienscheerlinck/" target="_blank" rel="noopener" style="color: var(--fg-muted);">Rien Scheerlinck</a></p>
-        {metadata_html}
-        {sections_html}
-    </main>
-
-</div>
-
-<!-- Back-to-top button -->
-<button class="back-to-top" id="backToTop" title="Back to top" aria-label="Back to top">&#8593;</button>
-
-<script>
-    // ── Mermaid initialisation ────────────────────────────────────
-    document.addEventListener("DOMContentLoaded", function () {{
-        if (typeof mermaid !== "undefined") {{
-            mermaid.initialize({{ startOnLoad: true, theme: "neutral" }});
-        }}
-    }});
-
-    // ── Back-to-top visibility toggle ─────────────────────────────
-    (function () {{
-        var btn = document.getElementById("backToTop");
-        window.addEventListener("scroll", function () {{
-            if (window.scrollY > 300) {{
-                btn.classList.add("visible");
-            }} else {{
-                btn.classList.remove("visible");
-            }}}}
-        }}}});
-        btn.addEventListener("click", function () {{{{
-            window.scrollTo({{{{ top: 0, behavior: "smooth" }}}});
-        }}}});
-    }})();
-
-    // ── Scroll-based sidebar highlighting ─────────────────────────
-    (function () {{{{
-        var links = document.querySelectorAll(".sidebar a[href^='#']");
-        if (!links.length) return;
-
-        var sections = [];
-        links.forEach(function (link) {{{{
-            var id = link.getAttribute("href").slice(1);
-            var el = document.getElementById(id);
-            if (el) sections.push({{{{ el: el, link: link }}}});
-        }}}});
-
-        function highlight() {{{{
-            var scrollY = window.scrollY + 40;
-            var current = null;
-            for (var i = 0; i < sections.length; i++) {{{{
-                if (sections[i].el.offsetTop <= scrollY) {{{{
-                    current = sections[i];
-                }}}}
-            }}}}
-            links.forEach(function (l) {{{{ l.classList.remove("active"); }}}});
-            if (current) {{{{
-                current.link.classList.add("active");
-                let parentUl = current.link.closest('ul');
-                if (parentUl && parentUl.parentElement.tagName === 'LI' && !parentUl.classList.contains('toc')) {{{{
-                    parentUl.style.display = 'block';
-                    let toggle = parentUl.parentElement.querySelector('span.toggle-icon');
-                    if (toggle) toggle.innerHTML = '&#9650;';
-                }}}}
-            }}}}
-        }}}}
-
-        window.addEventListener("scroll", highlight);
-        highlight();
-    }})();
-
-    // ── Sidebar collapsible groups ──────────────────────────────────
-    document.querySelectorAll('.sidebar .toc > li').forEach(li => {{{{
+JS_COLLAPSIBLE = r"""
+(function () {
+    document.querySelectorAll('.sidebar .toc > li').forEach(li => {
       const ul = li.querySelector('ul');
-      if (ul) {{{{
+      if (ul) {
         li.style.position = 'relative';
         const toggle = document.createElement('span');
         toggle.className = 'toggle-icon';
@@ -611,97 +362,191 @@ pre:hover .copy-btn {{ opacity: 1; }}
         li.insertBefore(toggle, li.firstChild);
         ul.style.display = 'none';
         
-        const toggleMenu = (e) => {{{{
+        const toggleMenu = (e) => {
           e.preventDefault();
           const isClosed = ul.style.display === 'none';
           ul.style.display = isClosed ? 'block' : 'none';
           toggle.innerHTML = isClosed ? '&#9650;' : '&#9660;';
-        }};
+        };
         toggle.addEventListener('click', toggleMenu);
-      }}}}
-    }}}});
+      }
+    });
+})();
+"""
 
-    // ── Sidebar search ──────────────────────────────────────────────
-    (function () {{
-      const input = document.getElementById('toc-search');
-      if (!input) return;
-      const allLi = Array.from(document.querySelectorAll('.sidebar li'));
-      input.addEventListener('input', () => {{
+JS_SEARCH = r"""
+(function () {
+    const input = document.getElementById('toc-search');
+    if (!input) return;
+    const allLi = Array.from(document.querySelectorAll('.sidebar li'));
+    input.addEventListener('input', () => {
         const q = input.value.toLowerCase().trim();
-        if (!q) {{ 
+        if (!q) { 
             allLi.forEach(li => li.style.display = ''); 
             window.dispatchEvent(new Event('scroll')); // trigger scroll to reset collapsible state
             return; 
-        }}
+        }
         allLi.forEach(li => li.style.display = 'none');
-        allLi.forEach(li => {{
-          const a = li.querySelector(':scope > a');
-          if (a && a.textContent.toLowerCase().includes(q)) {{
-            li.style.display = '';
-            let p = li.parentElement;
-            while (p && !p.classList.contains('sidebar')) {{
-              if (p.tagName === 'LI') p.style.display = '';
-              if (p.tagName === 'UL' && !p.classList.contains('toc')) {{
-                  p.style.display = 'block';
-                  let toggle = p.parentElement.querySelector('span.toggle-icon');
-                  if (toggle) toggle.innerHTML = '&#9650;';
-              }}
-              p = p.parentElement;
-            }}
-          }}
-        }});
-      }});
-      document.addEventListener('keydown', e => {{
-        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {{ e.preventDefault(); input.focus(); }}
-      }});
-    }})();
+        allLi.forEach(li => {
+            const a = li.querySelector(':scope > a');
+            if (a && a.textContent.toLowerCase().includes(q)) {
+                li.style.display = '';
+                let p = li.parentElement;
+                while (p && !p.classList.contains('sidebar')) {
+                    if (p.tagName === 'LI') p.style.display = '';
+                    if (p.tagName === 'UL' && !p.classList.contains('toc')) {
+                        p.style.display = 'block';
+                        let toggle = p.parentElement.querySelector('span.toggle-icon');
+                        if (toggle) toggle.innerHTML = '&#9650;';
+                    }
+                    p = p.parentElement;
+                }
+            }
+        });
+    });
+    document.addEventListener('keydown', e => {
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); input.focus(); }
+    });
+})();
+"""
 
-    // ── Copy buttons ────────────────────────────────────────────────
-    document.querySelectorAll('pre').forEach(pre => {{
+JS_COPY_BUTTONS = r"""
+(function () {
+    document.querySelectorAll('pre').forEach(pre => {
       if (pre.classList.contains('mermaid')) return;
       pre.style.position = 'relative';
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'copy-btn';
       btn.textContent = 'Copy';
-      btn.addEventListener('click', () => {{
+      btn.addEventListener('click', () => {
         const code = pre.querySelector('code') || pre;
-        navigator.clipboard.writeText(code.innerText).then(() => {{
+        navigator.clipboard.writeText(code.innerText).then(() => {
           btn.textContent = 'Copied';
           setTimeout(() => (btn.textContent = 'Copy'), 1500);
-        }});
-      }});
+        });
+      });
       pre.appendChild(btn);
-    }});
+    });
+})();
+"""
 
-    // ── Theme toggle logic ──────────────────────────────────────────
-    (function () {{
-      const KEY = 'pbidoc-theme';
-      const btn = document.getElementById('theme-toggle');
-      if (!btn) return;
-      btn.addEventListener('click', () => {{
+JS_THEME_TOGGLE = r"""
+(function () {
+    const KEY = 'pbidoc-theme';
+    const btn = document.getElementById('theme-toggle');
+    if (!btn) return;
+    btn.addEventListener('click', () => {
         let cur = document.documentElement.getAttribute('data-theme');
-        if (!cur) {{
+        if (!cur) {
             cur = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-        }}
+        }
         const next = cur === 'dark' ? 'light' : 'dark';
         document.documentElement.setAttribute('data-theme', next);
         localStorage.setItem(KEY, next);
-      }});
-    }})();
+    });
+})();
+"""
 
-    // ── Auto-open anchored details ──────────────────────────────────
-    function openTargetDetails() {{
-      if (!location.hash) return;
-      const el = document.querySelector(location.hash);
-      if (!el) return;
-      let p = el;
-      while (p) {{ if (p.tagName === 'DETAILS') p.open = true; p = p.parentElement; }}
-      el.scrollIntoView();
-    }}
+JS_AUTO_OPEN_DETAILS = r"""
+(function () {
+    function openTargetDetails() {
+        if (!location.hash) return;
+        const el = document.querySelector(location.hash);
+        if (!el) return;
+        let p = el;
+        while (p) { if (p.tagName === 'DETAILS') p.open = true; p = p.parentElement; }
+        el.scrollIntoView();
+    }
     window.addEventListener('load', openTargetDetails);
     window.addEventListener('hashchange', openTargetDetails);
-</script>
-</body>
-</html>
+})();
 """
+
+def generate_html(report_name: str, sections_html: str, sidebar_html: str, metadata_html: str = "") -> str:
+    from mermaid_js import MERMAID_JS
+    
+    # We will build the HTML by concatenating normal strings rather than running `.format()` on the entire document body.
+    # We still use f-strings for the HTML parts, but carefully excluding CSS/JS blocks from the f-string interpolation.
+
+    html_parts = []
+    
+    html_parts.append(f'''<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{report_name} — Data Documentation</title>
+''')
+    
+    # Mermaid JS
+    html_parts.append('<script>\n')
+    html_parts.append(MERMAID_JS)
+    html_parts.append('\n</script>\n')
+    
+    # Styles
+    html_parts.append('<style>\n')
+    html_parts.append(CSS_STYLES)
+    html_parts.append('\n</style>\n')
+    
+    # Early JS
+    html_parts.append('<script>\n')
+    html_parts.append(JS_THEME_INIT)
+    html_parts.append('\n</script>\n')
+    
+    # Body start
+    import extract
+    version_str = extract.__version__
+    
+    html_parts.append(f'''</head>
+<body>
+<div class="page-wrapper">
+
+    <!-- Sidebar navigation -->
+    <nav class="sidebar">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px solid var(--border); padding-bottom: 8px;">
+            <h2 style="margin-bottom: 0; border-bottom: none; padding-bottom: 0;">Contents</h2>
+            <button id="theme-toggle" style="background: none; border: none; cursor: pointer; color: var(--fg-muted); font-size: 16px; padding: 4px;" title="Toggle Dark/Light Mode">◑</button>
+        </div>
+        
+        <input type="text" id="toc-search" placeholder="Search (Ctrl+K)..." style="width: 100%; padding: 6px 8px; margin-bottom: 12px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg); color: var(--fg); font-size: 13px;">
+        
+        <ul class="toc">
+{sidebar_html}
+        </ul>
+    </nav>
+
+    <!-- Main content -->
+    <main class="content">
+        <h1>{report_name}</h1>
+            <p style="font-size: 12px; color: var(--fg-muted); margin-bottom: 4px;">Generated by <a href="https://github.com/djrien-ai/pbi-doc-generator" style="color: var(--fg-muted);"><strong>PBI Doc Generator</strong></a> v{version_str} &mdash; by <a href="https://www.linkedin.com/in/rienscheerlinck/" target="_blank" rel="noopener" style="color: var(--fg-muted);">Rien Scheerlinck</a></p>
+{metadata_html}
+{sections_html}
+    </main>
+
+</div>
+
+<button class="back-to-top" id="backToTop" title="Back to top">↑</button>
+
+''')
+
+    # Add each feature in its own script block
+    js_blocks = [
+        JS_MERMAID_INIT,
+        JS_BACK_TO_TOP,
+        JS_SCROLL_SPY,
+        JS_COLLAPSIBLE,
+        JS_SEARCH,
+        JS_COPY_BUTTONS,
+        JS_THEME_TOGGLE,
+        JS_AUTO_OPEN_DETAILS
+    ]
+    
+    for js_block in js_blocks:
+        html_parts.append('<script>\n')
+        html_parts.append(js_block.strip())
+        html_parts.append('\n</script>\n')
+        
+    html_parts.append('</body>\n</html>')
+    
+    return "".join(html_parts)

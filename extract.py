@@ -1716,6 +1716,9 @@ def _extract_documentation_pipeline(input_path, output_path=None, include_system
     full_content = exec_summary + "\n\n" + full_content
 
     output_html = generate_html(report_name, full_content, full_sidebar, metadata_html=metadata_html)
+    
+    # Run Build-time HTML validation
+    validate_html(output_html, errors, input_path_obj, __version__)
 
     # Output path
     if not output_path:
@@ -1725,6 +1728,54 @@ def _extract_documentation_pipeline(input_path, output_path=None, include_system
         f.write(output_html)
 
     return output_path, errors
+
+
+def validate_html(html_str, errors, input_path_obj, app_version):
+    import re
+    import subprocess
+    import tempfile
+    from extract import build_report, write_log
+    
+    # 1. Double Brace check
+    script_style_pattern = re.compile(r'<(script|style)[^>]*>(.*?)</\1>', re.DOTALL | re.IGNORECASE)
+    for match in script_style_pattern.finditer(html_str):
+        tag = match.group(1).lower()
+        body = match.group(2)
+        if "mermaidAPI" in body or len(body) > 1000000:
+            continue
+        if "{{" in body or "}}" in body:
+            exc = ValueError(f"Validation Error: Double brace '{{{{' or '}}}}' found in <{tag}> body. Likely str.format() leak.")
+            code, report = build_report("Validation", exc, str(input_path_obj), app_version)
+            errors.append(("Validation", code))
+            write_log(report)
+            print(f"[!] Validation WARNING: Double brace found in <{tag}>: {code}")
+
+    # 2. Node.js syntax check
+    script_pattern = re.compile(r'<script[^>]*>(.*?)</script>', re.DOTALL | re.IGNORECASE)
+    for match in script_pattern.finditer(html_str):
+        body = match.group(1).strip()
+        if not body:
+            continue
+        # Skip mermaid bundle
+        if "mermaidAPI" in body or len(body) > 1000000:
+            continue
+            
+        with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False, encoding="utf-8") as f:
+            f.write(body)
+            path = f.name
+            
+        try:
+            r = subprocess.run(["node", "--check", path], capture_output=True, text=True, timeout=20)
+            if r.returncode != 0:
+                exc = ValueError(f"Validation Error: node --check failed for script block:\n{r.stderr.strip()}")
+                code, report = build_report("Validation", exc, str(input_path_obj), app_version)
+                errors.append(("Validation", code))
+                write_log(report)
+                print(f"[!] Validation WARNING: Script syntax error: {code}")
+        except FileNotFoundError:
+            pass # Node not installed, skip silently
+        finally:
+            os.unlink(path)
 
 def main():
     parser = argparse.ArgumentParser(description="PBI Metadata Extractor")
