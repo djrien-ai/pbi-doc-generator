@@ -567,7 +567,10 @@ def _process_multi_threaded(lib, dm):
 
 def _patched_unpack(self):
     with zipfile.ZipFile(self.file_path, 'r') as zip_ref:
-        with zip_ref.open('DataModel') as dm:
+        model_path = 'DataModel'
+        if 'xl/model/item.data' in zip_ref.namelist():
+            model_path = 'xl/model/item.data'
+        with zip_ref.open(model_path) as dm:
             mode = _detect_compression(dm)
 
             if mode == 'uncompressed':
@@ -1656,27 +1659,35 @@ def _extract_documentation_pipeline(input_path, output_path=None, include_system
     input_path_obj = Path(input_path)
     report_name = input_path_obj.stem
     
-    if input_path.lower().endswith('.pbix'):
+    is_excel = input_path.lower().endswith('.xlsx')
+    if input_path.lower().endswith(('.pbix', '.xlsx')):
         from pbixray import PBIXRay
-        print(f"Loading PBIX: {input_path}")
+        import excel_extractor
+        
+        print(f"Loading {'Excel' if is_excel else 'PBIX'}: {input_path}")
         try:
             model = PBIXRay(input_path)
         except Exception as e:
-            raise ValueError(f"Could not open the PBIX file: '{input_path}'.\nIt may be corrupted, missing, or locked. Details: {e}")
-    elif input_path.lower().endswith('.xlsx'):
-        import excel_extractor
-        print(f"Loading Excel PQ: {input_path}")
-        pq_df = excel_extractor.extract_excel_power_query(input_path)
-        class DummyModel:
-            power_query = pq_df
-            dax_tables = None
-            m_parameters = None
-            relationships = None
-            dax_measures = None
-            dax_columns = None
-            tables = []
-            schema = None
-        model = DummyModel()
+            if is_excel:
+                print('Excel Semantic Model (DAX) not found (CL 1103) or unreadable. Extracting Power Query only.'); model = None
+            else:
+                raise ValueError(f"Could not open the PBIX file: '{input_path}'.\nIt may be corrupted, missing, or locked. Details: {e}")
+                
+        if is_excel:
+            pq_df = excel_extractor.extract_excel_power_query(input_path)
+            if model is None:
+                class DummyModel:
+                    power_query = pq_df
+                    dax_tables = None
+                    m_parameters = None
+                    relationships = None
+                    dax_measures = None
+                    dax_columns = None
+                    tables = []
+                    schema = None
+                model = DummyModel()
+            else:
+                model.power_query = pq_df
     elif input_path.lower().endswith('.pbip') or os.path.isdir(input_path):
         from pbip_adapter import PbipAdapter
         print(f"Loading PBIP/Folder: {input_path}")
