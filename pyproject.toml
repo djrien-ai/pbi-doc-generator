@@ -45,4 +45,4 @@ pbi-doc-generator = "gui:main"
 pbi-doc-generator-gui = "gui:main"
 
 [tool.setuptools]
-py-modules = ["gui", "extract", "html_template", "pbip_adapter", "tmdl_parser", "mermaid_js"]
+py-modules = ["gui", "extract", "html_template", "pbip_adapter", "tmdl_parser", "mermaid_js", "excel_extractor"]
