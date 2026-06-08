@@ -43,10 +43,14 @@ class Splash(tk.Toplevel):
         
         self.canvas = tk.Canvas(self, width=w, height=h, bg="#000000", highlightthickness=0)
         self.canvas.pack(fill="both", expand=True)
+        self.wm_attributes("-topmost", True)
+        self.lift()
+        self.focus_force()
         self.w, self.h = w, h
         self._after_id = None
         self._log = []
         self._frac = 0.0
+        self._target_frac = 0.0
 
         # rain state: one falling head per column
         self.cw = 14
@@ -74,6 +78,11 @@ class Splash(tk.Toplevel):
                                     fill="#063d1b", font=("Consolas", 12), anchor="nw", tags="rain")
             self.drops[i] = 0 if y > self.h and random.random() > 0.975 else self.drops[i] + 1
         self.canvas.tag_lower("rain")               # keep rain behind the UI
+        
+        if abs(self._frac - self._target_frac) > 0.001:
+            self._frac += (self._target_frac - self._frac) * 0.15
+            self._render()
+
         self._after_id = self.after(60, self._tick)
 
     # ── foreground UI ───────────────────────────────────────────
@@ -101,7 +110,9 @@ class Splash(tk.Toplevel):
 
     # ── public API (call via root.after from the worker thread) ──
     def set_progress(self, frac, message):
-        self._frac = max(0.0, min(1.0, frac))
+        self._target_frac = max(0.0, min(1.0, frac))
+        if not MATRIX_RAIN or self._after_id is None:
+            self._frac = self._target_frac
         if message:
             self._log.append(message)
         self._render()

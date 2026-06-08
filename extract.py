@@ -18,6 +18,15 @@ import sys
 import re
 import html as html_module
 import datetime
+import subprocess
+
+def _no_window_kwargs():
+    if sys.platform == "win32":
+        si = subprocess.STARTUPINFO()
+        si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        si.wShowWindow = subprocess.SW_HIDE
+        return {"creationflags": subprocess.CREATE_NO_WINDOW, "startupinfo": si}
+    return {}
 import hashlib
 from pathlib import Path
 
@@ -457,138 +466,6 @@ from pathlib import Path
 import re
 
 __version__ = "0.6.0"
-
-# ---------------------------------------------------------------------------
-# Fix for pbixray 0.1.21: add support for "multithreaded XPrs9" DataModel
-# format.  The shipped version only handles single-threaded Xpress9.
-# Algorithm ported from pbixray >=0.10 (loader.py).
-# ---------------------------------------------------------------------------
-import ctypes
-import zipfile
-from pbixray.pbix_unpacker import PbixUnpacker
-from pbixray.abf import parser as _abf_parser
-from pbixray.abf.data_model import DataModel
-
-
-def _detect_compression(dm):
-    """Read the first 102 bytes and decide: single / multi / uncompressed."""
-    dm.seek(0)
-    header = dm.read(102)
-    text = header.decode('utf-16-le', errors='replace').rstrip('\x00')
-    dm.seek(0)
-    if 'multithreaded' in text.lower():
-        return 'multi'
-    if 'xprs9' in text.lower() or 'xpress9' in text.lower():
-        return 'single'
-    return 'uncompressed'
-
-
-def _decompress_chunk(lib, compressed_data, compressed_size, uncompressed_size):
-    """Decompress a single chunk using libxpress9."""
-    compressed_buffer = (ctypes.c_ubyte * compressed_size)(*compressed_data)
-    decompressed_buffer = (ctypes.c_ubyte * uncompressed_size)()
-    result = lib.Decompress(compressed_buffer, compressed_size,
-                            decompressed_buffer, uncompressed_size)
-    if result != uncompressed_size:
-        raise RuntimeError(
-            f"Expected {uncompressed_size} bytes after decompression, "
-            f"but got {result} bytes")
-    return bytes(decompressed_buffer)
-
-
-def _process_single_threaded(lib, dm):
-    """Original single-threaded Xpress9 decompression."""
-    all_data = bytearray()
-    total_size = dm.seek(0, 2)
-    dm.seek(102)
-    while dm.tell() < total_size:
-        raw = dm.read(8)
-        if len(raw) < 8:
-            break
-        uncompressed_size = int.from_bytes(raw[:4], 'little')
-        compressed_size = int.from_bytes(raw[4:], 'little')
-        compressed_data = dm.read(compressed_size)
-        all_data.extend(
-            _decompress_chunk(lib, compressed_data, compressed_size,
-                              uncompressed_size))
-    return all_data
-
-
-def _process_multi_threaded(lib, dm):
-    """Multi-threaded XPrs9 decompression (ported from pbixray >=0.10)."""
-    dm.seek(102)
-    main_chunks_per_thread = int.from_bytes(dm.read(8), 'little')
-    prefix_chunks_per_thread = int.from_bytes(dm.read(8), 'little')
-    prefix_thread_count = int.from_bytes(dm.read(8), 'little')
-    main_thread_count = int.from_bytes(dm.read(8), 'little')
-    _chunk_uncompressed_size = int.from_bytes(dm.read(8), 'little')
-
-    all_data = bytearray()
-
-    # --- prefix chunks ---
-    total_prefix = prefix_thread_count * prefix_chunks_per_thread
-    if total_prefix > 0:
-        chunks = []
-        for _ in range(total_prefix):
-            uncomp = int.from_bytes(dm.read(4), 'little')
-            comp = int.from_bytes(dm.read(4), 'little')
-            cdata = dm.read(comp)
-            chunks.append((uncomp, cdata, comp))
-        # Process per thread-group, in order
-        for t in range(prefix_thread_count):
-            lib.Initialize()
-            start = t * prefix_chunks_per_thread
-            end = start + prefix_chunks_per_thread
-            for uncomp, cdata, comp in chunks[start:end]:
-                all_data.extend(
-                    _decompress_chunk(lib, cdata, comp, uncomp))
-            lib.Terminate()
-
-    # --- main chunks ---
-    total_main = main_thread_count * main_chunks_per_thread
-    if total_main > 0:
-        chunks = []
-        for _ in range(total_main):
-            uncomp = int.from_bytes(dm.read(4), 'little')
-            comp = int.from_bytes(dm.read(4), 'little')
-            cdata = dm.read(comp)
-            chunks.append((uncomp, cdata, comp))
-        for t in range(main_thread_count):
-            lib.Initialize()
-            start = t * main_chunks_per_thread
-            end = start + main_chunks_per_thread
-            for uncomp, cdata, comp in chunks[start:end]:
-                all_data.extend(
-                    _decompress_chunk(lib, cdata, comp, uncomp))
-            lib.Terminate()
-
-    return all_data
-
-
-def _patched_unpack(self):
-    with zipfile.ZipFile(self.file_path, 'r') as zip_ref:
-        model_path = 'DataModel'
-        if 'xl/model/item.data' in zip_ref.namelist():
-            model_path = 'xl/model/item.data'
-        with zip_ref.open(model_path) as dm:
-            mode = _detect_compression(dm)
-
-            if mode == 'uncompressed':
-                dm.seek(0)
-                self._data_model.decompressed_data = bytearray(dm.read())
-            elif mode == 'multi':
-                self._data_model.decompressed_data = \
-                    _process_multi_threaded(self.lib, dm)
-            else:  # single
-                self.lib.Initialize()
-                self._data_model.decompressed_data = \
-                    _process_single_threaded(self.lib, dm)
-                self.lib.Terminate()
-
-    _abf_parser.AbfParser(self._data_model)
-
-PbixUnpacker._PbixUnpacker__unpack = _patched_unpack
-
 
 
 # ---------------------------------------------------------------------------
@@ -1656,6 +1533,7 @@ def _extract_documentation_pipeline(input_path, output_path=None, include_system
     str
         The path to the generated HTML file.
     """
+    if on_progress: on_progress(0.02, "Loading model…")
     input_path_obj = Path(input_path)
     report_name = input_path_obj.stem
     
@@ -1669,7 +1547,7 @@ def _extract_documentation_pipeline(input_path, output_path=None, include_system
             model = PBIXRay(input_path)
         except Exception as e:
             if is_excel:
-                print('Excel Semantic Model (DAX) not found (CL 1103) or unreadable. Extracting Power Query only.'); model = None
+                print(f'ERROR: {e}'); print('Excel Semantic Model (DAX) not found (CL 1103) or unreadable. Extracting Power Query only.'); model = None
             else:
                 raise ValueError(f"Could not open the PBIX file: '{input_path}'.\nIt may be corrupted, missing, or locked. Details: {e}")
                 
@@ -1687,7 +1565,8 @@ def _extract_documentation_pipeline(input_path, output_path=None, include_system
                     schema = None
                 model = DummyModel()
             else:
-                model.power_query = pq_df
+                type(model).power_query = property(lambda self: getattr(self, '_pq_override', pq_df))
+                model._pq_override = pq_df
     elif input_path.lower().endswith('.pbip') or os.path.isdir(input_path):
         from pbip_adapter import PbipAdapter
         print(f"Loading PBIP/Folder: {input_path}")
@@ -1701,6 +1580,7 @@ def _extract_documentation_pipeline(input_path, output_path=None, include_system
     print(f"  Power Queries: {len(model.power_query) if getattr(model, 'power_query', None) is not None else 0}")
     print(f"  Relationships: {len(model.relationships) if getattr(model, 'relationships', None) is not None else 0}")
 
+    if on_progress: on_progress(0.35, "Extracting Report Pages…")
     # Extract Report Pages early (needed for unused-measures observation)
     if input_path.lower().endswith('.pbix'):
         pages = extract_report_pages_pbix(input_path)
@@ -1761,25 +1641,38 @@ def _extract_documentation_pipeline(input_path, output_path=None, include_system
         
     stages.append(("Measure Lineage", "MODEL", "Measure Lineage", build_measure_lineage, [model.dax_measures, all_columns], {'include_system_tables': include_system_tables}))
 
-    total_stages = len(stages) + 1 # +1 for report pages
+    stage_weights = {
+        "Data Sources": 0.04,
+        "Transformations": 0.04,
+        "Relationships": 0.04,
+        "DAX Measures": 0.08,
+        "Calculated Columns": 0.08,
+        "Calculation Groups": 0.04,
+        "Observations": 0.06,
+        "Measure Lineage": 0.06,
+    }
     
+    current_weight = 0.50
     for i, (label, stage_code, name, fn, args, kwargs) in enumerate(stages):
-        if on_progress: on_progress(i / total_stages, f"Running: {label}")
+        weight = stage_weights.get(label, 0.05)
+        if on_progress: on_progress(current_weight, f"Running: {label}")
         s, sb = safe_unit(stage_code, name, fn, errors, input_path, *args, **kwargs)
         if s:
             sections.append(s)
         if sb:
             sidebar_entries.append(sb)
-        if on_progress: on_progress((i + 1) / total_stages, f"[ OK ] {label}")
+        current_weight += weight
+        if on_progress: on_progress(current_weight, f"[ OK ] {label}")
 
     # Report Pages as last section (dynamic number)
     next_sec = len(sections) + 1
-    if on_progress: on_progress((total_stages - 1) / total_stages, f"Running: Report Pages")
+    if on_progress: on_progress(current_weight, f"Running: Report Pages")
     s, sb = safe_unit("PAGES", "Report Pages", build_report_pages, errors, input_path, pages, sec_num=next_sec)
     if s:
         sections.append(s)
     if sb:
         sidebar_entries.append(sb)
+    current_weight = 1.0
     if on_progress: on_progress(1.0, f"[ OK ] Report Pages")
 
     if errors:
@@ -1867,7 +1760,7 @@ def validate_html(html_str, errors, input_path_obj, app_version):
             path = f.name
             
         try:
-            r = subprocess.run(["node", "--check", path], capture_output=True, text=True, timeout=20)
+            r = subprocess.run(["node", "--check", path], capture_output=True, text=True, timeout=20, **_no_window_kwargs())
             if r.returncode != 0:
                 exc = ValueError(f"Validation Error: node --check failed for script block:\n{r.stderr.strip()}")
                 code, report = build_report("Validation", exc, str(input_path_obj), app_version)

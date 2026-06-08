@@ -32,10 +32,11 @@ splash = Splash(
 exe = EXE(
     pyz,
     a.scripts,
-    a.binaries,
-    a.datas,
     splash,
     splash.binaries,
+    a.binaries,
+    a.datas,
+    [],
     name='PBI_Doc_Generator_v0.6',
     debug=False,
     bootloader_ignore_signals=False,

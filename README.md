@@ -27,19 +27,41 @@ Drop a `.pbix` file, a `.pbip` project, or a `.SemanticModel` folder → get a *
 ### Portable .exe (no install)
 [Download from GitHub Releases (v0.6.0)](https://github.com/djrien-ai/pbi-doc-generator/releases/tag/v0.6.0)
 
-### To run it without an .exe
-Install Python 3.10+ from python.org (I'm sure you already have that).
+## Run without the .exe (Python)
 
-Open a terminal and run:
+**Prerequisites:** Python 3.10+ from [python.org](https://python.org)
+
+### First-time install
+
+Open a terminal in the folder where you want the tool, then run:
+
 ```bash
 python -m venv pbidoc
 pbidoc\Scripts\activate
 pip install git+https://github.com/djrien-ai/pbi-doc-generator.git
 ```
 
-Launch the tool:
+### Updating to the latest version
+
+This is an active beta, so the version number isn't always bumped between releases.
+A plain `pip install` will report "already satisfied" and keep your old build. To force
+the latest code, activate your environment first, then run:
+
+```bash
+pbidoc\Scripts\activate
+pip install --upgrade --force-reinstall --no-deps --no-cache-dir git+https://github.com/djrien-ai/pbi-doc-generator.git
+```
+
+### Launch
+
 ```bash
 pbi-doc-generator
+```
+
+### Verify your version
+
+```bash
+pip show pbi-doc-generator
 ```
 
 ## How it works
