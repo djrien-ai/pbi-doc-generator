@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pbi-doc-generator"
-version = "0.6.1"
+version = "0.7.0"
 description = "Automatically generate data documentation from Power BI .pbix files"
 readme = "README.md"
 license = {text = "MIT"}

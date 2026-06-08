@@ -30,7 +30,7 @@ def _no_window_kwargs():
 import hashlib
 from pathlib import Path
 
-__version__ = "0.6.1"
+__version__ = "0.7.0"
 
 from html_template import generate_html
 
@@ -465,7 +465,7 @@ from collections import defaultdict
 from pathlib import Path
 import re
 
-__version__ = "0.6.1"
+__version__ = "0.7.0"
 
 
 # ---------------------------------------------------------------------------
