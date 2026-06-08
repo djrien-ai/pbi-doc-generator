@@ -305,6 +305,44 @@ class App(tk.Tk):
         )
         sys_cb.pack(pady=(0, 6))
 
+        # ── AI Export Options ──────────────────────────────────
+        self.ai_container = ttk.Frame(container)
+        self.ai_container.pack(pady=(0, 6), fill="x")
+        
+        self.ai_expanded = False
+        self.ai_toggle_lbl = tk.Label(self.ai_container, text="▶ Advanced Options: AI Assistant Export", bg=BG, fg=FG_DIM, font=("Segoe UI", 9), cursor="hand2")
+        self.ai_toggle_lbl.grid(row=0, column=0, sticky="w", pady=(0, 5))
+        self.ai_toggle_lbl.bind("<Button-1>", self._toggle_ai_pane)
+        
+        self.ai_pane = ttk.Frame(self.ai_container)
+        
+        ttk.Label(self.ai_pane, text="Output:").grid(row=0, column=0, sticky="e", padx=(0, 10), pady=4)
+        self._output_mode = tk.StringVar(value="HTML documentation")
+        self.output_cb = ttk.Combobox(self.ai_pane, textvariable=self._output_mode, values=["HTML documentation", "AI Prompt-Pack (.md) only", "Both"], state="readonly", width=35)
+        self.output_cb.grid(row=0, column=1, sticky="w", pady=4)
+        self.output_cb.bind("<<ComboboxSelected>>", self._update_ai_pane_state)
+        
+        ttk.Label(self.ai_pane, text="Export Scope:").grid(row=1, column=0, sticky="e", padx=(0, 10), pady=4)
+        self._ai_scope = tk.StringVar(value="Entire Model")
+        self.scope_cb = ttk.Combobox(self.ai_pane, textvariable=self._ai_scope, values=["Entire Model", "Fact Tables & Relationships Only"], state="readonly", width=35)
+        self.scope_cb.grid(row=1, column=1, sticky="w", pady=4)
+        
+        self._redact_pii = tk.BooleanVar(value=True)
+        self.redact_chk = ttk.Checkbutton(self.ai_pane, text="Redact connection strings & IPs (does NOT remove object names or business logic)", variable=self._redact_pii, style="Dark.TCheckbutton")
+        self.redact_chk.grid(row=2, column=0, columnspan=2, sticky="w", pady=(6, 2))
+        
+        warn_text = "Designed for local / offline LLMs. The prompt-pack contains your full model logic. If you paste it into a cloud AI service, that logic — including measure names and business rules — leaves your environment. Redaction below removes connection strings and IPs only; it does NOT remove object names or business logic."
+        self.ai_warn_lbl = tk.Label(self.ai_pane, text=warn_text, bg=BG, fg=ERROR, font=("Segoe UI", 8, "italic"), justify="left", wraplength=540)
+        self.ai_warn_lbl.grid(row=3, column=0, columnspan=2, sticky="w", pady=(2, 6))
+        
+        self._ai_pane_grid_info = {}
+        for child in self.ai_pane.winfo_children():
+            self._ai_pane_grid_info[child] = child.grid_info()
+            child.grid_forget()
+        
+        self._update_ai_pane_state()
+
+
         # ── status area (progress / success / error) ──────────
         self.status_frame = ttk.Frame(container)
         self.status_frame.pack(fill="x", pady=(10, 0))
@@ -359,6 +397,29 @@ class App(tk.Tk):
 
     # ── callbacks ─────────────────────────────────────────────
 
+
+    def _toggle_ai_pane(self, event=None):
+        self.ai_expanded = not self.ai_expanded
+        if self.ai_expanded:
+            self.ai_toggle_lbl.config(text="▼ Advanced Options: AI Assistant Export")
+            self.ai_pane.grid(row=1, column=0, sticky="w")
+            for child, info in self._ai_pane_grid_info.items():
+                child.grid(**info)
+        else:
+            self.ai_toggle_lbl.config(text="▶ Advanced Options: AI Assistant Export")
+            for child in self.ai_pane.winfo_children():
+                self._ai_pane_grid_info[child] = child.grid_info()
+                child.grid_forget()
+            self.ai_pane.grid_forget()
+            
+    def _update_ai_pane_state(self, event=None):
+        if self._output_mode.get() == "HTML documentation":
+            self.scope_cb.config(state="disabled")
+            self.redact_chk.state(['disabled'])
+        else:
+            self.scope_cb.config(state="readonly")
+            self.redact_chk.state(['!disabled'])
+
     def _on_select(self):
         """Open a file dialog, then kick off extraction in a thread."""
         pbix_path = filedialog.askopenfilename(
@@ -393,10 +454,21 @@ class App(tk.Tk):
         try:
             from extract import extract_documentation
 
+            output_mode = self._output_mode.get() if hasattr(self, '_output_mode') else "HTML documentation"
+            if output_mode == "HTML documentation":
+                output_mode = "html"
+            elif output_mode == "AI Prompt-Pack (.md) only":
+                output_mode = "md"
+            else:
+                output_mode = "both"
+
             result = extract_documentation(
                 pbix_path,
                 include_system_tables=self._include_sys_tables.get(),
-                on_progress=on_progress
+                on_progress=on_progress,
+                output_mode=output_mode,
+                ai_scope=self._ai_scope.get() if hasattr(self, '_ai_scope') else "Entire Model",
+                redact_pii=self._redact_pii.get() if hasattr(self, '_redact_pii') else True
             )
             # Schedule UI update on the main thread
             self.after(0, self._on_extraction_done, result)

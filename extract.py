@@ -30,7 +30,7 @@ def _no_window_kwargs():
 import hashlib
 from pathlib import Path
 
-__version__ = "0.6.0"
+__version__ = "0.6.1"
 
 from html_template import generate_html
 
@@ -465,7 +465,7 @@ from collections import defaultdict
 from pathlib import Path
 import re
 
-__version__ = "0.6.0"
+__version__ = "0.6.1"
 
 
 # ---------------------------------------------------------------------------
@@ -974,7 +974,7 @@ def build_data_sources(pq_df, dax_tables_df, m_params_df, include_system_tables=
                 pkg, view, _ = _extract_hana_info(m_code)
                 excerpt = f"Package: {pkg} / View: {view}"
                 
-            h += f'<tr><td>{i}</td><td><strong><a href="#sec2-tbl-{_safe_id(tbl_name)}">{_esc(tbl_name)}</a></strong></td>'
+            h += f'<tr data-object-type="table" data-object-name="{_esc(tbl_name)}" data-table="{_esc(tbl_name)}"><td>{i}</td><td><strong><a href="#sec2-tbl-{_safe_id(tbl_name)}">{_esc(tbl_name)}</a></strong></td>'
             h += f'<td>{_esc(conn_type)}</td><td>{_code(excerpt)}</td></tr>\n'
         h += "</tbody></table>\n"
         sec_idx += 1
@@ -996,7 +996,7 @@ def build_data_sources(pq_df, dax_tables_df, m_params_df, include_system_tables=
             else:
                 src = expr.strip()
             ttype = "DAX Calculated Table" if is_dax else "M (Power Query)"
-            h += f'<tr><td>{i}</td><td><strong><a href="#sec2-tbl-{_safe_id(tbl_name)}">{_esc(tbl_name)}</a></strong></td>'
+            h += f'<tr data-object-type="table" data-object-name="{_esc(tbl_name)}" data-table="{_esc(tbl_name)}"><td>{i}</td><td><strong><a href="#sec2-tbl-{_safe_id(tbl_name)}">{_esc(tbl_name)}</a></strong></td>'
             h += f'<td>{_code(src)}</td><td>{_esc(ttype)}</td></tr>\n'
         h += "</tbody></table>\n"
         sec_idx += 1
@@ -1189,7 +1189,7 @@ def build_measures(measures_df, descriptions_dict=None, include_system_tables=Fa
             expr = str(row.get('Expression', '')).strip()
             measure_name = _esc(row['Name'])
             details_attr = "" if len(measures_df) > 15 else " open"
-            h += f"<details id=\"measure-{_safe_id(row['Name'])}\"{details_attr} style=\"margin-bottom: 12px;\">\n"
+            h += f"<details id=\"measure-{_safe_id(row['Name'])}\" data-object-type=\"measure\" data-object-name=\"{_esc(row['Name'])}\" data-table=\"{_esc(tbl_name)}\"{details_attr} style=\"margin-bottom: 12px;\">\n"
             h += f"<summary style=\"cursor: pointer; font-weight: 600; font-size: 15px;\">{measure_name}</summary>\n"
             h += f"<div style=\"margin-top: 8px;\">\n<pre><code>{_esc(expr)}</code></pre>\n"
             
@@ -1250,7 +1250,7 @@ def build_calculated_columns(dax_cols_df, include_system_tables=False):
         h += "<table>\n<thead><tr><th>Column</th><th>Expression</th></tr></thead>\n<tbody>\n"
         for _, row in group.iterrows():
             expr = str(row.get('Expression', '')).strip()
-            h += f'<tr><td><strong>{_esc(row["ColumnName"])}</strong></td><td>{_code(expr)}</td></tr>\n'
+            h += f'<tr data-object-type="column" data-object-name="{_esc(row["ColumnName"])}" data-table="{_esc(tbl_name)}"><td><strong>{_esc(row["ColumnName"])}</strong></td><td>{_code(expr)}</td></tr>\n'
         h += "</tbody></table>\n</details>\n"
         group_idx += 1
 
@@ -1495,9 +1495,9 @@ def build_measure_lineage(measures_df, all_columns, include_system_tables=False,
 # Main extraction function (called by GUI and CLI)
 # ---------------------------------------------------------------------------
 
-def extract_documentation(input_path, output_path=None, include_system_tables=False, on_progress=None):
+def extract_documentation(input_path, output_path=None, include_system_tables=False, on_progress=None, output_mode="html", ai_scope="Entire Model", redact_pii=True):
     try:
-        return _extract_documentation_pipeline(input_path, output_path, include_system_tables, on_progress)
+        return _extract_documentation_pipeline(input_path, output_path, include_system_tables, on_progress, output_mode, ai_scope, redact_pii)
     except Exception as exc:
         code, report = build_report("RENDER", exc, input_path, __version__)
         write_log(report)
@@ -1507,15 +1507,15 @@ def extract_documentation(input_path, output_path=None, include_system_tables=Fa
 # Main extraction function (called by GUI and CLI)
 # ---------------------------------------------------------------------------
 
-def extract_documentation(input_path, output_path=None, include_system_tables=False, on_progress=None):
+def extract_documentation(input_path, output_path=None, include_system_tables=False, on_progress=None, output_mode="html", ai_scope="Entire Model", redact_pii=True):
     try:
-        return _extract_documentation_pipeline(input_path, output_path, include_system_tables, on_progress)
+        return _extract_documentation_pipeline(input_path, output_path, include_system_tables, on_progress, output_mode, ai_scope, redact_pii)
     except Exception as exc:
         code, report = build_report("RENDER", exc, input_path, __version__)
         write_log(report)
         return ExtractionError(code, report)
 
-def _extract_documentation_pipeline(input_path, output_path=None, include_system_tables=False, on_progress=None):
+def _extract_documentation_pipeline(input_path, output_path=None, include_system_tables=False, on_progress=None, output_mode="html", ai_scope="Entire Model", redact_pii=True):
     """
     Extract metadata from a .pbix or .pbip file and generate HTML documentation.
 
@@ -1710,17 +1710,29 @@ def _extract_documentation_pipeline(input_path, output_path=None, include_system
 </div>"""
     full_content = exec_summary + "\n\n" + full_content
 
-    output_html = generate_html(report_name, full_content, full_sidebar, metadata_html=metadata_html)
-    
-    # Run Build-time HTML validation
-    validate_html(output_html, errors, input_path_obj, __version__)
+    if output_mode in ("html", "both"):
+        output_html = generate_html(report_name, full_content, full_sidebar, metadata_html=metadata_html, enable_ai_enrichment=(output_mode == "both"))
+        # Run Build-time HTML validation
+        validate_html(output_html, errors, input_path_obj, __version__)
+    else:
+        output_html = None
 
     # Output path
     if not output_path:
         output_path = os.path.join(input_path_obj.parent, f"{report_name}_Data_Documentation.html")
 
-    with open(output_path, "w", encoding="utf-8") as f:
-        f.write(output_html)
+    if output_html:
+        with open(output_path, "w", encoding="utf-8") as f:
+            f.write(output_html)
+            
+    if output_mode in ("md", "both"):
+        if on_progress: on_progress(1.0, "Generating AI Prompt-Pack...")
+        prompt_pack = _generate_tmdl_prompt_pack(model, ai_scope, redact_pii, input_path)
+        prompt_path = os.path.join(input_path_obj.parent, f"{input_path_obj.stem}_AI_Prompt_Pack.md")
+        with open(prompt_path, "w", encoding="utf-8") as f:
+            f.write(prompt_pack)
+        if output_mode == "md":
+            output_path = prompt_path
 
     return output_path, errors
 
@@ -1801,3 +1813,199 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+def _redact_sensitive_strings(text):
+    if not text:
+        return text
+    import re
+    # IPv4/IPv6
+    text = re.sub(r'\b(?:\d{1,3}\.){3}\d{1,3}\b', '[REDACTED_IP]', text)
+    text = re.sub(r'\b(?:[a-fA-F0-9]{1,4}:){7}[a-fA-F0-9]{1,4}\b', '[REDACTED_IPV6]', text)
+    # Connection strings in M
+    text = re.sub(r'(Sql\.Database\()\s*[\'"][^\'"]+[\'"]\s*,\s*[\'"][^\'"]+[\'"]', r'\1"[REDACTED_SERVER]", "[REDACTED_DB]"', text)
+    text = re.sub(r'(SapHana\.Database\()\s*[\'"][^\'"]+[\'"]', r'\1"[REDACTED_HANA]"', text)
+    text = re.sub(r'(Oracle\.Database\()\s*[\'"][^\'"]+[\'"]', r'\1"[REDACTED_ORACLE]"', text)
+    text = re.sub(r'(OData\.Feed\()\s*[\'"][^\'"]+[\'"]', r'\1"[REDACTED_URL]"', text)
+    text = re.sub(r'(Web\.Contents\()\s*[\'"][^\'"]+[\'"]', r'\1"[REDACTED_URL]"', text)
+    # Generic Tokens/Passwords
+    text = re.sub(r'(?i)(password|token|secret|key)\s*=\s*[\'"][^\'"]+[\'"]', r'\1="[REDACTED]"', text)
+    return text
+
+def _generate_tmdl_prompt_pack(model, ai_scope, redact_pii, input_path):
+    import os
+    
+    is_pbip = str(input_path).lower().endswith('.pbip') or os.path.isdir(input_path)
+    
+    # Check if PBIP and raw TMDL exists
+    raw_tmdl = ""
+    if is_pbip:
+        dataset_dir = None
+        if os.path.isdir(input_path):
+            for d in os.listdir(input_path):
+                if d.endswith(".Dataset") or d.endswith(".SemanticModel"):
+                    dataset_dir = os.path.join(input_path, d)
+                    break
+        else:
+            dataset_dir = input_path.replace(".pbip", ".Dataset")
+            if not os.path.exists(dataset_dir):
+                dataset_dir = input_path.replace(".pbip", ".SemanticModel")
+                
+        if dataset_dir and os.path.exists(dataset_dir):
+            tmdl_dir = os.path.join(dataset_dir, "definition")
+            if os.path.exists(tmdl_dir):
+                # We have real TMDL! Concatenate it.
+                tmdl_parts = []
+                for root, _, files in os.walk(tmdl_dir):
+                    for f in files:
+                        if f.endswith(".tmdl"):
+                            with open(os.path.join(root, f), "r", encoding="utf-8") as tf:
+                                tmdl_parts.append(f"// --- {f} ---")
+                                tmdl_parts.append(tf.read())
+                raw_tmdl = "\n".join(tmdl_parts)
+    
+    # Select tables
+    import pandas as pd
+    all_tables = []
+    if getattr(model, 'tables', None) is not None:
+        all_tables = model.tables['Name'].tolist() if 'Name' in model.tables else []
+        
+    target_tables = set(all_tables)
+    
+    # Identify Fact tables heuristic
+    if ai_scope == "Fact Tables & Relationships Only" and getattr(model, 'relationships', None) is not None:
+        fact_candidates = set()
+        for _, rel in model.relationships.iterrows():
+            # A table on the 'many' side of a one-to-many is likely a fact table
+            # Or if it's many-to-many, both might be fact or bridge.
+            to_card = str(rel.get('ToCardinality', '')).lower()
+            from_card = str(rel.get('FromCardinality', '')).lower()
+            
+            if to_card == 'many':
+                fact_candidates.add(rel.get('ToTable'))
+            if from_card == 'many':
+                fact_candidates.add(rel.get('FromTable'))
+                
+        if fact_candidates:
+            # Include fact tables and tables exactly 1 hop away
+            final_targets = set(fact_candidates)
+            for _, rel in model.relationships.iterrows():
+                if rel.get('FromTable') in fact_candidates:
+                    final_targets.add(rel.get('ToTable'))
+                if rel.get('ToTable') in fact_candidates:
+                    final_targets.add(rel.get('FromTable'))
+            target_tables = final_targets
+            
+    # If heuristic yields 0 tables, fallback
+    if not target_tables:
+        target_tables = set(all_tables)
+        
+    # Generate TMDL-style if no raw TMDL
+    tmdl = raw_tmdl
+    if not tmdl:
+        lines = ["// The model is represented in Tabular Model Definition Language (TMDL)-style format."]
+        lines.append("// Pay close attention to indentation, which strictly denotes parent-child hierarchy.\n")
+        
+        # Power Queries (M)
+        pq_dict = {}
+        if getattr(model, 'power_query', None) is not None:
+            if isinstance(model.power_query, dict):
+                pq_dict = model.power_query
+            else:
+                for _, row in model.power_query.iterrows():
+                    pq_dict[row['TableName']] = str(row.get('Expression', ''))
+                    
+        for t in target_tables:
+            lines.append(f"table '{t}'")
+            # M source
+            if t in pq_dict:
+                expr = pq_dict[t]
+                if redact_pii:
+                    expr = _redact_sensitive_strings(expr)
+                lines.append(f"\tpartition '{t}-Partition' = m")
+                lines.append(f"\t\tmode: import")
+                lines.append(f"\t\tsource = \n```\n{expr}\n```\n")
+            
+            # Columns
+            if getattr(model, 'dax_columns', None) is not None:
+                cols = model.dax_columns[model.dax_columns['TableName'] == t]
+                for _, row in cols.iterrows():
+                    cname = row.get('ColumnName', row.get('Name', ''))
+                    cexpr = row.get('Expression', '')
+                    lines.append(f"\tcolumn '{cname}'")
+                    lines.append(f"\t\tdataType: {row.get('DataType', 'unknown')}")
+                    if str(row.get('IsHidden', '')).lower() == 'true':
+                        lines.append(f"\t\tisHidden")
+                    if cexpr:
+                        lines.append(f"\t\texpression = \n\t\t\t```\n\t\t\t{cexpr}\n\t\t\t```")
+                    lines.append("")
+                    
+            # Measures
+            if getattr(model, 'dax_measures', None) is not None:
+                meas = model.dax_measures[model.dax_measures['TableName'] == t]
+                for _, row in meas.iterrows():
+                    mname = row.get('Name', '')
+                    mexpr = row.get('Expression', '')
+                    lines.append(f"\tmeasure '{mname}' = \n\t\t```\n\t\t{mexpr}\n\t\t```")
+                    if row.get('DisplayFolder'):
+                        lines.append(f"\t\tdisplayFolder: {row.get('DisplayFolder')}")
+                    if row.get('FormatString'):
+                        lines.append(f"\t\tformatString: {row.get('FormatString')}")
+                    if str(row.get('IsHidden', '')).lower() == 'true':
+                        lines.append(f"\t\tisHidden")
+                    lines.append("")
+                    
+        # Relationships
+        if getattr(model, 'relationships', None) is not None:
+            for _, rel in model.relationships.iterrows():
+                from_t = rel.get('FromTable')
+                to_t = rel.get('ToTable')
+                if from_t in target_tables and to_t in target_tables:
+                    lines.append(f"relationship '{from_t}_{to_t}'")
+                    lines.append(f"\tfromColumn: '{from_t}'.'{rel.get('FromColumn')}'")
+                    lines.append(f"\ttoColumn: '{to_t}'.'{rel.get('ToColumn')}'")
+                    lines.append(f"\tisActive: {str(rel.get('IsActive', 'true')).lower()}")
+                    lines.append(f"\tcrossFilteringBehavior: {rel.get('CrossFilteringBehavior', 'both')}")
+                    lines.append("")
+                    
+        tmdl = "\n".join(lines)
+        
+    num_tables = len(target_tables)
+    num_measures = len(model.dax_measures) if getattr(model, 'dax_measures', None) is not None else 0
+    num_rels = len(model.relationships) if getattr(model, 'relationships', None) is not None else 0
+    
+    prompt = f"""PBI Documentation Tool - AI Prompt Pack
+
+<system_role>
+IMPORTANT: You are an expert Data Architect. Your task is to analyze the following Power BI Semantic Model and generate plain-language documentation for its components.
+Do NOT invent business logic under any circumstances.
+Base all explanations strictly on the provided DAX and M logic.
+Acknowledge relationship directionality and cardinality in your analysis.
+</system_role>
+
+<context>
+Model Name: {os.path.basename(str(input_path))}
+Total Tables Included: {num_tables}
+Total Measures: {num_measures}
+Total Relationships: {num_rels}
+</context>
+
+<payload>
+```tmdl
+{tmdl}
+```
+</payload>
+
+<task>
+Read the TMDL payload provided above.
+For your first response, output STRICTLY the following exact phrase: "MODEL RECEIVED AND PARSED. READY FOR DOCUMENTATION TASKS."
+Do not generate the documentation yet. Wait for my specific follow-up prompts regarding which tables to document.
+When generating definitions, you MUST use the following JSON schema to allow for offline round-trip integration back into the local HTML file:
+
+```json
+[{"schema_version":"1","object_type":"measure|column|table","table":"...","object_name":"...","definition":"...","business_logic":"..."}]
+```
+Return ONLY the JSON array, no prose.
+</task>
+"""
+    return prompt

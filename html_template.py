@@ -482,6 +482,92 @@ JS_WIREFRAME_TOGGLES = r'''
 })();
 '''
 
+
+JS_AI_IMPORTER = r"""
+(function () {
+    const importBtn = document.getElementById('ai-import-btn');
+    const importPanel = document.getElementById('ai-import-panel');
+    const applyBtn = document.getElementById('ai-apply-btn');
+    const exportBtn = document.getElementById('ai-export-btn');
+    const textarea = document.getElementById('ai-json-input');
+    
+    if (!importBtn) return;
+    
+    importBtn.addEventListener('click', () => {
+        importPanel.style.display = importPanel.style.display === 'none' ? 'block' : 'none';
+    });
+    
+    applyBtn.addEventListener('click', () => {
+        const text = textarea.value;
+        const match = text.match(/\[\s*\{.*?\}\s*\]/s);
+        if (!match) {
+            alert("Could not find a valid JSON array in the input.");
+            return;
+        }
+        try {
+            const data = JSON.parse(match[0]);
+            let count = 0;
+            data.forEach(item => {
+                if (item.schema_version !== "1") return;
+                const type = item.object_type;
+                const name = item.object_name;
+                const tbl = item.table;
+                const definition = item.definition;
+                const logic = item.business_logic;
+                
+                // Find node
+                let selector = `[data-object-type="${type}"][data-object-name="${name}"]`;
+                if (tbl) selector += `[data-table="${tbl}"]`;
+                
+                const nodes = document.querySelectorAll(selector);
+                nodes.forEach(node => {
+                    // Check if already injected
+                    let existing = node.querySelector('.ai-enrichment-block');
+                    if (!existing) {
+                        // Create block depending on node type
+                        existing = document.createElement('div');
+                        existing.className = 'ai-enrichment-block alert alert-important';
+                        existing.style.marginTop = '10px';
+                        if (node.tagName === 'TR') {
+                            const td = document.createElement('td');
+                            td.colSpan = node.children.length; // Span across columns
+                            td.appendChild(existing);
+                            
+                            // Insert as a new row after this row
+                            const nextRow = document.createElement('tr');
+                            nextRow.className = 'ai-enrichment-row';
+                            nextRow.appendChild(td);
+                            node.parentNode.insertBefore(nextRow, node.nextSibling);
+                        } else {
+                            node.appendChild(existing);
+                        }
+                    }
+                    
+                    // Update content
+                    existing.innerHTML = `<strong>🤖 AI Definition:</strong> ${definition}<br/><br/><strong>🧠 Business Logic:</strong> ${logic}`;
+                    count++;
+                });
+            });
+            alert(`Successfully injected ${count} definitions.`);
+            importPanel.style.display = 'none';
+        } catch (e) {
+            alert("Error parsing JSON: " + e.message);
+        }
+    });
+    
+    exportBtn.addEventListener('click', () => {
+        const html = document.documentElement.outerHTML;
+        const blob = new Blob(["<!DOCTYPE html>\\n" + html], { type: "text/html" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = document.title.replace(" — Data Documentation", "") + "_enriched.html";
+        a.click();
+        URL.revokeObjectURL(url);
+    });
+})();
+"""
+
 JS_AUTO_OPEN_DETAILS = r"""
 (function () {
     function openTargetDetails() {
@@ -497,7 +583,7 @@ JS_AUTO_OPEN_DETAILS = r"""
 })();
 """
 
-def generate_html(report_name: str, sections_html: str, sidebar_html: str, metadata_html: str = "") -> str:
+def generate_html(report_name: str, sections_html: str, sidebar_html: str, metadata_html: str = "", enable_ai_enrichment: bool = False) -> str:
     from mermaid_js import MERMAID_JS
     
     # We will build the HTML by concatenating normal strings rather than running `.format()` on the entire document body.
@@ -532,8 +618,26 @@ def generate_html(report_name: str, sections_html: str, sidebar_html: str, metad
     import extract
     version_str = extract.__version__
     
+    ai_overlay = ""
+    if enable_ai_enrichment:
+        ai_overlay = '''
+<div style="position: fixed; bottom: 24px; left: 24px; z-index: 200;">
+    <button id="ai-import-btn" style="background: var(--important-border); color: var(--important-fg); border: 2px solid var(--important-border); padding: 10px 16px; border-radius: 20px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">✨ Import AI Definitions</button>
+</div>
+<div id="ai-import-panel" style="display: none; position: fixed; bottom: 80px; left: 24px; width: 400px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.2); z-index: 200; padding: 16px;">
+    <h3 style="margin-top: 0;">Import Prompt-Pack Output</h3>
+    <p style="font-size: 13px; color: var(--fg-muted);">Paste the JSON array generated by the AI here:</p>
+    <textarea id="ai-json-input" style="width: 100%; height: 200px; margin-bottom: 12px; font-family: monospace; font-size: 12px; padding: 8px; background: var(--code-bg); color: var(--fg); border: 1px solid var(--border); border-radius: 4px;"></textarea>
+    <div style="display: flex; gap: 8px;">
+        <button id="ai-apply-btn" style="flex: 1; background: var(--accent); color: #fff; border: none; padding: 8px; border-radius: 4px; font-weight: bold; cursor: pointer;">Inject Definitions</button>
+        <button id="ai-export-btn" style="flex: 1; background: var(--success, #2ea043); color: #fff; border: none; padding: 8px; border-radius: 4px; font-weight: bold; cursor: pointer;">Export Enriched HTML</button>
+    </div>
+</div>
+'''
+
     html_parts.append(f'''</head>
 <body>
+{ai_overlay}
 <div class="page-wrapper">
 
     <!-- Sidebar navigation -->
@@ -576,6 +680,8 @@ def generate_html(report_name: str, sections_html: str, sidebar_html: str, metad
         JS_AUTO_OPEN_DETAILS,
         JS_WIREFRAME_TOGGLES
     ]
+    if enable_ai_enrichment:
+        js_blocks.append(JS_AI_IMPORTER)
     
     for js_block in js_blocks:
         html_parts.append('<script>\n')
