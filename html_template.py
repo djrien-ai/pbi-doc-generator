@@ -515,9 +515,9 @@ JS_AI_IMPORTER = r"""
                 const definition = item.definition;
                 const logic = item.business_logic;
                 
-                // Find node
-                let selector = `[data-object-type="${type}"][data-object-name="${name}"]`;
-                if (tbl) selector += `[data-table="${tbl}"]`;
+                // Find node (case-insensitive where possible using i flag)
+                let selector = `[data-object-type="${type}" i][data-object-name="${name}" i]`;
+                if (tbl) selector += `[data-table="${tbl}" i]`;
                 
                 const nodes = document.querySelectorAll(selector);
                 nodes.forEach(node => {
@@ -548,7 +548,14 @@ JS_AI_IMPORTER = r"""
                     count++;
                 });
             });
-            alert(`Successfully injected ${count} definitions.`);
+            
+            if (count === 0) {
+                alert(`Found ${data.length} definitions in JSON, but none could be matched to the report objects. Check casing or object types.`);
+            } else if (count < data.length) {
+                alert(`Successfully injected ${count} definitions.\nNote: ${data.length - count} definitions were skipped (could not match table/object name).`);
+            } else {
+                alert(`Successfully injected all ${count} definitions.`);
+            }
             importPanel.style.display = 'none';
         } catch (e) {
             alert("Error parsing JSON: " + e.message);
