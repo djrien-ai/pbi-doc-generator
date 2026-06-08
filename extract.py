@@ -2003,7 +2003,7 @@ Do not generate the documentation yet. Wait for my specific follow-up prompts re
 When generating definitions, you MUST use the following JSON schema to allow for offline round-trip integration back into the local HTML file:
 
 ```json
-[{"schema_version":"1","object_type":"measure|column|table","table":"...","object_name":"...","definition":"...","business_logic":"..."}]
+[{{"schema_version":"1","object_type":"measure|column|table","table":"...","object_name":"...","definition":"...","business_logic":"..."}}]
 ```
 Return ONLY the JSON array, no prose.
 </task>
