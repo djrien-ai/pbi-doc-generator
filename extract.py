@@ -1834,43 +1834,53 @@ def _redact_sensitive_strings(text):
 
 def _generate_tmdl_prompt_pack(model, ai_scope, redact_pii, input_path):
     import os
+    import pandas as pd
     
     is_pbip = str(input_path).lower().endswith('.pbip') or os.path.isdir(input_path)
     
-    # Check if PBIP and raw TMDL exists
-    raw_tmdl = ""
-    if is_pbip:
-        dataset_dir = None
-        if os.path.isdir(input_path):
-            for d in os.listdir(input_path):
-                if d.endswith(".Dataset") or d.endswith(".SemanticModel"):
-                    dataset_dir = os.path.join(input_path, d)
-                    break
-        else:
-            dataset_dir = input_path.replace(".pbip", ".Dataset")
-            if not os.path.exists(dataset_dir):
-                dataset_dir = input_path.replace(".pbip", ".SemanticModel")
-                
-        if dataset_dir and os.path.exists(dataset_dir):
-            tmdl_dir = os.path.join(dataset_dir, "definition")
-            if os.path.exists(tmdl_dir):
-                # We have real TMDL! Concatenate it.
-                tmdl_parts = []
-                for root, _, files in os.walk(tmdl_dir):
-                    for f in files:
-                        if f.endswith(".tmdl"):
-                            with open(os.path.join(root, f), "r", encoding="utf-8") as tf:
-                                tmdl_parts.append(f"// --- {f} ---")
-                                tmdl_parts.append(tf.read())
-                raw_tmdl = "\n".join(tmdl_parts)
-    
     # Select tables
-    import pandas as pd
-    all_tables = []
+    all_tables_set = set()
+    
+    # 1. model.tables (names)
     if getattr(model, 'tables', None) is not None:
-        all_tables = model.tables['Name'].tolist() if 'Name' in model.tables else []
-        
-    target_tables = set(all_tables)
+        for t in model.tables:
+            if isinstance(t, str):
+                all_tables_set.add(t)
+            elif hasattr(t, 'name'):
+                all_tables_set.add(t.name)
+                
+    # 2. model.power_query['TableName']
+    if getattr(model, 'power_query', None) is not None:
+        if isinstance(model.power_query, pd.DataFrame) and 'TableName' in model.power_query:
+            all_tables_set.update(model.power_query['TableName'].dropna().astype(str).unique())
+        elif isinstance(model.power_query, dict):
+            all_tables_set.update(model.power_query.keys())
+            
+    # 3. model.dax_tables['TableName']
+    if getattr(model, 'dax_tables', None) is not None:
+        if isinstance(model.dax_tables, pd.DataFrame) and 'TableName' in model.dax_tables:
+            all_tables_set.update(model.dax_tables['TableName'].dropna().astype(str).unique())
+        elif isinstance(model.dax_tables, list):
+            for t in model.dax_tables:
+                if isinstance(t, dict) and 'TableName' in t:
+                    all_tables_set.add(str(t['TableName']))
+
+    # 4. model.schema['TableName']
+    if getattr(model, 'schema', None) is not None:
+        if isinstance(model.schema, pd.DataFrame) and 'TableName' in model.schema:
+            all_tables_set.update(model.schema['TableName'].dropna().astype(str).unique())
+
+    # 5. parent tables of measures and columns
+    if getattr(model, 'dax_measures', None) is not None:
+        if isinstance(model.dax_measures, pd.DataFrame) and 'TableName' in model.dax_measures:
+            all_tables_set.update(model.dax_measures['TableName'].dropna().astype(str).unique())
+    
+    if getattr(model, 'dax_columns', None) is not None:
+        if isinstance(model.dax_columns, pd.DataFrame) and 'TableName' in model.dax_columns:
+            all_tables_set.update(model.dax_columns['TableName'].dropna().astype(str).unique())
+
+    target_tables = set(all_tables_set)
+    all_tables = list(all_tables_set)
     
     # Identify Fact tables heuristic
     if ai_scope == "Fact Tables & Relationships Only" and getattr(model, 'relationships', None) is not None:
@@ -1900,76 +1910,74 @@ def _generate_tmdl_prompt_pack(model, ai_scope, redact_pii, input_path):
     if not target_tables:
         target_tables = set(all_tables)
         
-    # Generate TMDL-style if no raw TMDL
-    tmdl = raw_tmdl
-    if not tmdl:
-        lines = ["// The model is represented in Tabular Model Definition Language (TMDL)-style format."]
-        lines.append("// Pay close attention to indentation, which strictly denotes parent-child hierarchy.\n")
+    # Generate TMDL-style string based purely on the internal model (same as HTML)
+    lines = ["// The model is represented in Tabular Model Definition Language (TMDL)-style format."]
+    lines.append("// Pay close attention to indentation, which strictly denotes parent-child hierarchy.\n")
         
-        # Power Queries (M)
-        pq_dict = {}
-        if getattr(model, 'power_query', None) is not None:
-            if isinstance(model.power_query, dict):
-                pq_dict = model.power_query
-            else:
-                for _, row in model.power_query.iterrows():
-                    pq_dict[row['TableName']] = str(row.get('Expression', ''))
-                    
-        for t in target_tables:
-            lines.append(f"table '{t}'")
-            # M source
-            if t in pq_dict:
-                expr = pq_dict[t]
-                if redact_pii:
-                    expr = _redact_sensitive_strings(expr)
-                lines.append(f"\tpartition '{t}-Partition' = m")
-                lines.append(f"\t\tmode: import")
-                lines.append(f"\t\tsource = \n```\n{expr}\n```\n")
-            
-            # Columns
-            if getattr(model, 'dax_columns', None) is not None:
-                cols = model.dax_columns[model.dax_columns['TableName'] == t]
-                for _, row in cols.iterrows():
-                    cname = row.get('ColumnName', row.get('Name', ''))
-                    cexpr = row.get('Expression', '')
-                    lines.append(f"\tcolumn '{cname}'")
-                    lines.append(f"\t\tdataType: {row.get('DataType', 'unknown')}")
-                    if str(row.get('IsHidden', '')).lower() == 'true':
-                        lines.append(f"\t\tisHidden")
-                    if cexpr:
-                        lines.append(f"\t\texpression = \n\t\t\t```\n\t\t\t{cexpr}\n\t\t\t```")
-                    lines.append("")
-                    
-            # Measures
-            if getattr(model, 'dax_measures', None) is not None:
-                meas = model.dax_measures[model.dax_measures['TableName'] == t]
-                for _, row in meas.iterrows():
-                    mname = row.get('Name', '')
-                    mexpr = row.get('Expression', '')
-                    lines.append(f"\tmeasure '{mname}' = \n\t\t```\n\t\t{mexpr}\n\t\t```")
-                    if row.get('DisplayFolder'):
-                        lines.append(f"\t\tdisplayFolder: {row.get('DisplayFolder')}")
-                    if row.get('FormatString'):
-                        lines.append(f"\t\tformatString: {row.get('FormatString')}")
-                    if str(row.get('IsHidden', '')).lower() == 'true':
-                        lines.append(f"\t\tisHidden")
-                    lines.append("")
-                    
-        # Relationships
-        if getattr(model, 'relationships', None) is not None:
-            for _, rel in model.relationships.iterrows():
-                from_t = rel.get('FromTable')
-                to_t = rel.get('ToTable')
-                if from_t in target_tables and to_t in target_tables:
-                    lines.append(f"relationship '{from_t}_{to_t}'")
-                    lines.append(f"\tfromColumn: '{from_t}'.'{rel.get('FromColumn')}'")
-                    lines.append(f"\ttoColumn: '{to_t}'.'{rel.get('ToColumn')}'")
-                    lines.append(f"\tisActive: {str(rel.get('IsActive', 'true')).lower()}")
-                    lines.append(f"\tcrossFilteringBehavior: {rel.get('CrossFilteringBehavior', 'both')}")
-                    lines.append("")
-                    
-        tmdl = "\n".join(lines)
+    # Power Queries (M)
+    pq_dict = {}
+    if getattr(model, 'power_query', None) is not None:
+        if isinstance(model.power_query, dict):
+            pq_dict = model.power_query
+        elif not getattr(model.power_query, 'empty', True) and 'TableName' in model.power_query.columns:
+            for _, row in model.power_query.iterrows():
+                pq_dict[row['TableName']] = str(row.get('Expression', ''))
+                
+    for t in target_tables:
+        lines.append(f"table '{t}'")
+        # M source
+        if t in pq_dict:
+            expr = pq_dict[t]
+            if redact_pii:
+                expr = _redact_sensitive_strings(expr)
+            lines.append(f"\tpartition '{t}-Partition' = m")
+            lines.append(f"\t\tmode: import")
+            lines.append(f"\t\tsource = \n```\n{expr}\n```\n")
         
+        # Columns
+        if getattr(model, 'dax_columns', None) is not None and not getattr(model.dax_columns, 'empty', True) and 'TableName' in model.dax_columns.columns:
+            cols = model.dax_columns[model.dax_columns['TableName'] == t]
+            for _, row in cols.iterrows():
+                cname = row.get('ColumnName', row.get('Name', ''))
+                cexpr = row.get('Expression', '')
+                lines.append(f"\tcolumn '{cname}'")
+                lines.append(f"\t\tdataType: {row.get('DataType', 'unknown')}")
+                if str(row.get('IsHidden', '')).lower() == 'true':
+                    lines.append(f"\t\tisHidden")
+                if cexpr:
+                    lines.append(f"\t\texpression = \n\t\t\t```\n\t\t\t{cexpr}\n\t\t\t```")
+                lines.append("")
+                
+        # Measures
+        if getattr(model, 'dax_measures', None) is not None and not getattr(model.dax_measures, 'empty', True) and 'TableName' in model.dax_measures.columns:
+            meas = model.dax_measures[model.dax_measures['TableName'] == t]
+            for _, row in meas.iterrows():
+                mname = row.get('Name', '')
+                mexpr = row.get('Expression', '')
+                lines.append(f"\tmeasure '{mname}' = \n\t\t```\n\t\t{mexpr}\n\t\t```")
+                if row.get('DisplayFolder'):
+                    lines.append(f"\t\tdisplayFolder: {row.get('DisplayFolder')}")
+                if row.get('FormatString'):
+                    lines.append(f"\t\tformatString: {row.get('FormatString')}")
+                if str(row.get('IsHidden', '')).lower() == 'true':
+                    lines.append(f"\t\tisHidden")
+                lines.append("")
+                
+    # Relationships
+    if getattr(model, 'relationships', None) is not None and not getattr(model.relationships, 'empty', True) and 'FromTable' in model.relationships.columns and 'ToTable' in model.relationships.columns:
+        for _, rel in model.relationships.iterrows():
+            from_t = rel.get('FromTable')
+            to_t = rel.get('ToTable')
+            if from_t in target_tables and to_t in target_tables:
+                lines.append(f"relationship '{from_t}_{to_t}'")
+                lines.append(f"\tfromColumn: '{from_t}'.'{rel.get('FromColumn')}'")
+                lines.append(f"\ttoColumn: '{to_t}'.'{rel.get('ToColumn')}'")
+                lines.append(f"\tisActive: {str(rel.get('IsActive', 'true')).lower()}")
+                lines.append(f"\tcrossFilteringBehavior: {rel.get('CrossFilteringBehavior', 'both')}")
+                lines.append("")
+                
+    tmdl = "\n".join(lines)
+    
     num_tables = len(target_tables)
     num_measures = len(model.dax_measures) if getattr(model, 'dax_measures', None) is not None else 0
     num_rels = len(model.relationships) if getattr(model, 'relationships', None) is not None else 0
@@ -1998,14 +2006,13 @@ Total Relationships: {num_rels}
 
 <task>
 Read the TMDL payload provided above.
-For your first response, output STRICTLY the following exact phrase: "MODEL RECEIVED AND PARSED. READY FOR DOCUMENTATION TASKS."
-Do not generate the documentation yet. Wait for my specific follow-up prompts regarding which tables to document.
-When generating definitions, you MUST use the following JSON schema to allow for offline round-trip integration back into the local HTML file:
+Your task is to generate the definitions and business logic.
+You MUST output your response strictly as a JSON array using the following schema.
+Return ONLY the JSON array. Do not output any conversational text or acknowledgement.
 
 ```json
 [{{"schema_version":"1","object_type":"measure|column|table","table":"...","object_name":"...","definition":"...","business_logic":"..."}}]
 ```
-Return ONLY the JSON array, no prose.
 </task>
 """
     return prompt

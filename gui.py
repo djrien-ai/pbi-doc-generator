@@ -7,6 +7,7 @@ the resulting HTML documentation in a browser.
 """
 
 import os
+import sys
 import threading
 import webbrowser
 import tkinter as tk
@@ -15,11 +16,12 @@ import random
 import string
 from extract import __version__, ExtractionError
 
-try:
-    import pyi_splash
-    pyi_splash.close()
-except ImportError:
-    pass
+if getattr(sys, 'frozen', False):
+    try:
+        import pyi_splash
+        pyi_splash.close()
+    except ImportError:
+        pass
 
 # ── Style (tunable) ──────────────────────────────────────────────
 MATRIX_RAIN = True
@@ -186,24 +188,69 @@ def show_error_dialog(parent, code, report, repo_url):
     btn_copy.pack(side="right")
 
 def show_summary_dialog(parent, degraded_units):
+    """Show a pop-up summarizing which units fell back to empty/degraded extraction."""
     dlg = tk.Toplevel(parent)
-    dlg.title("Generated with Issues")
-    dlg.configure(bg=BG)
-    dlg.geometry("500x300")
+    dlg.title("Extraction Warning")
+    dlg.geometry("400x250")
+    dlg.configure(bg=BG_DARK)
     dlg.transient(parent)
     dlg.grab_set()
-    
-    lbl = tk.Label(dlg, text=f"Documentation generated, but {len(degraded_units)} units failed:",
-                   bg=BG, fg=ERROR, font=("Segoe UI", 10, "bold"))
-    lbl.pack(pady=10)
-    
-    txt = tk.Text(dlg, bg=BG_LIGHT, fg=FG, font=("Consolas", 9))
-    txt.pack(fill="both", expand=True, padx=10, pady=5)
-    for name, code in degraded_units:
-        txt.insert("end", f"- {name} ({code})\n")
+
+    lbl = ttk.Label(
+        dlg,
+        text="The following components could not be fully extracted and were skipped or partially extracted:",
+        wraplength=360,
+    )
+    lbl.pack(pady=10, padx=10)
+
+    txt = tk.Text(dlg, width=45, height=6, bg=BG_LIGHT, fg=FG_LIGHT, borderwidth=0, font=("Consolas", 9))
+    txt.insert("1.0", "\n".join(degraded_units))
     txt.config(state="disabled")
+    txt.pack(pady=5, padx=10)
+
+    btn = ttk.Button(dlg, text="OK", command=dlg.destroy)
+    btn.pack(pady=10)
+
+
+def show_md_instructions_dialog(parent):
+    """Show instructions for what to do with the generated MD file."""
+    if getattr(parent, 'skip_md_instruction', False):
+        return
+    dlg = tk.Toplevel(parent)
+    dlg.title("AI Prompt Pack Next Steps")
+    dlg.geometry("450x260")
+    dlg.configure(bg=BG_DARK)
+    dlg.transient(parent)
+    dlg.grab_set()
+
+    instructions = (
+        "1. Open the generated .md Prompt Pack file.\n\n"
+        "2. Copy the entire contents and paste into your AI (e.g. ChatGPT, Claude).\n\n"
+        "3. Copy the exact JSON array the AI returns.\n\n"
+        "4. Open the generated HTML file in your browser.\n\n"
+        "5. Expand the 'AI Assistant' tab at the top and paste the JSON to inject the definitions!"
+    )
+
+    lbl = ttk.Label(dlg, text=instructions, wraplength=410, justify="left", font=("Segoe UI", 10))
+    lbl.pack(pady=15, padx=20, fill="x")
+
+    var_skip = tk.BooleanVar(value=False)
+    cb = ttk.Checkbutton(dlg, text="Don't show this again for next file", variable=var_skip)
+    cb.pack(pady=5, padx=20, anchor="w")
+
+    def on_ok():
+        if var_skip.get():
+            parent.skip_md_instruction = True
+        dlg.destroy()
+
+    btn = ttk.Button(dlg, text="Got it!", command=on_ok)
+    btn.pack(pady=10)
     
-    ttk.Button(dlg, text="OK", command=dlg.destroy).pack(pady=10)
+    dlg.update_idletasks()
+    x = parent.winfo_x() + (parent.winfo_width() - dlg.winfo_reqwidth()) // 2
+    y = parent.winfo_y() + (parent.winfo_height() - dlg.winfo_reqheight()) // 2
+    dlg.geometry(f"+{x}+{y}")
+
 
 class App(tk.Tk):
     """Main application window."""
@@ -255,6 +302,13 @@ class App(tk.Tk):
         )
         style.map("Open.TButton", background=[("active", "#3ab553")])
 
+        style.configure("TCombobox", background=BG_LIGHT, fieldbackground=BG_LIGHT, foreground=FG)
+        style.map("TCombobox", fieldbackground=[("readonly", BG_LIGHT)], foreground=[("readonly", FG)])
+        self.option_add("*TCombobox*Listbox.background", BG_LIGHT)
+        self.option_add("*TCombobox*Listbox.foreground", FG)
+        self.option_add("*TCombobox*Listbox.selectBackground", ACCENT)
+        self.option_add("*TCombobox*Listbox.selectForeground", FG)
+
         # ── main container ─────────────────────────────────────
         container = ttk.Frame(self, padding=30)
         container.pack(fill="both", expand=True)
@@ -305,7 +359,10 @@ class App(tk.Tk):
         )
         sys_cb.pack(pady=(0, 6))
 
-        # ── AI Export Options ──────────────────────────────────
+        # --- State Variables ---
+        self.skip_md_instruction = False
+        
+        # --- Advanced Options ---
         self.ai_container = ttk.Frame(container)
         self.ai_container.pack(pady=(0, 6), fill="x")
         
@@ -411,6 +468,7 @@ class App(tk.Tk):
                 self._ai_pane_grid_info[child] = child.grid_info()
                 child.grid_forget()
             self.ai_pane.grid_forget()
+        self._adjust_window_size()
             
     def _update_ai_pane_state(self, event=None):
         if self._output_mode.get() == "HTML documentation":
@@ -419,6 +477,15 @@ class App(tk.Tk):
         else:
             self.scope_cb.config(state="readonly")
             self.redact_chk.state(['!disabled'])
+
+    def _adjust_window_size(self):
+        self.update_idletasks()
+        req_h = self.winfo_reqheight()
+        current_geom = self.geometry()
+        width = current_geom.split('x')[0]
+        x_y = current_geom.split('+')[1:]
+        self.minsize(int(width), 460)
+        self.geometry(f"{width}x{req_h}+{x_y[0]}+{x_y[1]}")
 
     def _on_select(self):
         """Open a file dialog, then kick off extraction in a thread."""
@@ -514,6 +581,10 @@ class App(tk.Tk):
             command=lambda p=result_path: threading.Thread(target=webbrowser.open, args=(p,), daemon=True).start(),
         )
         self.open_btn.pack(pady=(12, 0))
+        self._adjust_window_size()
+        
+        if self._output_mode.get() in ("AI Prompt-Pack (.md) only", "Both"):
+            show_md_instructions_dialog(self)
 
     def _on_error(self, message: str):
         """Show an error message in red."""
