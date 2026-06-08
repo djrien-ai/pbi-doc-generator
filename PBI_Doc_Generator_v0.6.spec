@@ -1,10 +1,14 @@
 # -*- mode: python ; coding: utf-8 -*-
+from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs
+
+pbixray_datas = collect_data_files('pbixray')
+pbixray_binaries = collect_dynamic_libs('pbixray')
 
 a = Analysis(
     ['gui.py'],
     pathex=[],
-    binaries=[],
-    datas=[('html_template.py', '.')],
+    binaries=pbixray_binaries,
+    datas=[('html_template.py', '.')] + pbixray_datas,
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
