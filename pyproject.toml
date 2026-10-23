@@ -29,7 +29,7 @@ classifiers = [
 ]
 
 dependencies = [
-    "pbixray==0.1.21",
+    "pbixray==0.15.5",
     "pandas>=2.0.0,<3.0.0",
 ]
 
