@@ -44,15 +44,14 @@ all = [
 
 [project.urls]
 Homepage = "https://github.com/djrien-ai/pbi-doc-generator"
+"Live Demo" = "https://djrien-ai.github.io/pbi-doc-generator/"
 Repository = "https://github.com/djrien-ai/pbi-doc-generator"
 Issues = "https://github.com/djrien-ai/pbi-doc-generator/issues"
+"Author LinkedIn" = "https://www.linkedin.com/in/rien-scheerlinck/"
 
 [project.scripts]
 pbi-doc-generator = "pbi_catalog.cli:main"
 
-[project.gui-scripts]
-pbi-doc-generator-legacy-gui = "gui:main"
-
 [tool.setuptools]
 packages = ["pbi_catalog"]
-py-modules = ["launcher", "gui", "extract", "html_template", "pbip_adapter", "tmdl_parser", "dax_parser", "mermaid_js", "excel_extractor"]
+py-modules = ["launcher", "extract", "html_template", "pbip_adapter", "tmdl_parser", "dax_parser", "mermaid_js", "excel_extractor"]
