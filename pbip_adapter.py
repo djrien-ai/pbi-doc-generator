@@ -19,9 +19,10 @@ class PbipAdapter:
                 rows.append({
                     'TableName': t.name,
                     'PartitionName': p.partition_name,
-                    'Expression': p.source_code
+                    'Expression': p.source_code,
+                    'Description': getattr(t, 'description', '')
                 })
-        return pd.DataFrame(rows) if rows else pd.DataFrame(columns=['TableName', 'PartitionName', 'Expression'])
+        return pd.DataFrame(rows) if rows else pd.DataFrame(columns=['TableName', 'PartitionName', 'Expression', 'Description'])
         
     @property
     def dax_measures(self):

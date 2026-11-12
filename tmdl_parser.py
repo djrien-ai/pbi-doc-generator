@@ -69,6 +69,7 @@ class MQueryInfo:
 class TableInfo:
     """A table with its columns, measures, partitions and hierarchies."""
     name: str
+    description: str = ""
     columns: List[ColumnInfo] = field(default_factory=list)
     measures: List[MeasureInfo] = field(default_factory=list)
     partitions: List[MQueryInfo] = field(default_factory=list)
@@ -294,12 +295,29 @@ def _parse_table_file(path: str) -> TableInfo:
     if not lines:
         return TableInfo(name=os.path.splitext(os.path.basename(path))[0])
 
-    # ── Table name ──────────────────────────────────────────────────
-    table_name, _ = _parse_name_from_header(lines[0], "table")
-
-    table = TableInfo(name=table_name)
-    idx = 1
+    # ── Table description (leading /// lines) & Table name ──────────
     total = len(lines)
+    hdr_idx = 0
+    desc_lines: List[str] = []
+    while hdr_idx < total:
+        s = lines[hdr_idx].strip()
+        if not s:
+            hdr_idx += 1
+            continue
+        if s.startswith("///"):
+            desc_lines.append(s[3:].strip())
+            hdr_idx += 1
+            continue
+        break
+
+    if hdr_idx < total:
+        table_name, _ = _parse_name_from_header(lines[hdr_idx], "table")
+        idx = hdr_idx + 1
+    else:
+        table_name = os.path.splitext(os.path.basename(path))[0]
+        idx = total
+
+    table = TableInfo(name=table_name, description=" ".join(d for d in desc_lines if d))
 
     while idx < total:
         line = lines[idx]

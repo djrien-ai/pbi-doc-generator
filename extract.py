@@ -899,8 +899,13 @@ def build_data_sources(pq_df, dax_tables_df, m_params_df, include_system_tables=
 
     if pq_df.empty or 'TableName' not in pq_df.columns:
         pq_dict = {}
+        pq_desc = {}
     else:
         pq_dict = dict(zip(pq_df['TableName'], pq_df['Expression']))
+        pq_desc = (
+            dict(zip(pq_df['TableName'], pq_df['Description'].fillna('').astype(str)))
+            if 'Description' in pq_df.columns else {}
+        )
 
     dax_table_names = set()
     if dax_tables_df is not None and len(dax_tables_df) > 0:
@@ -960,7 +965,7 @@ def build_data_sources(pq_df, dax_tables_df, m_params_df, include_system_tables=
         if sec_idx > 1:
             h += f'<hr>\n'
         h += f'<h3 id="{sec_id}">1.{sec_idx} {cat_name} <a href="#{sec_id}" class="section-anchor">#</a></h3>\n'
-        h += "<table>\n<thead><tr><th>#</th><th>Table Name</th><th>Connection Type</th><th>Source Excerpt</th></tr></thead>\n<tbody>\n"
+        h += "<table>\n<thead><tr><th>#</th><th>Table Name</th><th>Description</th><th>Connection Type</th><th>Source Excerpt</th></tr></thead>\n<tbody>\n"
         
         for i, (tbl_name, conn_type, m_code) in enumerate(cat_list, 1):
             # Try to extract HANA specifics if it's HANA
@@ -973,9 +978,10 @@ def build_data_sources(pq_df, dax_tables_df, m_params_df, include_system_tables=
             if conn_type == "SAP HANA":
                 pkg, view, _ = _extract_hana_info(m_code)
                 excerpt = f"Package: {pkg} / View: {view}"
+            tbl_desc = pq_desc.get(tbl_name, "").strip()
                 
             h += f'<tr data-object-type="table" data-object-name="{_esc(tbl_name)}" data-table="{_esc(tbl_name)}"><td>{i}</td><td><strong><a href="#sec2-tbl-{_safe_id(tbl_name)}">{_esc(tbl_name)}</a></strong></td>'
-            h += f'<td>{_esc(conn_type)}</td><td>{_code(excerpt)}</td></tr>\n'
+            h += f'<td>{_esc(tbl_desc) if tbl_desc else "-"}</td><td>{_esc(conn_type)}</td><td>{_code(excerpt)}</td></tr>\n'
         h += "</tbody></table>\n"
         sec_idx += 1
 
