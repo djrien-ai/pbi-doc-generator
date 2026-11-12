@@ -4,6 +4,8 @@ Workspace, Semantic Model, Report, Dataflow, and Governance Metadata Scanner.
 
 from __future__ import annotations
 
+import re
+from pathlib import Path
 from typing import Callable
 
 from .analyzer import bundle_from_local_tmdl_dir
@@ -216,8 +218,9 @@ class WorkspaceScanner:
     @staticmethod
     def register_local_tmdl(store: CatalogStore, path: str, workspace_name: str = "Local Projects") -> dict:
         """Import a local `.pbip` or `.SemanticModel` directory directly into the catalog store."""
-        model_name, bundle = bundle_from_local_tmdl_dir(path)
-        ds_id = f"local-{ abs(hash(str(path))) % 10**10:010d}"
+        p = Path(path).resolve()
+        model_name, bundle = bundle_from_local_tmdl_dir(p)
+        ds_id = f"local-{abs(hash(str(p).lower())) % 10**10:010d}"
         ws_id = "local-workspace"
 
         state = store.load()
@@ -241,14 +244,310 @@ class WorkspaceScanner:
             "workspace": workspace_name,
             "configured_by": "Local Developer",
             "created_date": utc_now_iso(),
-            "target_storage_mode": "TMDL",
+            "target_storage_mode": "TMDL (PBIP)",
             "is_refreshable": False,
             "datasources": [],
-            "last_refresh": {"status": "Local", "end_time": utc_now_iso(), "refresh_type": "File"},
+            "last_refresh": {"status": "Local", "end_time": utc_now_iso(), "refresh_type": "PBIP"},
             "permissions": [],
             "workspace_users": [],
             "definition_status": "ok",
             "definition_read_at": utc_now_iso(),
         }
+
+        # Register sibling .Report folder if present so downstream report lineage lights up
+        search_root = p.parent if (p.is_file() or p.name.endswith(".SemanticModel")) else p
+        rep_dirs = list(search_root.glob("*.Report"))
+        if rep_dirs:
+            for rdir in rep_dirs:
+                rep_name = rdir.name[: -len(".Report")]
+                rep_id = f"rep-{abs(hash(str(rdir).lower())) % 10**10:010d}"
+                state["reports"][rep_id] = {
+                    "id": rep_id,
+                    "name": rep_name,
+                    "workspace_id": ws_id,
+                    "workspace": workspace_name,
+                    "dataset_id": ds_id,
+                    "report_type": "PowerBIReport (PBIP)",
+                }
+
         store.save(state)
         return state["models"][ds_id]
+
+    @staticmethod
+    def register_local_pbix_or_xlsx(store: CatalogStore, path: str, workspace_name: str = "Local Projects") -> dict:
+        """Convert a local `.pbix` or `.xlsx` file (via PBIXRay / excel_extractor) into a catalog TMDL bundle."""
+        import sys as _sys
+
+        p = Path(path).resolve()
+        if not p.is_file():
+            raise FileNotFoundError(f"File not found: {p}")
+
+        root_dir = str(Path(__file__).resolve().parent.parent)
+        if root_dir not in _sys.path:
+            _sys.path.insert(0, root_dir)
+
+        is_excel = p.suffix.lower() == ".xlsx"
+        from pbixray import PBIXRay  # type: ignore
+
+        model = None
+        try:
+            model = PBIXRay(str(p))
+        except Exception as exc:
+            if not is_excel:
+                raise ValueError(f"Could not read PBIX data model from '{p.name}': {exc}") from exc
+
+        pq_override = None
+        if is_excel:
+            import excel_extractor  # type: ignore
+
+            pq_override = excel_extractor.extract_excel_power_query(str(p))
+
+        def _q(name: str) -> str:
+            escaped = str(name).replace("'", "''")
+            return f"'{escaped}'"
+
+        def _fenced(code_text: str, tabs: int) -> str:
+            pad = "\t" * tabs
+            body_lines = [f"{pad}{ln}" for ln in str(code_text or "").splitlines()]
+            return "```\n" + "\n".join(body_lines) + f"\n{pad}```"
+
+        def _clean_str(val: object) -> str:
+            if val is None:
+                return ""
+            s = str(val).strip()
+            return "" if s.lower() == "nan" else s
+
+        dtype_map = {
+            "int64": "int64",
+            "Int64": "int64",
+            "float64": "double",
+            "Float64": "double",
+            "bool": "boolean",
+            "boolean": "boolean",
+            "datetime64[ns]": "dateTime",
+            "decimal": "decimal",
+            "string": "string",
+            "object": "string",
+        }
+
+        all_tables: list[str] = []
+        seen_tables: set[str] = set()
+
+        def _add_tbl(tname: str) -> None:
+            t = _clean_str(tname)
+            if t and t not in seen_tables:
+                seen_tables.add(t)
+                all_tables.append(t)
+
+        if model is not None and getattr(model, "tables", None) is not None:
+            for t in model.tables:
+                _add_tbl(str(t))
+
+        pq_df = pq_override if pq_override is not None else (getattr(model, "power_query", None) if model is not None else None)
+        dax_tables_df = getattr(model, "dax_tables", None) if model is not None else None
+        schema_df = getattr(model, "schema", None) if model is not None else None
+        measures_df = getattr(model, "dax_measures", None) if model is not None else None
+        calc_cols_df = getattr(model, "dax_columns", None) if model is not None else None
+        rels_df = getattr(model, "relationships", None) if model is not None else None
+        params_df = getattr(model, "m_parameters", None) if model is not None else None
+
+        for df in (pq_df, dax_tables_df, schema_df, measures_df, calc_cols_df):
+            if df is not None and not getattr(df, "empty", True) and "TableName" in df.columns:
+                for t in df["TableName"].dropna().astype(str).tolist():
+                    _add_tbl(t)
+
+        pq_by_tbl: dict[str, list[str]] = {}
+        if pq_df is not None and not getattr(pq_df, "empty", True) and "TableName" in pq_df.columns:
+            for _, row in pq_df.iterrows():
+                t = _clean_str(row.get("TableName"))
+                expr = _clean_str(row.get("Expression"))
+                if t and expr:
+                    pq_by_tbl.setdefault(t, []).append(expr)
+
+        dax_tbl_by_name: dict[str, str] = {}
+        if dax_tables_df is not None and not getattr(dax_tables_df, "empty", True) and "TableName" in dax_tables_df.columns:
+            for _, row in dax_tables_df.iterrows():
+                t = _clean_str(row.get("TableName"))
+                expr = _clean_str(row.get("Expression"))
+                if t and expr:
+                    dax_tbl_by_name[t] = expr
+
+        calc_col_map: dict[tuple[str, str], str] = {}
+        if calc_cols_df is not None and not getattr(calc_cols_df, "empty", True):
+            for _, row in calc_cols_df.iterrows():
+                t = _clean_str(row.get("TableName"))
+                c = _clean_str(row.get("ColumnName", row.get("Name")))
+                expr = _clean_str(row.get("Expression"))
+                if t and c and expr:
+                    calc_col_map[(t, c)] = expr
+
+        cols_by_tbl: dict[str, list[tuple[str, str]]] = {}
+        seen_cols: set[tuple[str, str]] = set()
+        if schema_df is not None and not getattr(schema_df, "empty", True):
+            for _, row in schema_df.iterrows():
+                t = _clean_str(row.get("TableName"))
+                c = _clean_str(row.get("ColumnName"))
+                dt_raw = _clean_str(row.get("PandasDataType", row.get("DataType", "string")))
+                if t and c and (t, c) not in seen_cols:
+                    seen_cols.add((t, c))
+                    cols_by_tbl.setdefault(t, []).append((c, dtype_map.get(dt_raw, "string")))
+        for (t, c) in calc_col_map:
+            if (t, c) not in seen_cols:
+                seen_cols.add((t, c))
+                cols_by_tbl.setdefault(t, []).append((c, "string"))
+
+        meas_by_tbl: dict[str, list[dict]] = {}
+        if measures_df is not None and not getattr(measures_df, "empty", True):
+            for _, row in measures_df.iterrows():
+                t = _clean_str(row.get("TableName"))
+                mname = _clean_str(row.get("Name"))
+                if not t or not mname:
+                    continue
+                meas_by_tbl.setdefault(t, []).append(
+                    {
+                        "name": mname,
+                        "expr": _clean_str(row.get("Expression")),
+                        "folder": _clean_str(row.get("DisplayFolder")),
+                        "format": _clean_str(row.get("FormatString")),
+                        "desc": _clean_str(row.get("Description")),
+                    }
+                )
+
+        files_dict: dict[str, str] = {"definition/model.tmdl": "model Model\n\tculture: en-US\n"}
+
+        if params_df is not None and not getattr(params_df, "empty", True):
+            expr_lines: list[str] = []
+            for _, row in params_df.iterrows():
+                pname = _clean_str(row.get("ParameterName", row.get("Name")))
+                pexpr = _clean_str(row.get("Expression"))
+                pdesc = _clean_str(row.get("Description"))
+                if not pname or not pexpr:
+                    continue
+                if pdesc:
+                    for dln in pdesc.splitlines():
+                        expr_lines.append(f"/// {dln}")
+                expr_lines.append(f"expression {_q(pname)} = {_fenced(pexpr, 2)}")
+                expr_lines.append("")
+            if expr_lines:
+                files_dict["definition/expressions.tmdl"] = "\n".join(expr_lines)
+
+        if rels_df is not None and not getattr(rels_df, "empty", True):
+            rel_lines: list[str] = []
+            for idx, (_, row) in enumerate(rels_df.iterrows(), 1):
+                ft = _clean_str(row.get("FromTableName", row.get("FromTable")))
+                fc = _clean_str(row.get("FromColumnName", row.get("FromColumn")))
+                tt = _clean_str(row.get("ToTableName", row.get("ToTable")))
+                tc = _clean_str(row.get("ToColumnName", row.get("ToColumn")))
+                if not (ft and fc and tt and tc):
+                    continue
+                card_raw = _clean_str(row.get("Cardinality", "M:1")).upper()
+                fcard = "one" if card_raw.startswith("1:") else "many"
+                tcard = "many" if card_raw.endswith(":M") else "one"
+                cf_raw = _clean_str(row.get("CrossFilteringBehavior", "Single")).lower()
+                cf_val = "bothDirections" if cf_raw in ("2", "both", "bothdirections") else "oneDirection"
+                act_raw = row.get("IsActive", True)
+                is_active = str(act_raw).strip().lower() not in ("0", "false")
+                rel_lines.append(f"relationship rel_{idx}")
+                rel_lines.append(f"\tfromColumn: {_q(ft)}.{_q(fc)}")
+                rel_lines.append(f"\ttoColumn: {_q(tt)}.{_q(tc)}")
+                rel_lines.append(f"\tfromCardinality: {fcard}")
+                rel_lines.append(f"\ttoCardinality: {tcard}")
+                rel_lines.append(f"\tcrossFilteringBehavior: {cf_val}")
+                if not is_active:
+                    rel_lines.append("\tisActive: false")
+                rel_lines.append("")
+            if rel_lines:
+                files_dict["definition/relationships.tmdl"] = "\n".join(rel_lines)
+
+        for idx, tname in enumerate(all_tables, 1):
+            safe_file = re.sub(r"[^A-Za-z0-9._-]+", "_", tname).strip("_") or f"table_{idx}"
+            tlines = [f"table {_q(tname)}"]
+            for m in meas_by_tbl.get(tname, []):
+                if m["desc"]:
+                    for dln in m["desc"].splitlines():
+                        tlines.append(f"\t/// {dln}")
+                tlines.append(f"\tmeasure {_q(m['name'])} = {_fenced(m['expr'], 3)}")
+                if m["format"]:
+                    tlines.append(f"\t\tformatString: {m['format']}")
+                if m["folder"]:
+                    tlines.append(f"\t\tdisplayFolder: {m['folder']}")
+            for cname, cdtype in cols_by_tbl.get(tname, []):
+                cexpr = calc_col_map.get((tname, cname), "")
+                if cexpr:
+                    tlines.append(f"\tcolumn {_q(cname)} = {_fenced(cexpr, 3)}")
+                    tlines.append(f"\t\tdataType: {cdtype}")
+                else:
+                    tlines.append(f"\tcolumn {_q(cname)}")
+                    tlines.append(f"\t\tdataType: {cdtype}")
+                    tlines.append(f"\t\tsourceColumn: {cname}")
+            if tname in dax_tbl_by_name:
+                tlines.append(f"\tpartition {_q(tname)} = calculated")
+                tlines.append("\t\tmode: import")
+                tlines.append(f"\t\tsource = {_fenced(dax_tbl_by_name[tname], 3)}")
+            else:
+                for p_i, m_expr in enumerate(pq_by_tbl.get(tname, []), 1):
+                    pname = tname if p_i == 1 else f"{tname}_{p_i}"
+                    tlines.append(f"\tpartition {_q(pname)} = m")
+                    tlines.append("\t\tmode: import")
+                    tlines.append(f"\t\tsource = {_fenced(m_expr, 3)}")
+            files_dict[f"definition/tables/{idx:03d}_{safe_file}.tmdl"] = "\n".join(tlines) + "\n"
+
+        model_name = p.stem
+        ds_id = f"local-{abs(hash(str(p).lower())) % 10**10:010d}"
+        ws_id = "local-workspace"
+
+        state = store.load()
+        state["workspaces"][ws_id] = {
+            "id": ws_id,
+            "name": workspace_name,
+            "type": "Local",
+            "capacity_sku": "Local Disk",
+            "is_dedicated": False,
+            "is_read_only": True,
+            "users": [],
+            "last_scanned": utc_now_iso(),
+        }
+        store.write_tmdl_bundle(model_name, ds_id, files_dict)
+
+        fmt_label = "Excel Data Model (.xlsx)" if is_excel else "PBIX Binary (.pbix)"
+        state["models"][ds_id] = {
+            "id": ds_id,
+            "name": model_name,
+            "workspace_id": ws_id,
+            "workspace": workspace_name,
+            "configured_by": "Local Developer",
+            "created_date": utc_now_iso(),
+            "target_storage_mode": fmt_label,
+            "is_refreshable": False,
+            "datasources": [],
+            "last_refresh": {"status": "Local", "end_time": utc_now_iso(), "refresh_type": p.suffix.upper().lstrip(".")},
+            "permissions": [],
+            "workspace_users": [],
+            "definition_status": "ok",
+            "definition_read_at": utc_now_iso(),
+        }
+
+        if not is_excel:
+            rep_id = f"rep-{ds_id}"
+            state["reports"][rep_id] = {
+                "id": rep_id,
+                "name": f"{model_name} (Embedded Report)",
+                "workspace_id": ws_id,
+                "workspace": workspace_name,
+                "dataset_id": ds_id,
+                "report_type": "PowerBIReport (PBIX)",
+            }
+
+        store.save(state)
+        return state["models"][ds_id]
+
+    @classmethod
+    def register_local_any(cls, store: CatalogStore, path: str, workspace_name: str = "Local Projects") -> dict:
+        """Import any supported local Power BI artifact (.pbip, .SemanticModel folder, .pbix, or .xlsx) into the catalog."""
+        p = Path(path).expanduser().resolve()
+        if p.is_dir() or p.suffix.lower() in (".pbip", ".tmdl"):
+            target = p.parent if (p.is_file() and p.suffix.lower() == ".tmdl") else p
+            return cls.register_local_tmdl(store, str(target), workspace_name=workspace_name)
+        if p.suffix.lower() in (".pbix", ".xlsx"):
+            return cls.register_local_pbix_or_xlsx(store, str(p), workspace_name=workspace_name)
+        raise ValueError(f"Unsupported path '{p}'. Provide a .pbix, .pbip, .xlsx, or .SemanticModel directory.")

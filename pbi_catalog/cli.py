@@ -74,8 +74,8 @@ def main(argv: list[str] | None = None) -> int:
     p_portal.add_argument("--anonymous", action="store_true", help="Redact owner and user names")
 
     # import-local
-    p_imp = sub.add_parser("import-local", help="Import a local .pbip or .SemanticModel directory into the catalog")
-    p_imp.add_argument("path", help="Path to local .pbip or .SemanticModel directory")
+    p_imp = sub.add_parser("import-local", help="Import a local .pbix, .pbip, .xlsx, or .SemanticModel into the v1.0 catalog")
+    p_imp.add_argument("path", help="Path to local .pbix, .pbip, .xlsx, or .SemanticModel directory")
     p_imp.add_argument("--catalog", default=str(_default_catalog_dir()), help="Local catalog directory")
     p_imp.add_argument("--workspace-name", default="Local Projects", help="Workspace label in catalog")
 
@@ -124,7 +124,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if cmd == "import-local":
         store = CatalogStore(ns.catalog)
-        WorkspaceScanner.register_local_tmdl(store, ns.path, workspace_name=ns.workspace_name)
+        WorkspaceScanner.register_local_any(store, ns.path, workspace_name=ns.workspace_name)
         idx = generate_portal(store)
         print(f"Imported local project and updated portal: {idx}")
         return 0
@@ -133,9 +133,13 @@ def main(argv: list[str] | None = None) -> int:
         root_dir = str(Path(__file__).resolve().parent.parent)
         if root_dir not in sys.path:
             sys.path.insert(0, root_dir)
-        from extract import generate_documentation  # type: ignore
+        from extract import ExtractionError, extract_documentation  # type: ignore
 
-        out_path = generate_documentation(ns.path, ns.output)
+        res = extract_documentation(ns.path, ns.output)
+        if isinstance(res, ExtractionError):
+            print(f"Extraction error ({res.code}):\n{res.report}", file=sys.stderr)
+            return 1
+        out_path = res[0] if isinstance(res, tuple) else res
         print(f"Generated standalone documentation: {out_path}")
         return 0
 

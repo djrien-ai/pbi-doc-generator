@@ -11,10 +11,16 @@ Verifies:
 
 from __future__ import annotations
 
+import json
 import shutil
 import sys
 import tempfile
+import threading
+import types
+import urllib.request
 from pathlib import Path
+
+import pandas as pd
 
 ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
@@ -23,10 +29,13 @@ if str(ROOT) not in sys.path:
 from pbi_catalog.analyzer import analyze_model
 from pbi_catalog.api import PowerBiReadOnlyClient
 from pbi_catalog.auth import TokenProvider
+from pbi_catalog.cli import main as cli_main
 from pbi_catalog.mcp_server import CatalogMcpEngine, handle_jsonrpc_message
 from pbi_catalog.portal import extract_m_steps, format_dax_pretty, generate_portal
+from pbi_catalog.scanner import WorkspaceScanner
 from pbi_catalog.security import mask_secrets
 from pbi_catalog.store import CatalogStore
+from pbi_catalog.web_ui import create_studio_server
 from tmdl_parser import TmdlModel
 
 
@@ -234,9 +243,196 @@ def test_end_to_end_portal_and_mcp() -> None:
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+def test_local_pbix_and_pbip_import_and_cli_file() -> None:
+    tmp = Path(tempfile.mkdtemp(prefix="pbidoc_local_import_"))
+    try:
+        # 1. Create a local .pbip + .SemanticModel + .Report structure
+        proj_dir = tmp / "SalesDemo"
+        def_dir = proj_dir / "SalesDemo.SemanticModel" / "definition" / "tables"
+        rep_dir = proj_dir / "SalesDemo.Report"
+        def_dir.mkdir(parents=True)
+        rep_dir.mkdir(parents=True)
+        pbip_file = proj_dir / "SalesDemo.pbip"
+        pbip_file.write_text('{"version": "1.0"}', encoding="utf-8")
+        (def_dir.parent / "model.tmdl").write_text("model Model\n\tculture: en-US\n", encoding="utf-8")
+        (def_dir / "FactOrders.tmdl").write_text(
+            "/// Order line fact table.\n"
+            "table 'Fact Orders'\n"
+            "\tmeasure 'Net Revenue' = SUM('Fact Orders'[Amount])\n"
+            "\t\tformatString: $#,##0\n"
+            "\tcolumn Amount\n"
+            "\t\tdataType: decimal\n"
+            "\t\tsourceColumn: Amount\n"
+            "\tpartition 'Fact Orders' = m\n"
+            "\t\tmode: import\n"
+            "\t\tsource =\n"
+            "\t\t\tlet\n"
+            "\t\t\t\tSource = PostgreSQL.Database(\"pg-analytics.contoso.net\", \"sales_dw\")\n"
+            "\t\t\tin\n"
+            "\t\t\t\tSource\n",
+            encoding="utf-8",
+        )
+
+        # Verify legacy single-file CLI (`pbi-doc-generator file <pbip>`) works cleanly
+        standalone_out = tmp / "SalesDemo_Standalone.html"
+        rc = cli_main(["file", str(pbip_file), "-o", str(standalone_out)])
+        assert rc == 0 and standalone_out.is_file(), "CLI `file` subcommand failed on .pbip"
+
+        # 2. Verify PBIX -> v1.0 TMDL bridge (`register_local_pbix_or_xlsx`) with mocked PBIXRay
+        dummy_pbix = tmp / "Executive_Margin.pbix"
+        dummy_pbix.write_bytes(b"PK\x03\x04dummy")
+
+        class FakePBIXRay:
+            def __init__(self, file_path: str):
+                self.tables = ["Fact Margin", "Dim Product"]
+                self.schema = pd.DataFrame(
+                    [
+                        {"TableName": "Fact Margin", "ColumnName": "ProductKey", "PandasDataType": "int64"},
+                        {"TableName": "Fact Margin", "ColumnName": "GrossMargin", "PandasDataType": "float64"},
+                        {"TableName": "Dim Product", "ColumnName": "ProductKey", "PandasDataType": "int64"},
+                        {"TableName": "Dim Product", "ColumnName": "Category", "PandasDataType": "string"},
+                    ]
+                )
+                self.power_query = pd.DataFrame(
+                    [
+                        {
+                            "TableName": "Fact Margin",
+                            "Expression": 'let\n    Source = Sql.Database("sql-dw.contoso.net", "FIN_MART"),\n    Tbl = Source{[Schema="dbo",Item="FACT_MARGIN"]}[Data]\nin\n    Tbl',
+                        },
+                        {
+                            "TableName": "Dim Product",
+                            "Expression": 'let\n    Source = Sql.Database("sql-dw.contoso.net", "FIN_MART"),\n    Tbl = Source{[Schema="dbo",Item="DIM_PRODUCT"]}[Data]\nin\n    Tbl',
+                        },
+                    ]
+                )
+                self.dax_measures = pd.DataFrame(
+                    [
+                        {
+                            "TableName": "Fact Margin",
+                            "Name": "Total Margin",
+                            "Expression": "SUM('Fact Margin'[GrossMargin])",
+                            "DisplayFolder": "01. Financials",
+                            "Description": "Total gross margin in reporting currency.",
+                        },
+                        {
+                            "TableName": "Fact Margin",
+                            "Name": "Margin per Product",
+                            "Expression": "DIVIDE([Total Margin], DISTINCTCOUNT('Dim Product'[ProductKey]), 0)",
+                            "DisplayFolder": "02. Ratios",
+                            "Description": "Average gross margin per distinct product.",
+                        },
+                    ]
+                )
+                self.dax_columns = pd.DataFrame(
+                    [
+                        {
+                            "TableName": "Dim Product",
+                            "ColumnName": "Category Upper",
+                            "Expression": "UPPER('Dim Product'[Category])",
+                        }
+                    ]
+                )
+                self.dax_tables = pd.DataFrame(columns=["TableName", "Expression"])
+                self.m_parameters = pd.DataFrame(
+                    [
+                        {
+                            "ParameterName": "Environment",
+                            "Description": "Target DW environment",
+                            "Expression": '"PROD" meta [IsParameterQuery=true, Type="Text"]',
+                        }
+                    ]
+                )
+                self.relationships = pd.DataFrame(
+                    [
+                        {
+                            "FromTableName": "Fact Margin",
+                            "FromColumnName": "ProductKey",
+                            "ToTableName": "Dim Product",
+                            "ToColumnName": "ProductKey",
+                            "IsActive": 1,
+                            "Cardinality": "M:1",
+                            "CrossFilteringBehavior": "Single",
+                        }
+                    ]
+                )
+
+        real_pbixray_mod = sys.modules.get("pbixray")
+        fake_mod = types.ModuleType("pbixray")
+        fake_mod.PBIXRay = FakePBIXRay  # type: ignore[attr-defined]
+        sys.modules["pbixray"] = fake_mod
+        try:
+            cat_dir = tmp / "cat"
+            store = CatalogStore(cat_dir)
+            WorkspaceScanner.register_local_any(store, str(dummy_pbix))
+            idx = generate_portal(store)
+            assert idx.is_file()
+            html_pages = list((cat_dir / "portal" / "models").glob("*.html"))
+            assert len(html_pages) == 1
+            page_txt = html_pages[0].read_text(encoding="utf-8")
+            assert "Total Margin" in page_txt
+            assert "Margin per Product" in page_txt
+            assert "sql-dw.contoso.net" in page_txt
+            assert "Executive_Margin (Embedded Report)" in page_txt
+        finally:
+            if real_pbixray_mod is not None:
+                sys.modules["pbixray"] = real_pbixray_mod
+            else:
+                sys.modules.pop("pbixray", None)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def test_web_studio_http_endpoints() -> None:
+    tmp = Path(tempfile.mkdtemp(prefix="pbidoc_studio_http_"))
+    try:
+        proj_dir = tmp / "HttpModel.SemanticModel" / "definition" / "tables"
+        proj_dir.mkdir(parents=True)
+        (proj_dir.parent / "model.tmdl").write_text("model Model\n\tculture: en-US\n", encoding="utf-8")
+        (proj_dir / "KPIs.tmdl").write_text(
+            "table KPIs\n\tmeasure 'Order Count' = COUNTROWS(KPIs)\n\tcolumn Id\n\t\tdataType: int64\n\t\tsourceColumn: Id\n",
+            encoding="utf-8",
+        )
+
+        cat_dir = tmp / "studio_cat"
+        httpd, _ = create_studio_server(cat_dir, host="127.0.0.1", port=0)
+        port = httpd.server_address[1]
+        t = threading.Thread(target=httpd.serve_forever, daemon=True)
+        t.start()
+        try:
+            base = f"http://127.0.0.1:{port}"
+            with urllib.request.urlopen(f"{base}/") as r:
+                studio_html = r.read().decode("utf-8")
+                assert r.status == 200 and "Sign in with Microsoft" in studio_html
+
+            with urllib.request.urlopen(f"{base}/api/status") as r:
+                st = json.loads(r.read().decode("utf-8"))
+                assert "auth" in st and "logs" in st
+
+            req = urllib.request.Request(
+                f"{base}/api/import-local",
+                data=json.dumps({"path": str(proj_dir.parent.parent)}).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(req) as r:
+                imp = json.loads(r.read().decode("utf-8"))
+                assert imp["ok"] is True and imp["model_name"] == "HttpModel"
+
+            with urllib.request.urlopen(f"{base}/portal/index.html") as r:
+                portal_html = r.read().decode("utf-8")
+                assert r.status == 200 and "HttpModel" in portal_html
+        finally:
+            httpd.shutdown()
+            httpd.server_close()
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 if __name__ == "__main__":
     test_issue_12_tmdl_table_doc_comment()
     test_secret_masking_and_readonly_guard()
     test_dax_formatter_and_m_steps()
     test_end_to_end_portal_and_mcp()
-    print("ALL 4 V1.0 TEST SUITES PASSED SUCCESSFULLY!")
+    test_local_pbix_and_pbip_import_and_cli_file()
+    test_web_studio_http_endpoints()
+    print("ALL 6 V1.0 TEST SUITES PASSED SUCCESSFULLY!")

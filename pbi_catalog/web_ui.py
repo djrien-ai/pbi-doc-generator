@@ -476,9 +476,14 @@ async function browseLocal() {
 async function importLocalPath() {
   var p = document.getElementById("localPathInput").value.trim();
   if (!p) return;
-  appendLog("Processing " + p + " ...", "localLogBox");
+  appendLog("Importing " + p + " into v1.0 Portal ...", "localLogBox");
   var res = await apiPost("/api/import-local", { path: p });
-  appendLog(res.ok ? "Done! Output: " + res.output : "Error: " + res.error, "localLogBox");
+  appendLog(
+    res.ok
+      ? "Done! Imported '" + (res.model_name || "") + "' into Portal (" + res.output + "). Click 'Open Portal ->' at top-right!"
+      : "Error: " + res.error,
+    "localLogBox"
+  );
 }
 
 setInterval(refreshStatus, 2500);
@@ -503,7 +508,7 @@ class StudioState:
             self.logs = self.logs[-200:]
 
 
-def run_web_studio(catalog_dir: str | Path, host: str = "127.0.0.1", port: int = 8765, open_browser: bool = True) -> None:
+def create_studio_server(catalog_dir: str | Path, host: str = "127.0.0.1", port: int = 8765) -> tuple[http.server.ThreadingHTTPServer, StudioState]:
     state = StudioState(catalog_dir)
     # Ensure initial portal exists if store already has models
     if (state.store.root / "state.json").exists():
@@ -663,22 +668,12 @@ def run_web_studio(catalog_dir: str | Path, host: str = "127.0.0.1", port: int =
             if self.path == "/api/import-local":
                 p = Path(body.get("path", "")).expanduser()
                 try:
-                    if p.is_dir() or p.suffix.lower() in (".pbip", ".tmdl"):
-                        target_dir = p.parent if p.is_file() else p
-                        WorkspaceScanner.register_local_tmdl(state.store, str(target_dir))
-                        idx = generate_portal(state.store)
-                        state.log(f"Imported local TMDL project into portal: {idx}")
-                        self._json({"ok": True, "output": str(idx)})
-                    else:
-                        # Single .pbix or .xlsx via extract.py
-                        root_dir = str(Path(__file__).resolve().parent.parent)
-                        if root_dir not in sys.path:
-                            sys.path.insert(0, root_dir)
-                        from extract import generate_documentation  # type: ignore
-
-                        out_html = generate_documentation(str(p))
-                        self._json({"ok": True, "output": out_html})
+                    meta = WorkspaceScanner.register_local_any(state.store, str(p))
+                    idx = generate_portal(state.store)
+                    state.log(f"Imported '{meta.get('name', p.name)}' into v1.0 Portal: {idx}")
+                    self._json({"ok": True, "model_name": meta.get("name", p.stem), "output": str(idx)})
                 except Exception as exc:
+                    state.log(f"Local import error: {exc}")
                     self._json({"ok": False, "error": str(exc)})
                 return
 
@@ -686,7 +681,13 @@ def run_web_studio(catalog_dir: str | Path, host: str = "127.0.0.1", port: int =
             self.end_headers()
 
     httpd = http.server.ThreadingHTTPServer((host, port), Handler)
-    url = f"http://{host}:{port}"
+    return httpd, state
+
+
+def run_web_studio(catalog_dir: str | Path, host: str = "127.0.0.1", port: int = 8765, open_browser: bool = True) -> None:
+    httpd, _ = create_studio_server(catalog_dir, host=host, port=port)
+    actual_port = httpd.server_address[1]
+    url = f"http://{host}:{actual_port}"
     print(f"Power BI Documentation Studio running at {url}")
     if open_browser:
         threading.Timer(0.4, lambda: webbrowser.open(url)).start()
