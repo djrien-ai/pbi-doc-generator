@@ -9,6 +9,7 @@ import http.server
 import json
 import mimetypes
 import os
+import shutil
 import subprocess
 import sys
 import threading
@@ -349,7 +350,7 @@ STUDIO_HTML = r"""<!DOCTYPE html>
   </div>
   <nav class="mode-tabs">
     <button type="button" class="mode-tab active" data-pane="pane-service">1. Power BI Service (Workspaces &amp; Catalog)</button>
-    <button type="button" class="mode-tab" data-pane="pane-local">2. Local File or Project (.pbix, .pbip, .xlsx)</button>
+    <button type="button" class="mode-tab" data-pane="pane-local">2. Local Power BI Files (.pbix, .pbip, .xlsx)</button>
     <button type="button" class="mode-tab" data-pane="pane-mcp">3. AI Assistant (MCP Server)</button>
   </nav>
 </header>
@@ -401,26 +402,21 @@ STUDIO_HTML = r"""<!DOCTYPE html>
 
     <div class="step-card">
       <div class="step-hdr">
-        <h2 class="step-title"><span class="step-num">3</span> Select Output Preset &amp; Generate Portal</h2>
+        <h2 class="step-title"><span class="step-num">3</span> Generate Documentation Portal</h2>
       </div>
-      <div class="preset-grid">
-        <button type="button" class="preset-box active" data-preset="standard" onclick="selectPreset('standard', this)">
-          <b>Documentation &amp; Live Lineage</b>
-          <span>Models, reports map, Star-Schema diagrams, auto-formatted DAX, visual Power Query &amp; interactive lineage.</span>
-        </button>
-        <button type="button" class="preset-box" data-preset="governance" onclick="selectPreset('governance', this)">
-          <b>Full Governance &amp; Access Audit</b>
-          <span>Includes workspace roles, dataset permissions, refresh health checks &amp; cross-workspace thin report audit.</span>
-        </button>
-        <button type="button" class="preset-box" data-preset="anonymous" onclick="selectPreset('anonymous', this)">
-          <b>Anonymized / External Share</b>
-          <span>Automatically hides owner names, user emails &amp; access tables while masking connection secrets.</span>
-        </button>
-      </div>
+      <p style="margin:0 0 14px 0;color:var(--fg-muted);font-size:13px">
+        Builds the complete interactive HTML portal: Semantic Models, Star-Schema diagrams, formatted DAX &amp; Power Query catalogs, Workspaces &amp; Reports mapping, Governance Health checks, and Live Lineage.
+      </p>
 
-      <div style="display:flex;flex-wrap:wrap;gap:16px;margin-bottom:16px;font-size:13px">
-        <label><input type="checkbox" id="chkAccess"> Include workspace &amp; model user permissions</label>
-        <label><input type="checkbox" id="chkAnon"> Redact personal &amp; owner names (<code>--anonymous</code>)</label>
+      <div style="display:grid;gap:10px;margin-bottom:16px;padding:12px 14px;background:var(--surface-alt);border:1px solid var(--border);border-radius:10px;font-size:13px">
+        <label style="display:flex;align-items:flex-start;gap:9px;cursor:pointer">
+          <input type="checkbox" id="chkAccess" style="margin-top:3px">
+          <span><b>Include user permissions &amp; refresh history</b> <span style="color:var(--fg-muted)">- also fetches who has Admin/Member/Viewer access on each workspace &amp; dataset plus latest refresh status (takes slightly longer on large tenants).</span></span>
+        </label>
+        <label style="display:flex;align-items:flex-start;gap:9px;cursor:pointer">
+          <input type="checkbox" id="chkAnon" style="margin-top:3px">
+          <span><b>Anonymize personal names &amp; emails</b> <span style="color:var(--fg-muted)">- replaces owner names and user emails with <code>Redacted</code> when sharing the HTML folder externally (e.g. with external consultants or auditors).</span></span>
+        </label>
       </div>
 
       <div id="scanBanner" class="inline-banner info" style="display:none;margin-top:0;margin-bottom:14px"></div>
@@ -435,24 +431,38 @@ STUDIO_HTML = r"""<!DOCTYPE html>
     </div>
   </section>
 
-  <!-- MODE 2: LOCAL FILE OR PROJECT -->
+  <!-- MODE 2: LOCAL POWER BI FILES -->
   <section class="pane" id="pane-local">
     <div class="step-card">
-      <h2 class="step-title" style="margin-bottom:8px">Document a Local Power BI File or Git Project (Offline)</h2>
+      <h2 class="step-title" style="margin-bottom:8px">Document Local Power BI Files &amp; Projects</h2>
       <p style="margin:0 0 14px 0;color:var(--fg-muted);font-size:13px">
-        Works completely offline for reports still in development on your laptop. Supports Power BI Project folders (<code>.pbip</code> / <code>.SemanticModel</code>), <code>.pbix</code> files, and Excel PowerPivot (<code>.xlsx</code>).
+        Select local Power BI files directly from your computer (works 100% offline, no Power BI Service sign-in needed): Power BI Desktop files (<code>.pbix</code>), Power BI Project folders (<code>.pbip</code> / <code>.SemanticModel</code>), or Excel PowerPivot workbooks (<code>.xlsx</code>).
       </p>
-      <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
-        <input type="text" id="localPathInput" style="flex:1;min-width:260px" placeholder="Paste path to .pbip, .pbix, .xlsx, or .SemanticModel folder...">
-        <button type="button" class="btn btn-secondary" id="btnBrowseLocal" onclick="browseLocal('file')">Browse File...</button>
-        <button type="button" class="btn btn-secondary" id="btnBrowseFolder" onclick="browseLocal('folder')">Browse Folder...</button>
+
+      <input type="file" id="nativeFilePicker" accept=".pbix,.xlsx,.bim" multiple style="display:none" onchange="handleNativeFiles(this.files)">
+      <input type="file" id="nativeFolderPicker" webkitdirectory directory multiple style="display:none" onchange="handleNativeFolder(this.files)">
+
+      <div id="localDropZone" style="border:2px dashed var(--border);border-radius:12px;padding:22px 20px;background:var(--surface-alt);text-align:center;margin-bottom:14px;transition:border-color 0.15s,background 0.15s">
+        <div style="font-weight:700;font-size:14.5px;margin-bottom:6px">Choose or drag &amp; drop your Power BI file(s) here</div>
+        <div style="font-size:12.5px;color:var(--fg-muted);margin-bottom:14px">Imports directly into your unified v1.0 Documentation &amp; Live Lineage Portal</div>
+        <div style="display:flex;justify-content:center;gap:10px;flex-wrap:wrap">
+          <button type="button" class="btn btn-primary" id="btnPickFile" onclick="document.getElementById('nativeFilePicker').click()">Select .pbix or .xlsx File...</button>
+          <button type="button" class="btn btn-secondary" id="btnPickFolder" onclick="document.getElementById('nativeFolderPicker').click()">Select PBIP Project Folder...</button>
+          <a class="btn btn-success" href="/portal/index.html">Open Documentation Portal &rarr;</a>
+        </div>
       </div>
-      <div style="display:flex;gap:10px">
-        <button type="button" class="btn btn-primary" id="btnImportLocal" onclick="importLocalPath()">Generate Documentation</button>
-        <a class="btn btn-success" href="/portal/index.html">Open Documentation Portal &rarr;</a>
-      </div>
-      <div id="localBanner" class="inline-banner info" style="display:none"></div>
-      <div class="log-box" id="localLogBox">Select a local .pbip / .SemanticModel folder or .pbix / .xlsx file above.</div>
+
+      <div id="localBanner" class="inline-banner info" style="display:none;margin-bottom:12px"></div>
+
+      <details class="subtle">
+        <summary>Or paste a local file or folder path manually</summary>
+        <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+          <input type="text" id="localPathInput" style="flex:1;min-width:260px" placeholder="e.g. C:\Reports\Sales.pbix or C:\Projects\Sales.SemanticModel">
+          <button type="button" class="btn btn-primary" id="btnImportLocal" onclick="importLocalPath()">Generate from Path</button>
+        </div>
+      </details>
+
+      <div class="log-box" id="localLogBox">Ready. Click 'Select .pbix or .xlsx File...' or 'Select PBIP Project Folder...' above.</div>
     </div>
   </section>
 
@@ -750,31 +760,112 @@ async function rebuildPortalOnly() {
   }
 }
 
-async function browseLocal(kind) {
-  var btn1 = document.getElementById("btnBrowseLocal");
-  var btn2 = document.getElementById("btnBrowseFolder");
+async function handleNativeFiles(fileList) {
+  if (!fileList || !fileList.length) return;
+  var files = Array.from(fileList);
+  var btn1 = document.getElementById("btnPickFile");
+  var btn2 = document.getElementById("btnPickFolder");
   if (btn1) btn1.disabled = true;
   if (btn2) btn2.disabled = true;
-  setBanner("localBanner", "info",
-    "<span style='display:flex;align-items:center;gap:10px'><span class='spin'></span><span>Opening Windows " + (kind === "folder" ? "folder" : "file") + " selector window...</span></span>"
-  );
+  var imported = [];
   try {
-    var res = await apiPost("/api/browse-local", { kind: kind || "file" });
-    if (res.path) {
-      document.getElementById("localPathInput").value = res.path;
-      setBanner("localBanner", "ok", "<span>Selected: <b>" + escHtml(res.path) + "</b>. Click <b>Generate Documentation</b> to add it to the Portal.</span>");
-    } else if (res.error) {
-      setBanner("localBanner", "err", "<span><b>Could not open file dialog:</b> " + escHtml(res.error) + "</span>");
-    } else {
-      setBanner("localBanner", "", "");
+    for (var i = 0; i < files.length; i++) {
+      var f = files[i];
+      if (f.name.toLowerCase().endsWith(".pbip")) {
+        setBanner("localBanner", "err", "<span>A <code>.pbip</code> pointer file references a sibling <code>.SemanticModel</code> folder. Click <b>Select PBIP Project Folder...</b> and choose the project folder instead.</span>");
+        return;
+      }
+      setBanner("localBanner", "info", "<span style='display:flex;align-items:center;gap:10px'><span class='spin'></span><span>Importing <b>" + escHtml(f.name) + "</b> (" + (i + 1) + "/" + files.length + ") and building v1.0 Portal...</span></span>");
+      appendLog("Importing " + f.name + " ...", "localLogBox");
+      var resp = await fetch("/api/upload-local-file?name=" + encodeURIComponent(f.name), {
+        method: "POST",
+        headers: { "Content-Type": "application/octet-stream" },
+        body: f
+      });
+      var res = await resp.json();
+      if (!res.ok) {
+        appendLog("Error: " + res.error, "localLogBox");
+        setBanner("localBanner", "err", "<span><b>Import failed for " + escHtml(f.name) + ":</b> " + escHtml(res.error) + "</span>");
+        return;
+      }
+      imported.push(res.model_name || f.name);
+      appendLog("Done! Imported '" + (res.model_name || f.name) + "'.", "localLogBox");
     }
+    await refreshStatus();
+    setBanner("localBanner", "ok",
+      "<span><b>Imported " + escHtml(imported.join(", ")) + "!</b> Added to your v1.0 Documentation &amp; Live Lineage Portal.</span>" +
+      "<a class='btn btn-success' style='padding:6px 14px;font-size:12.5px' href='/portal/index.html'>Open Documentation Portal &rarr;</a>"
+    );
   } catch (err) {
-    setBanner("localBanner", "err", "<span><b>Could not open file dialog:</b> " + escHtml(err) + "</span>");
+    setBanner("localBanner", "err", "<span><b>Upload error:</b> " + escHtml(err) + "</span>");
   } finally {
     if (btn1) btn1.disabled = false;
     if (btn2) btn2.disabled = false;
+    document.getElementById("nativeFilePicker").value = "";
   }
 }
+
+async function handleNativeFolder(fileList) {
+  if (!fileList || !fileList.length) return;
+  var btn1 = document.getElementById("btnPickFile");
+  var btn2 = document.getElementById("btnPickFolder");
+  if (btn1) btn1.disabled = true;
+  if (btn2) btn2.disabled = true;
+  try {
+    setBanner("localBanner", "info", "<span style='display:flex;align-items:center;gap:10px'><span class='spin'></span><span>Reading Power BI Project metadata files...</span></span>");
+    var payloadFiles = [];
+    var allowedExt = [".tmdl", ".pbip", ".pbir", ".pbi", ".bim", ".json", ".m", ".pq"];
+    for (var i = 0; i < fileList.length; i++) {
+      var f = fileList[i];
+      var rel = (f.webkitRelativePath || f.name).replace(/\\/g, "/");
+      var low = rel.toLowerCase();
+      if (low.indexOf("/.pbi/") !== -1 || low.indexOf("/.git/") !== -1 || low.endsWith(".abf")) continue;
+      if (f.size > 15 * 1024 * 1024) continue;
+      var keep = allowedExt.some(function(ext) { return low.endsWith(ext); });
+      if (!keep) continue;
+      var txt = await f.text();
+      payloadFiles.push({ path: rel, content: txt });
+    }
+    if (!payloadFiles.length) {
+      setBanner("localBanner", "err", "<span>No Power BI Project (<code>.tmdl</code> / <code>.pbip</code> / <code>model.bim</code>) metadata files found in the selected folder.</span>");
+      return;
+    }
+    appendLog("Uploading " + payloadFiles.length + " project metadata files...", "localLogBox");
+    var res = await apiPost("/api/upload-local-folder", { files: payloadFiles });
+    if (res.ok) {
+      await refreshStatus();
+      appendLog("Done! Imported '" + res.model_name + "' into Portal.", "localLogBox");
+      setBanner("localBanner", "ok",
+        "<span><b>Imported '" + escHtml(res.model_name) + "'!</b> Added to your v1.0 Documentation &amp; Live Lineage Portal.</span>" +
+        "<a class='btn btn-success' style='padding:6px 14px;font-size:12.5px' href='/portal/index.html'>Open Documentation Portal &rarr;</a>"
+      );
+    } else {
+      appendLog("Error: " + res.error, "localLogBox");
+      setBanner("localBanner", "err", "<span><b>Folder import failed:</b> " + escHtml(res.error) + "</span>");
+    }
+  } catch (err) {
+    setBanner("localBanner", "err", "<span><b>Folder import error:</b> " + escHtml(err) + "</span>");
+  } finally {
+    if (btn1) btn1.disabled = false;
+    if (btn2) btn2.disabled = false;
+    document.getElementById("nativeFolderPicker").value = "";
+  }
+}
+
+(function() {
+  var dz = document.getElementById("localDropZone");
+  if (!dz) return;
+  dz.addEventListener("dragover", function(e) { e.preventDefault(); dz.style.borderColor = "var(--accent)"; dz.style.background = "var(--accent-soft)"; });
+  dz.addEventListener("dragleave", function() { dz.style.borderColor = "var(--border)"; dz.style.background = "var(--surface-alt)"; });
+  dz.addEventListener("drop", function(e) {
+    e.preventDefault();
+    dz.style.borderColor = "var(--border)";
+    dz.style.background = "var(--surface-alt)";
+    if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) {
+      handleNativeFiles(e.dataTransfer.files);
+    }
+  });
+})();
 
 async function importLocalPath() {
   var p = document.getElementById("localPathInput").value.trim();
@@ -907,8 +998,75 @@ def create_studio_server(catalog_dir: str | Path, host: str = "127.0.0.1", port:
             self.end_headers()
 
         def do_POST(self) -> None:  # noqa: N802
+            parsed = urllib.parse.urlparse(self.path)
             length = int(self.headers.get("Content-Length") or "0")
+
+            if parsed.path == "/api/upload-local-file":
+                raw_bytes = self.rfile.read(length) if length else b""
+                qs = urllib.parse.parse_qs(parsed.query)
+                safe_name = Path(qs.get("name", ["model.pbix"])[0]).name
+                staging_root = (state.store.root / "_staged_imports").resolve()
+                staging_root.mkdir(parents=True, exist_ok=True)
+                staged_file = staging_root / safe_name
+                try:
+                    staged_file.write_bytes(raw_bytes)
+                    meta = WorkspaceScanner.register_local_any(state.store, str(staged_file))
+                    idx = generate_portal(state.store)
+                    state.log(f"Imported '{meta.get('name', safe_name)}' into v1.0 Portal: {idx}")
+                    self._json({"ok": True, "model_name": meta.get("name", staged_file.stem), "output": str(idx)})
+                except Exception as exc:
+                    state.log(f"File upload import error: {exc}")
+                    self._json({"ok": False, "error": str(exc)})
+                finally:
+                    try:
+                        staged_file.unlink(missing_ok=True)
+                    except Exception:
+                        pass
+                return
+
             body = json.loads(self.rfile.read(length).decode("utf-8") or "{}") if length else {}
+
+            if parsed.path == "/api/upload-local-folder":
+                files_list = body.get("files") or []
+                staging_root = (state.store.root / "_staged_imports").resolve()
+                if staging_root.exists():
+                    shutil.rmtree(staging_root, ignore_errors=True)
+                staging_root.mkdir(parents=True, exist_ok=True)
+                try:
+                    top_folder_name = ""
+                    for item in files_list:
+                        rel_str = str(item.get("path") or "").replace("\\", "/").lstrip("/")
+                        if not rel_str or ".." in rel_str.split("/"):
+                            continue
+                        if not top_folder_name:
+                            top_folder_name = rel_str.split("/")[0]
+                        dest = (staging_root / rel_str).resolve()
+                        if not str(dest).startswith(str(staging_root)):
+                            continue
+                        dest.parent.mkdir(parents=True, exist_ok=True)
+                        dest.write_text(str(item.get("content") or ""), encoding="utf-8")
+
+                    target_root = (staging_root / top_folder_name) if top_folder_name else staging_root
+                    sem_dirs = sorted(target_root.rglob("*.SemanticModel"))
+                    imported_names: list[str] = []
+                    if sem_dirs:
+                        for sdir in sem_dirs:
+                            meta = WorkspaceScanner.register_local_any(state.store, str(sdir))
+                            imported_names.append(meta.get("name", sdir.stem))
+                    else:
+                        meta = WorkspaceScanner.register_local_any(state.store, str(target_root))
+                        imported_names.append(meta.get("name", target_root.name))
+
+                    idx = generate_portal(state.store)
+                    joined = ", ".join(imported_names)
+                    state.log(f"Imported '{joined}' into v1.0 Portal: {idx}")
+                    self._json({"ok": True, "model_name": joined, "output": str(idx)})
+                except Exception as exc:
+                    state.log(f"Folder upload import error: {exc}")
+                    self._json({"ok": False, "error": str(exc)})
+                finally:
+                    shutil.rmtree(staging_root, ignore_errors=True)
+                return
 
             if self.path == "/api/cancel-auth":
                 state.auth.cancel_pending()
@@ -987,54 +1145,6 @@ def create_studio_server(catalog_dir: str | Path, host: str = "127.0.0.1", port:
                     self._json({"ok": True, "index": str(idx)})
                 except Exception as exc:
                     self._json({"ok": False, "error": str(exc)})
-                return
-
-            if self.path == "/api/browse-local":
-                chosen = ""
-                err_msg = ""
-                kind = body.get("kind", "file")
-                if sys.platform == "win32":
-                    try:
-                        if kind == "folder":
-                            ps = (
-                                "Add-Type -AssemblyName System.Windows.Forms; "
-                                "[System.Windows.Forms.Application]::EnableVisualStyles(); "
-                                "$owner = New-Object System.Windows.Forms.Form; "
-                                "$owner.TopMost = $true; $owner.ShowInTaskbar = $false; "
-                                "$owner.Width = 1; $owner.Height = 1; $owner.Opacity = 0; "
-                                "$owner.StartPosition = 'CenterScreen'; $owner.Show(); $owner.Activate(); "
-                                "$d = New-Object System.Windows.Forms.FolderBrowserDialog; "
-                                "$d.Description = 'Select a Power BI Project or .SemanticModel folder'; "
-                                "if ($d.ShowDialog($owner) -eq 'OK') { Write-Output $d.SelectedPath }; "
-                                "$owner.Close()"
-                            )
-                        else:
-                            ps = (
-                                "Add-Type -AssemblyName System.Windows.Forms; "
-                                "[System.Windows.Forms.Application]::EnableVisualStyles(); "
-                                "$owner = New-Object System.Windows.Forms.Form; "
-                                "$owner.TopMost = $true; $owner.ShowInTaskbar = $false; "
-                                "$owner.Width = 1; $owner.Height = 1; $owner.Opacity = 0; "
-                                "$owner.StartPosition = 'CenterScreen'; $owner.Show(); $owner.Activate(); "
-                                "$d = New-Object System.Windows.Forms.OpenFileDialog; "
-                                "$d.Title = 'Select a Power BI File (.pbip, .pbix, .xlsx, .bim)'; "
-                                "$d.Filter = 'Power BI Files (*.pbip;*.pbix;*.xlsx;*.bim)|*.pbip;*.pbix;*.xlsx;*.bim|All files (*.*)|*.*'; "
-                                "if ($d.ShowDialog($owner) -eq 'OK') { Write-Output $d.FileName }; "
-                                "$owner.Close()"
-                            )
-                        cflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-                        res = subprocess.run(
-                            ["powershell", "-NoProfile", "-Sta", "-Command", ps],
-                            capture_output=True,
-                            text=True,
-                            creationflags=cflags,
-                        )
-                        chosen = (res.stdout or "").strip()
-                        if res.returncode != 0 and not chosen:
-                            err_msg = (res.stderr or "").strip()
-                    except Exception as exc:
-                        err_msg = str(exc)
-                self._json({"path": chosen, "error": err_msg})
                 return
 
             if self.path == "/api/import-local":
