@@ -352,6 +352,33 @@ code, pre {
   cursor: pointer;
 }
 .btn-ghost:hover { background: rgba(255,255,255,0.25); text-decoration: none; }
+.theme-icon-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  background: rgba(255,255,255,0.14);
+  border: 1px solid rgba(255,255,255,0.26);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+}
+.theme-icon-btn:hover { background: rgba(255,255,255,0.26); }
+.theme-icon-btn.surface-btn {
+  background: var(--surface-alt);
+  border-color: var(--border);
+  color: var(--fg);
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+}
+.theme-icon-btn.surface-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+.theme-icon-btn .icon-sun { display: none; }
+[data-theme="dark"] .theme-icon-btn .icon-moon { display: none; }
+[data-theme="dark"] .theme-icon-btn .icon-sun { display: block; }
 
 .catalog-wrap {
   max-width: 1560px;
@@ -364,7 +391,7 @@ code, pre {
 /* Model Page Layout */
 .doc-shell {
   display: grid;
-  grid-template-columns: 276px minmax(0, 1fr);
+  grid-template-columns: 256px minmax(0, 1fr);
   min-height: 100vh;
 }
 .doc-sidebar {
@@ -372,6 +399,7 @@ code, pre {
   top: 0;
   height: 100vh;
   overflow-y: auto;
+  overflow-x: hidden;
   background: var(--surface);
   border-right: 1px solid var(--border);
   padding: 20px 16px;
@@ -394,12 +422,15 @@ code, pre {
   font-size: 16.5px;
   margin: 0;
   line-height: 1.3;
+  overflow-wrap: anywhere;
   word-break: break-word;
 }
 .doc-brand .sub {
   font-size: 12px;
   color: var(--fg-muted);
   margin-top: 4px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 .doc-search {
   width: 100%;
@@ -441,9 +472,10 @@ code, pre {
   border-radius: 999px;
 }
 .doc-main {
-  padding: 30px 40px 68px 40px;
-  max-width: 1400px;
+  padding: 28px 32px 68px 32px;
+  max-width: 100%;
   min-width: 0;
+  overflow-x: hidden;
 }
 
 /* Sections & KPIs */
@@ -721,25 +753,43 @@ th.sortable-th { cursor: pointer; user-select: none; }
 th.sortable-th:hover { color: var(--accent); }
 
 /* Tables */
-.table-scroll { overflow-x: auto; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+.table-scroll {
+  width: 100%;
+  overflow-x: hidden;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+}
 table.data-table {
   width: 100%;
+  table-layout: auto;
   border-collapse: collapse;
-  font-size: 13px;
+  font-size: 12.5px;
 }
 table.data-table th {
   text-align: left;
-  padding: 10px 13px;
+  padding: 9px 10px;
   background: var(--surface-alt);
   color: var(--fg);
   font-weight: 650;
   border-bottom: 1px solid var(--border);
-  white-space: nowrap;
+  line-height: 1.25;
 }
 table.data-table td {
-  padding: 9px 13px;
+  padding: 8px 10px;
   border-bottom: 1px solid var(--border);
   vertical-align: top;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+table.data-table td code,
+table.data-table td b,
+table.data-table td a {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+table.data-table td .badge {
+  white-space: nowrap;
 }
 table.data-table tr:last-child td { border-bottom: none; }
 table.data-table tr:hover td { background: rgba(11, 99, 206, 0.03); }
@@ -861,12 +911,12 @@ details.m-script-toggle > summary {
   border-left: 3px solid var(--code-accent-bar);
   border-radius: 8px;
   padding: 11px 74px 11px 14px;
-  overflow-x: auto;
+  overflow-x: hidden;
   font-size: 12.5px;
   line-height: 1.56;
   margin: 4px 0;
 }
-.code-block pre { margin: 0; white-space: pre-wrap; word-break: break-word; }
+.code-block pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; }
 .copy-btn {
   position: absolute;
   top: 7px;
@@ -937,7 +987,7 @@ details.table-blueprint[open] > summary {
 /* 3-Panel Interactive Live Lineage Explorer */
 .lineage-app {
   display: grid;
-  grid-template-columns: 225px minmax(0, 1fr) 265px;
+  grid-template-columns: 205px minmax(0, 1fr) 235px;
   height: 560px;
   background: var(--surface);
   border: 1px solid var(--border);
@@ -949,6 +999,7 @@ details.table-blueprint[open] > summary {
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
+  min-width: 0;
   min-height: 0;
   background: var(--surface-alt);
 }
@@ -983,6 +1034,7 @@ details.table-blueprint[open] > summary {
 .lin-nav-list {
   flex: 1 1 auto;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 6px;
   display: flex;
   flex-direction: column;
@@ -1000,6 +1052,9 @@ details.table-blueprint[open] > summary {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 .lin-nav-item:hover { background: var(--surface); border-color: var(--border); }
 .lin-nav-item.active {
@@ -1008,7 +1063,7 @@ details.table-blueprint[open] > summary {
   color: var(--accent);
   font-weight: 600;
 }
-.lin-nav-item small { color: var(--fg-muted); font-size: 10.5px; }
+.lin-nav-item small { color: var(--fg-muted); font-size: 10.5px; overflow-wrap: anywhere; word-break: break-word; }
 
 .lin-center {
   display: flex;
@@ -1026,6 +1081,7 @@ details.table-blueprint[open] > summary {
   justify-content: space-between;
   gap: 8px;
   font-size: 12px;
+  flex-wrap: wrap;
 }
 .lin-toolbar-actions { display: flex; gap: 6px; align-items: center; }
 .lin-btn {
@@ -1039,13 +1095,13 @@ details.table-blueprint[open] > summary {
   cursor: pointer;
 }
 .lin-btn.active, .lin-btn:hover { border-color: var(--accent); color: var(--accent); }
-.lin-canvas-scroll { position: relative; flex: 1 1 auto; overflow: auto; padding: 14px 16px; }
+.lin-canvas-scroll { position: relative; flex: 1 1 auto; overflow-y: auto; overflow-x: hidden; padding: 12px; }
 .lin-columns {
   position: relative;
   display: grid;
   grid-auto-flow: column;
-  grid-auto-columns: minmax(115px, 1fr);
-  gap: 20px;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 12px;
   width: 100%;
   min-width: 0;
   z-index: 2;
@@ -1060,6 +1116,8 @@ details.table-blueprint[open] > summary {
   padding-bottom: 5px;
   border-bottom: 2px solid var(--border);
   margin-bottom: 3px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 .lin-node {
   background: var(--surface);
@@ -1070,10 +1128,13 @@ details.table-blueprint[open] > summary {
   box-shadow: 0 1px 3px rgba(15,23,42,0.05);
   transition: transform 0.1s, border-color 0.12s, opacity 0.15s;
   font-size: 11.5px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 .lin-node:hover { border-color: var(--accent); transform: translateY(-1px); }
-.lin-node .n-title { font-weight: 650; word-break: break-word; line-height: 1.25; }
-.lin-node .n-sub { font-size: 10.5px; color: var(--fg-muted); margin-top: 2px; }
+.lin-node .n-title { font-weight: 650; overflow-wrap: anywhere; word-break: break-word; line-height: 1.25; }
+.lin-node .n-sub { font-size: 10.5px; color: var(--fg-muted); margin-top: 2px; overflow-wrap: anywhere; word-break: break-word; }
 .lin-node.is-focus {
   border-color: var(--accent);
   background: var(--accent-soft);
@@ -1088,6 +1149,10 @@ svg.lin-svg { position: absolute; top: 0; left: 0; pointer-events: none; z-index
   border-left: 1px solid var(--border);
   padding: 14px 16px;
   overflow-y: auto;
+  overflow-x: hidden;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
   background: var(--surface);
   display: flex;
   flex-direction: column;
@@ -1144,8 +1209,8 @@ body.mermaid-fallback-fullscreen { overflow: hidden; }
 .mermaid-viewport {
   width: 100%;
   max-height: 62vh;
-  overflow: auto;
-  padding: 18px;
+  overflow: hidden;
+  padding: 16px;
   cursor: grab;
 }
 .mermaid-viewport.is-panning { cursor: grabbing; user-select: none; }
@@ -1273,9 +1338,10 @@ INTERACTIVE_MERMAID_JS = r"""
         var vb = (svg.getAttribute("viewBox") || "").split(/\s+/).map(Number);
         var baseWidth = vb.length === 4 && vb[2] ? vb[2] : (svg.getBoundingClientRect().width || 900);
         svg.dataset.baseWidth = String(baseWidth);
-        var fit = Math.max(0.55, Math.min(1.15, (viewport.clientWidth - 40) / baseWidth));
+        var avail = Math.max(260, viewport.clientWidth - 36);
+        var fit = Math.max(0.15, Math.min(1.0, avail / baseWidth));
         svg.dataset.zoom = String(fit);
-        svg.style.width = Math.max(300, baseWidth * fit) + "px";
+        svg.style.width = Math.max(220, Math.floor(baseWidth * fit)) + "px";
     }
     function applyZoom(svg, factor) {
         var baseWidth = Number(svg.dataset.baseWidth || 900);
@@ -2422,7 +2488,10 @@ def render_model_html(analysis: dict, slug: str, anonymous: bool = False) -> str
     </ul>
     <div style="margin-top:auto;padding-top:12px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;font-size:11.5px;color:var(--fg-muted)">
       <span>PBI Doc Generator v1.0</span>
-      <button type="button" class="lin-btn" data-toggle-theme="1">Theme</button>
+      <button type="button" class="theme-icon-btn surface-btn" data-toggle-theme="1" title="Toggle Light / Dark theme" aria-label="Toggle Light / Dark theme">
+        <svg class="icon-moon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        <svg class="icon-sun" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+      </button>
     </div>
   </aside>
 
@@ -2782,12 +2851,15 @@ def generate_portal(store: CatalogStore, output_dir: str | Path | None = None, a
       <h1>Power BI Documentation &amp; Live Lineage Portal</h1>
       <p>{total_ws} Workspaces &bull; {len(analyses)} Semantic Models &bull; {total_reports} Reports &bull; Generated {esc(gen_ts)}</p>
     </div>
-    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
       <div class="app-switcher studio-only-link" style="display:none">
         <a href="/">&larr; 1. Scanner &amp; Setup</a>
         <span class="active-seg">2. Documentation Portal</span>
       </div>
-      <button type="button" class="btn-ghost" data-toggle-theme="1">Switch Light / Dark</button>
+      <button type="button" class="theme-icon-btn" data-toggle-theme="1" title="Toggle Light / Dark theme" aria-label="Toggle Light / Dark theme">
+        <svg class="icon-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        <svg class="icon-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+      </button>
     </div>
   </div>
   <nav class="top-tabs">

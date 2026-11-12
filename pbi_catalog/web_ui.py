@@ -43,9 +43,47 @@ STUDIO_HTML = r"""<!DOCTYPE html>
       --accent-soft: #e7f0fd;
       --ok: #15803d;
       --ok-bg: #dcfce7;
+      --code-bg: #f8fafc;
+      --code-fg: #1e293b;
+      --code-border: #dce4f0;
       --radius: 14px;
       --shadow: 0 3px 14px rgba(15, 23, 42, 0.06);
     }
+    [data-theme="dark"] {
+      --bg: #0b1120;
+      --surface: #111827;
+      --surface-alt: #1e293b;
+      --fg: #e5e7eb;
+      --fg-muted: #94a3b8;
+      --border: #283548;
+      --accent: #60a5fa;
+      --accent-hover: #3b82f6;
+      --accent-soft: #172554;
+      --ok: #4ade80;
+      --ok-bg: #052e16;
+      --code-bg: #172235;
+      --code-fg: #e2e8f0;
+      --code-border: #2b3b54;
+      --shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+    }
+    .theme-icon-btn {
+      width: 34px;
+      height: 34px;
+      border-radius: 9px;
+      background: rgba(255,255,255,0.14);
+      border: 1px solid rgba(255,255,255,0.26);
+      color: #fff;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      padding: 0;
+      flex-shrink: 0;
+    }
+    .theme-icon-btn:hover { background: rgba(255,255,255,0.26); }
+    .theme-icon-btn .icon-sun { display: none; }
+    [data-theme="dark"] .theme-icon-btn .icon-moon { display: none; }
+    [data-theme="dark"] .theme-icon-btn .icon-sun { display: block; }
     * { box-sizing: border-box; }
     body {
       margin: 0;
@@ -246,19 +284,24 @@ STUDIO_HTML = r"""<!DOCTYPE html>
       padding: 9px 12px;
       border: 1px solid var(--border);
       border-radius: 8px;
+      background: var(--surface);
+      color: var(--fg);
       font-size: 13px;
       font-family: inherit;
     }
     .log-box {
-      background: #0f172a;
-      color: #e2e8f0;
+      background: var(--code-bg);
+      color: var(--code-fg);
+      border: 1px solid var(--code-border);
       font-family: "Cascadia Code", Consolas, monospace;
       font-size: 12px;
       padding: 14px;
       border-radius: 10px;
       max-height: 220px;
       overflow-y: auto;
+      overflow-x: hidden;
       white-space: pre-wrap;
+      overflow-wrap: anywhere;
       margin-top: 14px;
     }
     details.subtle {
@@ -268,14 +311,23 @@ STUDIO_HTML = r"""<!DOCTYPE html>
     }
     details.subtle > summary { cursor: pointer; font-weight: 600; color: var(--accent); }
     pre.cfg {
-      background: #0f172a;
-      color: #e2e8f0;
+      background: var(--code-bg);
+      color: var(--code-fg);
+      border: 1px solid var(--code-border);
       padding: 14px;
       border-radius: 10px;
-      overflow-x: auto;
+      overflow-x: hidden;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
       font-size: 12px;
     }
   </style>
+  <script>
+    (function() {
+      var saved = localStorage.getItem("pbidoc-v1-theme");
+      if (saved) document.documentElement.setAttribute("data-theme", saved);
+    })();
+  </script>
 </head>
 <body>
 <header class="hero">
@@ -284,9 +336,15 @@ STUDIO_HTML = r"""<!DOCTYPE html>
       <h1>Power BI Documentation &amp; Live Lineage</h1>
       <p>Step 1: Scan Power BI workspaces or import local files here &bull; Step 2: Explore &amp; share in the Documentation Portal</p>
     </div>
-    <div style="display:inline-flex;background:rgba(255,255,255,0.12);padding:4px;border-radius:11px;border:1px solid rgba(255,255,255,0.24);gap:4px;align-items:center">
-      <span style="padding:7px 13px;border-radius:8px;background:#fff;color:#072854;font-weight:700;font-size:12.5px">1. Scanner &amp; Setup</span>
-      <a href="/portal/index.html" id="topOpenPortalBtn" style="padding:7px 13px;border-radius:8px;color:#fff;text-decoration:none;font-weight:650;font-size:12.5px">2. Documentation Portal &rarr;</a>
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      <div style="display:inline-flex;background:rgba(255,255,255,0.12);padding:4px;border-radius:11px;border:1px solid rgba(255,255,255,0.24);gap:4px;align-items:center">
+        <span style="padding:7px 13px;border-radius:8px;background:#fff;color:#072854;font-weight:700;font-size:12.5px">1. Scanner &amp; Setup</span>
+        <a href="/portal/index.html" id="topOpenPortalBtn" style="padding:7px 13px;border-radius:8px;color:#fff;text-decoration:none;font-weight:650;font-size:12.5px">2. Documentation Portal &rarr;</a>
+      </div>
+      <button type="button" class="theme-icon-btn" onclick="toggleStudioTheme()" title="Toggle Light / Dark theme" aria-label="Toggle Light / Dark theme">
+        <svg class="icon-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        <svg class="icon-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+      </button>
     </div>
   </div>
   <nav class="mode-tabs">
@@ -384,9 +442,10 @@ STUDIO_HTML = r"""<!DOCTYPE html>
       <p style="margin:0 0 14px 0;color:var(--fg-muted);font-size:13px">
         Works completely offline for reports still in development on your laptop. Supports Power BI Project folders (<code>.pbip</code> / <code>.SemanticModel</code>), <code>.pbix</code> files, and Excel PowerPivot (<code>.xlsx</code>).
       </p>
-      <div style="display:flex;gap:8px;margin-bottom:12px">
-        <input type="text" id="localPathInput" placeholder="Paste path to .pbip folder, .SemanticModel folder, .pbix, or .xlsx...">
-        <button type="button" class="btn btn-secondary" id="btnBrowseLocal" onclick="browseLocal()">Browse...</button>
+      <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+        <input type="text" id="localPathInput" style="flex:1;min-width:260px" placeholder="Paste path to .pbip, .pbix, .xlsx, or .SemanticModel folder...">
+        <button type="button" class="btn btn-secondary" id="btnBrowseLocal" onclick="browseLocal('file')">Browse File...</button>
+        <button type="button" class="btn btn-secondary" id="btnBrowseFolder" onclick="browseLocal('folder')">Browse Folder...</button>
       </div>
       <div style="display:flex;gap:10px">
         <button type="button" class="btn btn-primary" id="btnImportLocal" onclick="importLocalPath()">Generate Documentation</button>
@@ -414,6 +473,12 @@ STUDIO_HTML = r"""<!DOCTYPE html>
 var uiConnecting = false;
 var wsLoadedOnce = false;
 var wasBusy = false;
+
+function toggleStudioTheme() {
+  var cur = document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark";
+  document.documentElement.setAttribute("data-theme", cur);
+  localStorage.setItem("pbidoc-v1-theme", cur);
+}
 
 document.querySelectorAll(".mode-tab").forEach(function(btn) {
   btn.addEventListener("click", function() {
@@ -506,6 +571,13 @@ async function refreshStatus() {
     var topPortalBtn = document.getElementById("topOpenPortalBtn");
     if (topPortalBtn && typeof st.models_count === "number") {
       topPortalBtn.innerHTML = "2. Documentation Portal" + (st.models_count > 0 ? " (" + st.models_count + ")" : "") + " &rarr;";
+    }
+
+    var azBtn = document.getElementById("btnAuthAz");
+    if (azBtn && st.auth && st.auth.az_available === false) {
+      azBtn.disabled = true;
+      azBtn.title = "Optional: requires Microsoft Azure CLI ('az') to be installed on this PC.";
+      azBtn.textContent = "Azure CLI (not installed on this PC)";
     }
 
     var scanBtn = document.getElementById("btnScanBuild");
@@ -678,14 +750,29 @@ async function rebuildPortalOnly() {
   }
 }
 
-async function browseLocal() {
-  var btn = document.getElementById("btnBrowseLocal");
-  if (btn) btn.disabled = true;
+async function browseLocal(kind) {
+  var btn1 = document.getElementById("btnBrowseLocal");
+  var btn2 = document.getElementById("btnBrowseFolder");
+  if (btn1) btn1.disabled = true;
+  if (btn2) btn2.disabled = true;
+  setBanner("localBanner", "info",
+    "<span style='display:flex;align-items:center;gap:10px'><span class='spin'></span><span>Opening Windows " + (kind === "folder" ? "folder" : "file") + " selector window...</span></span>"
+  );
   try {
-    var res = await apiPost("/api/browse-local", {});
-    if (res.path) document.getElementById("localPathInput").value = res.path;
+    var res = await apiPost("/api/browse-local", { kind: kind || "file" });
+    if (res.path) {
+      document.getElementById("localPathInput").value = res.path;
+      setBanner("localBanner", "ok", "<span>Selected: <b>" + escHtml(res.path) + "</b>. Click <b>Generate Documentation</b> to add it to the Portal.</span>");
+    } else if (res.error) {
+      setBanner("localBanner", "err", "<span><b>Could not open file dialog:</b> " + escHtml(res.error) + "</span>");
+    } else {
+      setBanner("localBanner", "", "");
+    }
+  } catch (err) {
+    setBanner("localBanner", "err", "<span><b>Could not open file dialog:</b> " + escHtml(err) + "</span>");
   } finally {
-    if (btn) btn.disabled = false;
+    if (btn1) btn1.disabled = false;
+    if (btn2) btn2.disabled = false;
   }
 }
 
@@ -904,16 +991,50 @@ def create_studio_server(catalog_dir: str | Path, host: str = "127.0.0.1", port:
 
             if self.path == "/api/browse-local":
                 chosen = ""
+                err_msg = ""
+                kind = body.get("kind", "file")
                 if sys.platform == "win32":
-                    ps = (
-                        "Add-Type -AssemblyName System.Windows.Forms; "
-                        "$d = New-Object System.Windows.Forms.OpenFileDialog; "
-                        "$d.Filter = 'Power BI Files (*.pbip;*.pbix;*.xlsx;*.bim)|*.pbip;*.pbix;*.xlsx;*.bim|All files (*.*)|*.*'; "
-                        "if ($d.ShowDialog() -eq 'OK') { Write-Output $d.FileName }"
-                    )
-                    res = subprocess.run(["powershell", "-NoProfile", "-Sta", "-Command", ps], capture_output=True, text=True)
-                    chosen = (res.stdout or "").strip()
-                self._json({"path": chosen})
+                    try:
+                        if kind == "folder":
+                            ps = (
+                                "Add-Type -AssemblyName System.Windows.Forms; "
+                                "[System.Windows.Forms.Application]::EnableVisualStyles(); "
+                                "$owner = New-Object System.Windows.Forms.Form; "
+                                "$owner.TopMost = $true; $owner.ShowInTaskbar = $false; "
+                                "$owner.Width = 1; $owner.Height = 1; $owner.Opacity = 0; "
+                                "$owner.StartPosition = 'CenterScreen'; $owner.Show(); $owner.Activate(); "
+                                "$d = New-Object System.Windows.Forms.FolderBrowserDialog; "
+                                "$d.Description = 'Select a Power BI Project or .SemanticModel folder'; "
+                                "if ($d.ShowDialog($owner) -eq 'OK') { Write-Output $d.SelectedPath }; "
+                                "$owner.Close()"
+                            )
+                        else:
+                            ps = (
+                                "Add-Type -AssemblyName System.Windows.Forms; "
+                                "[System.Windows.Forms.Application]::EnableVisualStyles(); "
+                                "$owner = New-Object System.Windows.Forms.Form; "
+                                "$owner.TopMost = $true; $owner.ShowInTaskbar = $false; "
+                                "$owner.Width = 1; $owner.Height = 1; $owner.Opacity = 0; "
+                                "$owner.StartPosition = 'CenterScreen'; $owner.Show(); $owner.Activate(); "
+                                "$d = New-Object System.Windows.Forms.OpenFileDialog; "
+                                "$d.Title = 'Select a Power BI File (.pbip, .pbix, .xlsx, .bim)'; "
+                                "$d.Filter = 'Power BI Files (*.pbip;*.pbix;*.xlsx;*.bim)|*.pbip;*.pbix;*.xlsx;*.bim|All files (*.*)|*.*'; "
+                                "if ($d.ShowDialog($owner) -eq 'OK') { Write-Output $d.FileName }; "
+                                "$owner.Close()"
+                            )
+                        cflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+                        res = subprocess.run(
+                            ["powershell", "-NoProfile", "-Sta", "-Command", ps],
+                            capture_output=True,
+                            text=True,
+                            creationflags=cflags,
+                        )
+                        chosen = (res.stdout or "").strip()
+                        if res.returncode != 0 and not chosen:
+                            err_msg = (res.stderr or "").strip()
+                    except Exception as exc:
+                        err_msg = str(exc)
+                self._json({"path": chosen, "error": err_msg})
                 return
 
             if self.path == "/api/import-local":

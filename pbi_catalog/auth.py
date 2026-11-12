@@ -17,6 +17,7 @@ import http.server
 import json
 import os
 import secrets
+import shutil
 import socket
 import subprocess
 import sys
@@ -291,10 +292,31 @@ def fetch_token_via_browser(browser_channel: str = "msedge", headless_first: boo
     return clean_token(tok)
 
 
+def find_az_cli_executable() -> str | None:
+    """Locate the Azure CLI executable if installed on this machine."""
+    found = shutil.which("az") or shutil.which("az.cmd")
+    if found:
+        return found
+    if sys.platform == "win32":
+        for candidate in (
+            r"C:\Program Files\Microsoft SDKs\Azure\CLI2\wbin\az.cmd",
+            r"C:\Program Files (x86)\Microsoft SDKs\Azure\CLI2\wbin\az.cmd",
+        ):
+            if os.path.isfile(candidate):
+                return candidate
+    return None
+
+
 def fetch_token_via_az_cli() -> str:
     """Obtain Power BI token via Azure CLI (`az account get-access-token`)."""
-    cmd = ["az", "account", "get-access-token", "--resource", "https://analysis.windows.net/powerbi/api", "--query", "accessToken", "-o", "tsv"]
-    res = subprocess.run(cmd, capture_output=True, text=True, timeout=25, shell=(sys.platform == "win32"))
+    az_exe = find_az_cli_executable()
+    if not az_exe:
+        raise RuntimeError(
+            "Azure CLI ('az') is not installed on this PC. "
+            "Use 'Sign in via Power BI Web Window (Edge/Chrome)' instead - no extra software needed."
+        )
+    cmd = [az_exe, "account", "get-access-token", "--resource", "https://analysis.windows.net/powerbi/api", "--query", "accessToken", "-o", "tsv"]
+    res = subprocess.run(cmd, capture_output=True, text=True, timeout=25)
     if res.returncode != 0 or not (res.stdout or "").strip():
         raise RuntimeError(f"Azure CLI sign-in failed: {(res.stderr or res.stdout or '').strip()}")
     return clean_token(res.stdout)
@@ -459,4 +481,5 @@ class TokenProvider:
             "auth_in_progress": self.auth_in_progress,
             "pending_auth_url": self._pending_auth_url,
             "last_error": self.last_error,
+            "az_available": bool(find_az_cli_executable()),
         }
