@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Group Working Capital &amp; Margin - Semantic Model Documentation</title>
+  <link rel="stylesheet" href="../assets/portal.css">
+</head>
+<body>
+<div class="doc-shell">
+  <aside class="doc-sidebar">
+    <a class="doc-back studio-only-link" href="/" style="display:none;margin-bottom:6px">&larr; 1. Scanner &amp; Setup</a>
+    <a class="doc-back" href="../index.html">&larr; Catalog Home (All Models)</a>
+    <div class="doc-brand">
+      <h2>Group Working Capital &amp; Margin</h2>
+      <div class="sub">Workspace: <b>Corporate Finance &amp; FP&amp;A</b></div>
+    </div>
+    <input type="search" class="doc-search" data-quick-search="1" id="modelQuickFilter" placeholder="Filter measures &amp; tables (Ctrl+K)">
+    <ul class="toc-list">
+      <li><a href="#sec-overview"><span>1. Overview &amp; Health</span><span class="toc-count">0</span></a></li>
+      <li><a href="#sec-schema"><span>2. Data Model &amp; Star Schema</span><span class="toc-count">1</span></a></li>
+      <li><a href="#sec-tables"><span>3. Sources &amp; Tables</span><span class="toc-count">2</span></a></li>
+      <li><a href="#sec-dax"><span>4. DAX Measure Catalog</span><span class="toc-count">3</span></a></li>
+      <li><a href="#sec-lineage"><span>5. Live Lineage Explorer</span><span class="toc-count">Interactive</span></a></li>
+      <li><a href="#sec-security"><span>6. Security &amp; Reports</span><span class="toc-count">1</span></a></li>
+    </ul>
+    <div style="margin-top:auto;padding-top:12px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;font-size:11.5px;color:var(--fg-muted)">
+      <span>PBI Doc Generator v1.0</span>
+      <button type="button" class="theme-icon-btn surface-btn" data-toggle-theme="1" title="Toggle Light / Dark theme" aria-label="Toggle Light / Dark theme">
+        <svg class="icon-moon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        <svg class="icon-sun" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+      </button>
+    </div>
+  </aside>
+
+  <main class="doc-main">
+    <section class="section" id="sec-overview">
+      <div class="section-header">
+        <div>
+          <h2>1. Executive Overview &amp; Health Summary</h2>
+          <div class="hint">Owner: <b>elena.rostova@northwind-global.example</b> &bull; Upstream Connectors: <b>SQL Server / Azure SQL, Snowflake</b></div>
+        </div>
+        <span class="badge badge-ok">Refresh: Completed</span>
+      </div>
+
+      <div class="kpi-grid">
+        <div class="kpi-card"><div class="val">2</div><div class="lbl">Tables (2 Import / 0 DQ)</div></div>
+        <div class="kpi-card"><div class="val">4</div><div class="lbl">Columns (0 Calculated)</div></div>
+        <div class="kpi-card"><div class="val">3</div><div class="lbl">DAX Measures</div></div>
+        <div class="kpi-card"><div class="val">1</div><div class="lbl">Relationships (0 Bi-Di)</div></div>
+        <div class="kpi-card"><div class="val">4</div><div class="lbl">Power Query Steps</div></div>
+        <div class="kpi-card"><div class="val">1</div><div class="lbl">Bound Reports</div></div>
+      </div>
+
+      <div class="finding ok"><div><strong>Healthy model architecture</strong><span>Zero refresh errors, non-production endpoints, bidirectional filter traps, or local file dependencies detected.</span></div></div>
+    </section>
+
+    <section class="section" id="sec-schema">
+      <div class="section-header">
+        <h2>2. Data Model &amp; Star Schema</h2>
+        <span class="hint">Fact tables (blue) vs. Dimension tables (teal) &bull; Hover or click any table to highlight relationships</span>
+      </div>
+      <pre class="mermaid">flowchart LR
+    classDef factNode fill:#e8f1fd,stroke:#0b63ce,stroke-width:2px,color:#0f172a;
+    classDef dimNode fill:#e6f6f4,stroke:#0f766e,stroke-width:1.5px,color:#0f172a;
+    classDef standaloneNode fill:#f8fafc,stroke:#94a3b8,stroke-width:1px,color:#334155;
+    T1[&quot;[DIM] Dim Calendar (1 cols, 0 meas)&quot;]
+    T2[&quot;[FACT] Fact GL Margin (3 cols, 3 meas)&quot;]
+    T2 --&gt;|&quot;PostingDate = Date (*:1)&quot;| T1
+    class T1 dimNode;
+    class T2 factNode;</pre>
+      <div class="table-scroll" style="margin-top:14px"><table class="data-table"><thead><tr><th>Many / Fact Side</th><th>Cardinality</th><th>One / Dimension Side</th><th>Filter Direction</th><th>State</th></tr></thead><tbody><tr><td><b>Fact GL Margin</b>.<code>PostingDate</code></td><td><code>* : 1</code></td><td><b>Dim Calendar</b>.<code>Date</code></td><td><span class='badge '>Single</span></td><td><span class='badge badge-ok'>Active</span></td></tr></tbody></table></div>
+    </section>
+
+    <section class="section" id="sec-tables">
+      <div class="section-header">
+        <div>
+          <h2>3. Data Sources &amp; Tables Blueprint</h2>
+          <div class="hint">Storage modes, source endpoints, business descriptions, visual Power Query pipelines, and column definitions</div>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button type="button" class="lin-btn" data-details-toggle="tablesBlueprintContainer" data-open="1">Expand All</button>
+          <button type="button" class="lin-btn" data-details-toggle="tablesBlueprintContainer" data-open="0">Collapse All</button>
+        </div>
+      </div>
+      <div class="table-scroll" style="margin-bottom:18px">
+        <table class="data-table">
+          <thead>
+            <tr><th>Table</th><th>Role</th><th>Mode</th><th>Connector</th><th>Endpoint / Database</th><th>Description</th><th>Cols</th><th>Measures</th><th>PQ Steps</th></tr>
+          </thead>
+          <tbody><tr><td><a href="#t-dim-calendar"><b>Dim Calendar</b></a></td><td><span class="badge badge-dim">Dimension</span></td><td><code>import</code></td><td>Snowflake</td><td>Snowflake: northwind.eu-central-1.snowflakecomputing.com</td><td>Shared corporate fiscal calendar.</td><td>1</td><td>0</td><td>2</td></tr><tr><td><a href="#t-fact-gl-margin"><b>Fact GL Margin</b></a></td><td><span class="badge badge-fact">Fact</span></td><td><code>import</code></td><td>SQL Server / Azure SQL</td><td>SQL Server / Azure SQL: sql-fin-prod.database.windows.net</td><td>Consolidated General Ledger revenue and COGS postings.</td><td>3</td><td>3</td><td>2</td></tr></tbody>
+        </table>
+      </div>
+      <div id="tablesBlueprintContainer"><details class="table-blueprint" id="t-dim-calendar" open data-searchable="dim calendar shared corporate fiscal calendar."><summary><span>Dim Calendar <span style="font-weight:400;color:var(--fg-muted)">: Shared corporate fiscal calendar.</span></span><div class="model-meta"><span class="badge badge-accent">Dimension</span><span class="badge">1 cols</span><span class="badge">2 PQ steps</span></div></summary><div class="blueprint-body"><div class="table-scroll"><table class="data-table"><thead><tr><th>Column</th><th>Data Type</th><th>Origin / Source Column</th><th>Format</th><th>Description</th></tr></thead><tbody><tr><td><b>Date</b> <span class="badge badge-accent">Key</span></td><td><code>dateTime</code></td><td>Date</td><td>-</td><td>-</td></tr></tbody></table></div><div style="margin-top:12px;font-size:12px;font-weight:650">Power Query Transformation Pipeline (2 steps)</div><div class="pq-pipeline"><span class="pq-step"><b>1. Source</b><small>Snowflake.Databases</small></span><span class="pq-arrow">&rarr;</span><span class="pq-step"><b>2. View</b><small>Expression</small></span></div><details class="m-script-toggle"><summary>View Power Query M Script - Partition Dim Calendar (import)</summary><div style="padding:8px 10px"><div class="code-block"><button type="button" class="copy-btn" data-copy="1">Copy M</button><pre><span class="kw">let</span>
+    Source = <span class="fn">Snowflake.Databases</span>(<span class="str">&quot;northwind.eu-central-1.snowflakecomputing.com&quot;</span>, <span class="str">&quot;WH_ENTERPRISE&quot;</span>),
+    View = Source{[Name=<span class="str">&quot;DIM_CALENDAR_ISO&quot;</span>]}[Data]
+<span class="kw">in</span>
+    View</pre></div></div></details></div></details><details class="table-blueprint" id="t-fact-gl-margin" data-searchable="fact gl margin consolidated general ledger revenue and cogs postings."><summary><span>Fact GL Margin <span style="font-weight:400;color:var(--fg-muted)">: Consolidated General Ledger revenue and COGS postings.</span></span><div class="model-meta"><span class="badge badge-accent">Fact</span><span class="badge">3 cols</span><span class="badge">2 PQ steps</span></div></summary><div class="blueprint-body"><div class="table-scroll"><table class="data-table"><thead><tr><th>Column</th><th>Data Type</th><th>Origin / Source Column</th><th>Format</th><th>Description</th></tr></thead><tbody><tr><td><b>PostingDate</b> <span class="badge badge-accent">Key</span></td><td><code>dateTime</code></td><td>PostingDate</td><td>-</td><td>-</td></tr><tr><td><b>RevenueEUR</b></td><td><code>decimal</code></td><td>RevenueEUR</td><td>-</td><td>-</td></tr><tr><td><b>CogsEUR</b></td><td><code>decimal</code></td><td>CogsEUR</td><td>-</td><td>-</td></tr></tbody></table></div><div style="margin-top:12px;font-size:12px;font-weight:650">Power Query Transformation Pipeline (2 steps)</div><div class="pq-pipeline"><span class="pq-step"><b>1. Source</b><small>AzureSql.Database</small></span><span class="pq-arrow">&rarr;</span><span class="pq-step"><b>2. View</b><small>Expression</small></span></div><details class="m-script-toggle"><summary>View Power Query M Script - Partition Fact GL Margin (import)</summary><div style="padding:8px 10px"><div class="code-block"><button type="button" class="copy-btn" data-copy="1">Copy M</button><pre><span class="kw">let</span>
+    Source = <span class="fn">AzureSql.Database</span>(<span class="str">&quot;sql-fin-prod.database.windows.net&quot;</span>, <span class="str">&quot;DB_FINANCE&quot;</span>),
+    View = Source{[Schema=<span class="str">&quot;mart&quot;</span>,Item=<span class="str">&quot;v_FactGLMargin&quot;</span>]}[Data]
+<span class="kw">in</span>
+    View</pre></div></div></details></div></details></div>
+      
+    </section>
+
+    <section class="section" id="sec-dax">
+      <div class="section-header">
+        <div>
+          <h2>4. DAX Measure Catalog</h2>
+          <div class="hint">Auto-formatted &amp; organized by Table &rarr; Display Folder &rarr; Base Aggregations first, Derived KPIs second</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <div class="view-toggle">
+            <button type="button" class="view-btn active" data-dax-view="list">Compact Table</button>
+            <button type="button" class="view-btn" data-dax-view="cards">Formatted Cards</button>
+          </div>
+          <button type="button" class="lin-btn" data-details-toggle="daxCardsContainer" data-open="1">Expand All</button>
+          <button type="button" class="lin-btn" data-details-toggle="daxCardsContainer" data-open="0">Collapse All</button>
+        </div>
+      </div>
+      <div id="daxListContainer"><div class="table-scroll"><table class="data-table"><thead><tr><th>Measure</th><th>Host Table</th><th>Display Folder</th><th>Tier</th><th>Format</th><th>Reads</th><th>Used By</th><th>DAX Preview</th></tr></thead><tbody><tr data-searchable="cogs fact gl margin p&amp;l core sum(&#x27;fact gl margin&#x27;[cogseur])"><td><a href="#m-fact-gl-margin-cogs" onclick="document.querySelector('[data-dax-view=cards]').click()"><b>COGS</b></a></td><td>Fact GL Margin</td><td>P&amp;L Core</td><td><span class='badge badge-dim'>Base</span></td><td><code>#,##0 &quot;EUR&quot;</code></td><td>1</td><td>1</td><td><code style='font-size:11.5px'>SUM(&#x27;Fact GL Margin&#x27;[CogsEUR])</code></td></tr><tr data-searchable="gross revenue fact gl margin p&amp;l core sum(&#x27;fact gl margin&#x27;[revenueeur])"><td><a href="#m-fact-gl-margin-gross-revenue" onclick="document.querySelector('[data-dax-view=cards]').click()"><b>Gross Revenue</b></a></td><td>Fact GL Margin</td><td>P&amp;L Core</td><td><span class='badge badge-dim'>Base</span></td><td><code>#,##0 &quot;EUR&quot;</code></td><td>1</td><td>1</td><td><code style='font-size:11.5px'>SUM(&#x27;Fact GL Margin&#x27;[RevenueEUR])</code></td></tr><tr data-searchable="gross margin % fact gl margin profitability divide([gross revenue] - [cogs], [gross revenue], 0)"><td><a href="#m-fact-gl-margin-gross-margin" onclick="document.querySelector('[data-dax-view=cards]').click()"><b>Gross Margin %</b></a></td><td>Fact GL Margin</td><td>Profitability</td><td><span class='badge badge-accent'>Tier 1</span></td><td><code>0.0%</code></td><td>2</td><td>0</td><td><code style='font-size:11.5px'>DIVIDE([Gross Revenue] - [COGS], [Gross Revenue], 0)</code></td></tr></tbody></table></div></div><div id="daxCardsContainer" style="display:none"><details class="dax-table-group" open><summary><span>Measure Host Table: Fact GL Margin</span><span class="badge badge-accent">3 measures</span></summary><div class="dax-folder"><div class="dax-folder-title">Display Folder: P&amp;L Core (2)</div><div class="dax-tier-label">Tier 1: Base Aggregations (2)</div><div class="measure-grid"><div class="measure-card" id="m-fact-gl-margin-cogs" data-searchable="cogs  sum(&#x27;fact gl margin&#x27;[cogseur])"><div class="measure-head"><span class="measure-name">COGS</span><div class="model-meta"><span class="badge badge-dim">Base Measure</span><span class="badge">Format: #,##0 &quot;EUR&quot;</span></div></div><div class="code-block"><button type="button" class="copy-btn" data-copy="1">Copy DAX</button><pre><span class="kw">SUM</span>(&#x27;Fact GL Margin&#x27;[CogsEUR])</pre></div><div class="dep-row"><span>Reads:</span><a class="dep-chip" href="#t-fact-gl-margin">Fact GL Margin[CogsEUR]</a></div><div class="dep-row"><span>Used by:</span><a class="dep-chip" href="#m-fact-gl-margin-gross-margin">[Gross Margin %]</a></div></div><div class="measure-card" id="m-fact-gl-margin-gross-revenue" data-searchable="gross revenue  sum(&#x27;fact gl margin&#x27;[revenueeur])"><div class="measure-head"><span class="measure-name">Gross Revenue</span><div class="model-meta"><span class="badge badge-dim">Base Measure</span><span class="badge">Format: #,##0 &quot;EUR&quot;</span></div></div><div class="code-block"><button type="button" class="copy-btn" data-copy="1">Copy DAX</button><pre><span class="kw">SUM</span>(&#x27;Fact GL Margin&#x27;[RevenueEUR])</pre></div><div class="dep-row"><span>Reads:</span><a class="dep-chip" href="#t-fact-gl-margin">Fact GL Margin[RevenueEUR]</a></div><div class="dep-row"><span>Used by:</span><a class="dep-chip" href="#m-fact-gl-margin-gross-margin">[Gross Margin %]</a></div></div></div></div><div class="dax-folder"><div class="dax-folder-title">Display Folder: Profitability (1)</div><div class="dax-tier-label">Tier 2+: Derived &amp; Time-Intelligence KPIs (1)</div><div class="measure-grid"><div class="measure-card" id="m-fact-gl-margin-gross-margin" data-searchable="gross margin %  divide([gross revenue] - [cogs], [gross revenue], 0)"><div class="measure-head"><span class="measure-name">Gross Margin %</span><div class="model-meta"><span class="badge badge-accent">Derived KPI (Tier 1)</span><span class="badge">Format: 0.0%</span></div></div><div class="code-block"><button type="button" class="copy-btn" data-copy="1">Copy DAX</button><pre><span class="kw">DIVIDE</span>([Gross Revenue] - [COGS], [Gross Revenue], 0)</pre></div><div class="dep-row"><span>Reads:</span><a class="dep-chip" href="#m-fact-gl-margin-cogs">[COGS]</a><a class="dep-chip" href="#m-fact-gl-margin-gross-revenue">[Gross Revenue]</a></div></div></div></div></details></div>
+    </section>
+
+    <section class="section" id="sec-lineage">
+      <div class="section-header">
+        <h2>5. Interactive End-to-End Live Lineage</h2>
+        <span class="hint">Click any source, table, column, DAX measure, or report to trace live upstream &amp; downstream impact</span>
+      </div>
+      <div class="lineage-app" data-lineage-id="modelLineageData"></div>
+      <script type="application/json" id="modelLineageData">{"layers": [{"id": "source", "label": "1. Data Sources"}, {"id": "table", "label": "2. Model Tables"}, {"id": "column", "label": "3. Referenced Columns"}, {"id": "base_measure", "label": "4. Base Measures"}, {"id": "kpi_measure", "label": "5. Derived KPIs & Reports"}], "nodes": [{"id": "tbl:Dim Calendar", "label": "Dim Calendar", "layer": "table", "layerLabel": "Model Table", "sub": "IMPORT - 1 cols, 0 measures", "detail": "Shared corporate fiscal calendar.", "href": "#t-dim-calendar", "hrefLabel": "Jump to section", "code": ""}, {"id": "src:Snowflake: northwind.eu-central-1.snowflakecomputing.com", "label": "Snowflake: northwind.eu-central-1.snowflakecomputing.com", "layer": "source", "layerLabel": "External Data Source", "sub": "Snowflake", "detail": "Upstream connection or source object read by Power Query.", "href": "", "hrefLabel": "Jump to section", "code": ""}, {"id": "srcobj:Snowflake: northwind.eu-central-1.snowflakecomputing.com:DIM_CALENDAR_ISO", "label": "DIM_CALENDAR_ISO", "layer": "source", "layerLabel": "Source View / Object", "sub": "Snowflake", "detail": "Loaded into table 'Dim Calendar'.", "href": "", "hrefLabel": "Jump to section", "code": ""}, {"id": "tbl:Fact GL Margin", "label": "Fact GL Margin", "layer": "table", "layerLabel": "Model Table", "sub": "IMPORT - 3 cols, 3 measures", "detail": "Consolidated General Ledger revenue and COGS postings.", "href": "#t-fact-gl-margin", "hrefLabel": "Jump to section", "code": ""}, {"id": "src:SQL Server / Azure SQL: sql-fin-prod.database.windows.net", "label": "SQL Server / Azure SQL: sql-fin-prod.database.windows.net", "layer": "source", "layerLabel": "External Data Source", "sub": "SQL Server / Azure SQL", "detail": "Upstream connection or source object read by Power Query.", "href": "", "hrefLabel": "Jump to section", "code": ""}, {"id": "srcobj:SQL Server / Azure SQL: sql-fin-prod.database.windows.net:mart", "label": "mart", "layer": "source", "layerLabel": "Source View / Object", "sub": "SQL Server / Azure SQL", "detail": "Loaded into table 'Fact GL Margin'.", "href": "", "hrefLabel": "Jump to section", "code": ""}, {"id": "meas:Fact GL Margin[Gross Revenue]", "label": "Gross Revenue", "layer": "base_measure", "layerLabel": "Base Measure", "sub": "Fact GL Margin / P&L Core", "detail": "Format: #,##0 \"EUR\"", "href": "#m-fact-gl-margin-gross-revenue", "hrefLabel": "Jump to section", "code": "SUM('Fact GL Margin'[RevenueEUR])"}, {"id": "col:Fact GL Margin[RevenueEUR]", "label": "Fact GL Margin[RevenueEUR]", "layer": "column", "layerLabel": "Table Column", "sub": "Table: Fact GL Margin", "detail": "", "href": "#t-fact-gl-margin", "hrefLabel": "Jump to section", "code": ""}, {"id": "meas:Fact GL Margin[COGS]", "label": "COGS", "layer": "base_measure", "layerLabel": "Base Measure", "sub": "Fact GL Margin / P&L Core", "detail": "Format: #,##0 \"EUR\"", "href": "#m-fact-gl-margin-cogs", "hrefLabel": "Jump to section", "code": "SUM('Fact GL Margin'[CogsEUR])"}, {"id": "col:Fact GL Margin[CogsEUR]", "label": "Fact GL Margin[CogsEUR]", "layer": "column", "layerLabel": "Table Column", "sub": "Table: Fact GL Margin", "detail": "", "href": "#t-fact-gl-margin", "hrefLabel": "Jump to section", "code": ""}, {"id": "meas:Fact GL Margin[Gross Margin %]", "label": "Gross Margin %", "layer": "kpi_measure", "layerLabel": "Derived KPI (Tier 1)", "sub": "Fact GL Margin / Profitability", "detail": "Format: 0.0%", "href": "#m-fact-gl-margin-gross-margin", "hrefLabel": "Jump to section", "code": "DIVIDE([Gross Revenue] - [COGS], [Gross Revenue], 0)"}, {"id": "rep:r-3", "label": "CFO Monthly Margin & Cashflow Pack", "layer": "kpi_measure", "layerLabel": "Power BI Report", "sub": "Workspace: Corporate Finance & FP&A", "detail": "Downstream report bound to this semantic model.", "href": "", "hrefLabel": "Jump to section", "code": ""}], "edges": [{"from": "src:Snowflake: northwind.eu-central-1.snowflakecomputing.com", "to": "tbl:Dim Calendar"}, {"from": "srcobj:Snowflake: northwind.eu-central-1.snowflakecomputing.com:DIM_CALENDAR_ISO", "to": "tbl:Dim Calendar"}, {"from": "src:SQL Server / Azure SQL: sql-fin-prod.database.windows.net", "to": "tbl:Fact GL Margin"}, {"from": "srcobj:SQL Server / Azure SQL: sql-fin-prod.database.windows.net:mart", "to": "tbl:Fact GL Margin"}, {"from": "tbl:Fact GL Margin", "to": "col:Fact GL Margin[RevenueEUR]"}, {"from": "col:Fact GL Margin[RevenueEUR]", "to": "meas:Fact GL Margin[Gross Revenue]"}, {"from": "tbl:Fact GL Margin", "to": "col:Fact GL Margin[CogsEUR]"}, {"from": "col:Fact GL Margin[CogsEUR]", "to": "meas:Fact GL Margin[COGS]"}, {"from": "meas:Fact GL Margin[COGS]", "to": "meas:Fact GL Margin[Gross Margin %]"}, {"from": "meas:Fact GL Margin[Gross Revenue]", "to": "meas:Fact GL Margin[Gross Margin %]"}, {"from": "meas:Fact GL Margin[Gross Margin %]", "to": "rep:r-3"}], "defaultFocus": "meas:Fact GL Margin[Gross Revenue]"}</script>
+    </section>
+
+    <section class="section" id="sec-security">
+      <div class="section-header">
+        <h2>6. Row-Level Security (RLS), Downstream Reports &amp; Access</h2>
+        <span class="hint">0 RLS role(s) &bull; 1 bound report(s)</span>
+      </div>
+      <div class="card"><p style="margin:0;color:var(--fg-muted)">No Row-Level Security (RLS) roles defined in this model.</p></div>
+      <div class="table-scroll" style="margin-top:14px"><table class="data-table"><thead><tr><th>Downstream Report</th><th>Report Workspace</th><th>Report Type</th></tr></thead><tbody><tr><td><b>CFO Monthly Margin &amp; Cashflow Pack</b></td><td>Corporate Finance &amp; FP&amp;A</td><td><code>PowerBIReport</code></td></tr></tbody></table></div>
+      
+    </section>
+  </main>
+</div>
+
+<script src="../assets/mermaid.min.js"></script>
+<script src="../assets/portal_common.js"></script>
+<script src="../assets/interactive_mermaid.js"></script>
+<script src="../assets/lineage_widget.js"></script>
+<script>
+(function () {
+  var input = document.getElementById("modelQuickFilter");
+  if (!input) return;
+  input.addEventListener("input", function () {
+    var q = (input.value || "").toLowerCase().trim();
+    document.querySelectorAll("[data-searchable]").forEach(function (el) {
+      var match = !q || (el.getAttribute("data-searchable") || "").indexOf(q) !== -1;
+      el.style.display = match ? "" : "none";
+      if (q && match && el.tagName === "DETAILS") el.open = true;
+    });
+  });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Power BI Documentation &amp; Live Lineage Portal</title>
+  <link rel="stylesheet" href="assets/portal.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="topbar-row">
+    <div>
+      <h1>Power BI Documentation &amp; Live Lineage Portal</h1>
+      <p>3 Workspaces &bull; 3 Semantic Models &bull; 4 Reports &bull; Generated 2026-11-12 15:27</p>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      <div class="app-switcher studio-only-link" style="display:none">
+        <a href="/">&larr; 1. Scanner &amp; Setup</a>
+        <span class="active-seg">2. Documentation Portal</span>
+      </div>
+      <button type="button" class="theme-icon-btn" data-toggle-theme="1" title="Toggle Light / Dark theme" aria-label="Toggle Light / Dark theme">
+        <svg class="icon-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        <svg class="icon-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+      </button>
+    </div>
+  </div>
+  <nav class="top-tabs">
+    <button type="button" class="top-tab active" data-tab="tab-portfolio">1. Semantic Models (3)</button>
+    <button type="button" class="top-tab" data-tab="tab-workspaces">2. Workspaces &amp; Reports (4)</button>
+    <button type="button" class="top-tab" data-tab="tab-lineage">3. Live Lineage Explorer</button>
+    <button type="button" class="top-tab" data-tab="tab-health">4. Governance &amp; Health (5)</button>
+  </nav>
+</header>
+
+<main class="catalog-wrap">
+  <div class="kpi-grid">
+    <div class="kpi-card"><div class="val">3</div><div class="lbl">Workspaces</div></div>
+    <div class="kpi-card"><div class="val">3</div><div class="lbl">Semantic Models</div></div>
+    <div class="kpi-card"><div class="val">4</div><div class="lbl">Power BI Reports</div></div>
+    <div class="kpi-card"><div class="val">9</div><div class="lbl">Model Tables</div></div>
+    <div class="kpi-card"><div class="val">11</div><div class="lbl">DAX Measures</div></div>
+    <div class="kpi-card"><div class="val">5</div><div class="lbl">Source Connectors</div></div>
+  </div>
+
+  <section class="tab-pane active" id="tab-portfolio">
+    <div class="filter-bar" style="justify-content:space-between">
+      <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;flex:1;min-width:260px">
+        <input type="search" id="catalogSearch" data-quick-search="1" placeholder="Search semantic models, workspaces, source connectors, or tables (Ctrl+K)...">
+        <button type="button" class="chip-btn active" data-status-chip="all">All (3)</button>
+        <button type="button" class="chip-btn" data-status-chip="ok">Healthy</button>
+        <button type="button" class="chip-btn" data-status-chip="warn">Warnings</button>
+        <button type="button" class="chip-btn" data-status-chip="bad">Critical</button>
+        <button type="button" class="chip-btn" data-ws-chip="corporate finance &amp; fp&amp;a">Workspace: Corporate Finance &amp; FP&amp;A</button><button type="button" class="chip-btn" data-ws-chip="enterprise core semantic models">Workspace: Enterprise Core Semantic Models</button><button type="button" class="chip-btn" data-ws-chip="supply chain &amp; procurement analytics">Workspace: Supply Chain &amp; Procurement Analytics</button>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+        <select id="catalogSort" class="sort-select" aria-label="Sort semantic models">
+          <option value="name">Sort: Name (A-Z)</option>
+          <option value="measures">Sort: Most DAX Measures</option>
+          <option value="tables">Sort: Most Tables</option>
+          <option value="ws">Sort: Workspace (A-Z)</option>
+          <option value="sev">Sort: Health / Warnings First</option>
+        </select>
+        <div class="view-toggle" role="group" aria-label="Catalog layout view">
+          <button type="button" class="view-btn active" data-catalog-view="grid">Grid</button>
+          <button type="button" class="view-btn" data-catalog-view="list">List</button>
+          <button type="button" class="view-btn" data-catalog-view="workspace">By Workspace</button>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex;justify-content:space-between;align-items:center;margin:-6px 2px 12px 2px;font-size:12.5px;color:var(--fg-muted)">
+      <span id="catalogCountLabel">Showing <b>3</b> of <b>3</b> semantic models</span>
+      <button type="button" id="catalogResetBtn" class="lin-btn" style="display:none">Reset filters</button>
+    </div>
+
+    <div class="model-grid" id="modelGrid">
+      <a class="model-card" href="models/corporate-finance-fp-a-group-working-capital-margin.html" data-model-item="card" data-status="ok" data-ws="corporate finance &amp; fp&amp;a" data-search="group working capital &amp; margin corporate finance &amp; fp&amp;a power bi service sql server / azure sql snowflake dim calendar fact gl margin" data-name="group working capital &amp; margin" data-measures="3" data-tables="2" data-columns="4" data-rels="1" data-reports="1" data-sev="0" style="color:inherit;text-decoration:none"><div class="card-eyebrow"><span class="eyebrow-type">Semantic Model</span><span>Power BI Service</span></div><div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px"><h3>Group Working Capital &amp; Margin</h3><span class="badge badge-ok">Healthy</span></div><div style="font-size:12px;color:var(--fg-muted)">Workspace: <b>Corporate Finance &amp; FP&amp;A</b></div><div class="model-meta"><span class="badge badge-accent">SQL Server / Azure SQL</span><span class="badge badge-accent">Snowflake</span></div><div class="model-stats"><div><b>2</b>Tables</div><div><b>3</b>Measures</div><div><b>1</b>Rels</div><div><b>1</b>Reports</div></div><div class="card-footer-meta"><span>Owner: Local / Unassigned</span><span>Refresh: Snapshot</span></div></a><a class="model-card" href="models/enterprise-core-semantic-models-global-supply-chain-otif-core.html" data-model-item="card" data-status="ok" data-ws="enterprise core semantic models" data-search="global supply chain &amp; otif core enterprise core semantic models power bi service sap hana snowflake dim calendar dim customer dim material dim plant fact deliveries" data-name="global supply chain &amp; otif core" data-measures="7" data-tables="5" data-columns="22" data-rels="4" data-reports="2" data-sev="0" style="color:inherit;text-decoration:none"><div class="card-eyebrow"><span class="eyebrow-type">Semantic Model</span><span>Power BI Service</span></div><div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px"><h3>Global Supply Chain &amp; OTIF Core</h3><span class="badge badge-ok">Healthy</span></div><div style="font-size:12px;color:var(--fg-muted)">Workspace: <b>Enterprise Core Semantic Models</b></div><div class="model-meta"><span class="badge badge-accent">SAP HANA</span><span class="badge badge-accent">Snowflake</span></div><div class="model-stats"><div><b>5</b>Tables</div><div><b>7</b>Measures</div><div><b>4</b>Rels</div><div><b>2</b>Reports</div></div><div class="card-footer-meta"><span>Owner: Local / Unassigned</span><span>Refresh: Snapshot</span></div></a><a class="model-card" href="models/supply-chain-procurement-analytics-regional-vendor-spend-tracker.html" data-model-item="card" data-status="bad" data-ws="supply chain &amp; procurement analytics" data-search="regional vendor spend tracker supply chain &amp; procurement analytics power bi service excel file sql server / azure sql dim vendor fact spend" data-name="regional vendor spend tracker" data-measures="1" data-tables="2" data-columns="3" data-rels="1" data-reports="1" data-sev="2" style="color:inherit;text-decoration:none"><div class="card-eyebrow"><span class="eyebrow-type">Semantic Model</span><span>Power BI Service</span></div><div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px"><h3>Regional Vendor Spend Tracker</h3><span class="badge badge-bad">3 critical</span></div><div style="font-size:12px;color:var(--fg-muted)">Workspace: <b>Supply Chain &amp; Procurement Analytics</b></div><div class="model-meta"><span class="badge badge-accent">Excel</span><span class="badge badge-accent">File</span><span class="badge badge-accent">SQL Server / Azure SQL</span></div><div class="model-stats"><div><b>2</b>Tables</div><div><b>1</b>Measures</div><div><b>1</b>Rels</div><div><b>1</b>Reports</div></div><div class="card-footer-meta"><span>Owner: Local / Unassigned</span><span>Refresh: Snapshot</span></div></a>
+    </div>
+
+    <div class="table-scroll" id="modelListWrap" style="display:none">
+      <table class="data-table" id="modelListTable">
+        <thead>
+          <tr>
+            <th class="sortable-th" data-sort-col="name">Semantic Model &updownarrow;</th>
+            <th class="sortable-th" data-sort-col="ws">Workspace &updownarrow;</th>
+            <th>Format</th>
+            <th>Connectors</th>
+            <th class="sortable-th" data-sort-col="tables">Tables &updownarrow;</th>
+            <th class="sortable-th" data-sort-col="columns">Cols &updownarrow;</th>
+            <th class="sortable-th" data-sort-col="measures">DAX Measures &updownarrow;</th>
+            <th class="sortable-th" data-sort-col="rels">Rels &updownarrow;</th>
+            <th class="sortable-th" data-sort-col="reports">Reports &updownarrow;</th>
+            <th class="sortable-th" data-sort-col="sev">Health &updownarrow;</th>
+          </tr>
+        </thead>
+        <tbody id="modelListBody">
+          <tr data-model-item="row" data-status="ok" data-ws="corporate finance &amp; fp&amp;a" data-search="group working capital &amp; margin corporate finance &amp; fp&amp;a power bi service sql server / azure sql snowflake dim calendar fact gl margin" data-name="group working capital &amp; margin" data-measures="3" data-tables="2" data-columns="4" data-rels="1" data-reports="1" data-sev="0"><td><a href="models/corporate-finance-fp-a-group-working-capital-margin.html"><b>Group Working Capital &amp; Margin</b></a></td><td>Corporate Finance &amp; FP&amp;A</td><td><span class='badge'>Power BI Service</span></td><td><span class="badge badge-accent">SQL Server / Azure SQL</span><span class="badge badge-accent">Snowflake</span></td><td><b>2</b></td><td>4</td><td><b>3</b></td><td>1</td><td>1</td><td><span class="badge badge-ok">Healthy</span></td></tr><tr data-model-item="row" data-status="ok" data-ws="enterprise core semantic models" data-search="global supply chain &amp; otif core enterprise core semantic models power bi service sap hana snowflake dim calendar dim customer dim material dim plant fact deliveries" data-name="global supply chain &amp; otif core" data-measures="7" data-tables="5" data-columns="22" data-rels="4" data-reports="2" data-sev="0"><td><a href="models/enterprise-core-semantic-models-global-supply-chain-otif-core.html"><b>Global Supply Chain &amp; OTIF Core</b></a></td><td>Enterprise Core Semantic Models</td><td><span class='badge'>Power BI Service</span></td><td><span class="badge badge-accent">SAP HANA</span><span class="badge badge-accent">Snowflake</span></td><td><b>5</b></td><td>22</td><td><b>7</b></td><td>4</td><td>2</td><td><span class="badge badge-ok">Healthy</span></td></tr><tr data-model-item="row" data-status="bad" data-ws="supply chain &amp; procurement analytics" data-search="regional vendor spend tracker supply chain &amp; procurement analytics power bi service excel file sql server / azure sql dim vendor fact spend" data-name="regional vendor spend tracker" data-measures="1" data-tables="2" data-columns="3" data-rels="1" data-reports="1" data-sev="2"><td><a href="models/supply-chain-procurement-analytics-regional-vendor-spend-tracker.html"><b>Regional Vendor Spend Tracker</b></a></td><td>Supply Chain &amp; Procurement Analytics</td><td><span class='badge'>Power BI Service</span></td><td><span class="badge badge-accent">Excel</span><span class="badge badge-accent">File</span><span class="badge badge-accent">SQL Server / Azure SQL</span></td><td><b>2</b></td><td>3</td><td><b>1</b></td><td>1</td><td>1</td><td><span class="badge badge-bad">3 critical</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div id="modelWsGroups" style="display:none">
+      <details class="ws-group-card" data-ws-group="corporate finance &amp; fp&amp;a" open><summary><span>Workspace: <b>Corporate Finance &amp; FP&amp;A</b></span><span style="display:flex;gap:8px;align-items:center"><span class="badge badge-accent">1 semantic model(s)</span><span class="badge">3 DAX measures</span><span class="badge">1 report(s)</span></span></summary><div class="ws-group-body"><div class="model-grid"><a class="model-card" href="models/corporate-finance-fp-a-group-working-capital-margin.html" data-model-item="wscard" data-status="ok" data-ws="corporate finance &amp; fp&amp;a" data-search="group working capital &amp; margin corporate finance &amp; fp&amp;a power bi service sql server / azure sql snowflake dim calendar fact gl margin" data-name="group working capital &amp; margin" data-measures="3" data-tables="2" data-columns="4" data-rels="1" data-reports="1" data-sev="0" style="color:inherit;text-decoration:none"><div class="card-eyebrow"><span class="eyebrow-type">Semantic Model</span><span>Power BI Service</span></div><div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px"><h3>Group Working Capital &amp; Margin</h3><span class="badge badge-ok">Healthy</span></div><div style="font-size:12px;color:var(--fg-muted)">Workspace: <b>Corporate Finance &amp; FP&amp;A</b></div><div class="model-meta"><span class="badge badge-accent">SQL Server / Azure SQL</span><span class="badge badge-accent">Snowflake</span></div><div class="model-stats"><div><b>2</b>Tables</div><div><b>3</b>Measures</div><div><b>1</b>Rels</div><div><b>1</b>Reports</div></div><div class="card-footer-meta"><span>Owner: Local / Unassigned</span><span>Refresh: Snapshot</span></div></a></div></div></details><details class="ws-group-card" data-ws-group="enterprise core semantic models" open><summary><span>Workspace: <b>Enterprise Core Semantic Models</b></span><span style="display:flex;gap:8px;align-items:center"><span class="badge badge-accent">1 semantic model(s)</span><span class="badge">7 DAX measures</span><span class="badge">2 report(s)</span></span></summary><div class="ws-group-body"><div class="model-grid"><a class="model-card" href="models/enterprise-core-semantic-models-global-supply-chain-otif-core.html" data-model-item="wscard" data-status="ok" data-ws="enterprise core semantic models" data-search="global supply chain &amp; otif core enterprise core semantic models power bi service sap hana snowflake dim calendar dim customer dim material dim plant fact deliveries" data-name="global supply chain &amp; otif core" data-measures="7" data-tables="5" data-columns="22" data-rels="4" data-reports="2" data-sev="0" style="color:inherit;text-decoration:none"><div class="card-eyebrow"><span class="eyebrow-type">Semantic Model</span><span>Power BI Service</span></div><div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px"><h3>Global Supply Chain &amp; OTIF Core</h3><span class="badge badge-ok">Healthy</span></div><div style="font-size:12px;color:var(--fg-muted)">Workspace: <b>Enterprise Core Semantic Models</b></div><div class="model-meta"><span class="badge badge-accent">SAP HANA</span><span class="badge badge-accent">Snowflake</span></div><div class="model-stats"><div><b>5</b>Tables</div><div><b>7</b>Measures</div><div><b>4</b>Rels</div><div><b>2</b>Reports</div></div><div class="card-footer-meta"><span>Owner: Local / Unassigned</span><span>Refresh: Snapshot</span></div></a></div></div></details><details class="ws-group-card" data-ws-group="supply chain &amp; procurement analytics" open><summary><span>Workspace: <b>Supply Chain &amp; Procurement Analytics</b></span><span style="display:flex;gap:8px;align-items:center"><span class="badge badge-accent">1 semantic model(s)</span><span class="badge">1 DAX measures</span><span class="badge">1 report(s)</span></span></summary><div class="ws-group-body"><div class="model-grid"><a class="model-card" href="models/supply-chain-procurement-analytics-regional-vendor-spend-tracker.html" data-model-item="wscard" data-status="bad" data-ws="supply chain &amp; procurement analytics" data-search="regional vendor spend tracker supply chain &amp; procurement analytics power bi service excel file sql server / azure sql dim vendor fact spend" data-name="regional vendor spend tracker" data-measures="1" data-tables="2" data-columns="3" data-rels="1" data-reports="1" data-sev="2" style="color:inherit;text-decoration:none"><div class="card-eyebrow"><span class="eyebrow-type">Semantic Model</span><span>Power BI Service</span></div><div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px"><h3>Regional Vendor Spend Tracker</h3><span class="badge badge-bad">3 critical</span></div><div style="font-size:12px;color:var(--fg-muted)">Workspace: <b>Supply Chain &amp; Procurement Analytics</b></div><div class="model-meta"><span class="badge badge-accent">Excel</span><span class="badge badge-accent">File</span><span class="badge badge-accent">SQL Server / Azure SQL</span></div><div class="model-stats"><div><b>2</b>Tables</div><div><b>1</b>Measures</div><div><b>1</b>Rels</div><div><b>1</b>Reports</div></div><div class="card-footer-meta"><span>Owner: Local / Unassigned</span><span>Refresh: Snapshot</span></div></a></div></div></details>
+    </div>
+  </section>
+
+  <section class="tab-pane" id="tab-workspaces">
+    <h3 style="margin:0 0 10px 0;font-size:16px">Workspace Inventory &amp; Capacity Overview</h3>
+    <div class="table-scroll" style="margin-bottom:24px">
+      <table class="data-table">
+        <thead>
+          <tr><th>Workspace</th><th>Capacity / SKU</th><th>Semantic Models</th><th>Reports</th><th>Dataflows</th><th>Principals</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><b>Corporate Finance &amp; FP&amp;A</b></td><td><span class='badge badge-accent'>Premium P1</span></td><td><b>1</b></td><td><b>1</b></td><td>0</td><td>1</td></tr><tr><td><b>Enterprise Core Semantic Models</b></td><td><span class='badge badge-accent'>Fabric F64</span></td><td><b>1</b></td><td><b>0</b></td><td>1</td><td>2</td></tr><tr><td><b>Supply Chain &amp; Procurement Analytics</b></td><td><span class='badge badge-accent'>Fabric F64</span></td><td><b>1</b></td><td><b>3</b></td><td>0</td><td>1</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 style="margin:0 0 10px 0;font-size:16px">Reports to Semantic Model Mapping (Including Cross-Workspace Shared Datasets)</h3>
+    <div class="table-scroll">
+      <table class="data-table">
+        <thead>
+          <tr><th>Power BI Report</th><th>Report Workspace</th><th>Underlying Semantic Model</th><th>Model Workspace</th><th>Binding Architecture</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><b>CFO Monthly Margin &amp; Cashflow Pack</b></td><td>Corporate Finance &amp; FP&amp;A</td><td><a href="models/corporate-finance-fp-a-group-working-capital-margin.html"><b>Group Working Capital &amp; Margin</b></a></td><td>Corporate Finance &amp; FP&amp;A</td><td><span class="badge badge-ok">Same-Workspace Model</span></td></tr><tr><td><b>Executive OTIF &amp; Carrier Performance</b></td><td>Supply Chain &amp; Procurement Analytics</td><td><a href="models/enterprise-core-semantic-models-global-supply-chain-otif-core.html"><b>Global Supply Chain &amp; OTIF Core</b></a></td><td>Enterprise Core Semantic Models</td><td><span class="badge badge-accent">Cross-Workspace Shared Dataset</span></td></tr><tr><td><b>Vendor Rebate &amp; Spend Variance</b></td><td>Supply Chain &amp; Procurement Analytics</td><td><a href="models/supply-chain-procurement-analytics-regional-vendor-spend-tracker.html"><b>Regional Vendor Spend Tracker</b></a></td><td>Supply Chain &amp; Procurement Analytics</td><td><span class="badge badge-ok">Same-Workspace Model</span></td></tr><tr><td><b>Warehouse Dispatch Daily Monitor</b></td><td>Supply Chain &amp; Procurement Analytics</td><td><a href="models/enterprise-core-semantic-models-global-supply-chain-otif-core.html"><b>Global Supply Chain &amp; OTIF Core</b></a></td><td>Enterprise Core Semantic Models</td><td><span class="badge badge-accent">Cross-Workspace Shared Dataset</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    
+  </section>
+
+  <section class="tab-pane" id="tab-lineage">
+    <div style="margin-bottom:12px;color:var(--fg-muted);font-size:13px">
+      Trace data end-to-end from upstream platforms and database views through semantic models and core DAX KPIs into downstream Power BI reports across workspaces.
+    </div>
+    <div class="lineage-app" data-lineage-id="portfolioLineageData"></div>
+    <script type="application/json" id="portfolioLineageData">{"layers": [{"id": "source", "label": "1. Source Systems"}, {"id": "object", "label": "2. Views / Databases"}, {"id": "model", "label": "3. Semantic Models"}, {"id": "kpi", "label": "4. Core KPIs"}, {"id": "report", "label": "5. Power BI Reports"}], "nodes": [{"id": "mdl:corporate-finance-fp-a-group-working-capital-margin", "label": "Group Working Capital & Margin", "layer": "model", "layerLabel": "Semantic Model", "sub": "Corporate Finance & FP&A - 2 tables, 3 measures", "detail": "Sources: SQL Server / Azure SQL, Snowflake", "href": "models/corporate-finance-fp-a-group-working-capital-margin.html", "hrefLabel": "Open model documentation"}, {"id": "sys:SQL Server / Azure SQL", "label": "SQL Server / Azure SQL", "layer": "source", "layerLabel": "Source Platform", "sub": "Connector technology", "detail": "", "href": "", "hrefLabel": "Open model documentation"}, {"id": "ep:SQL Server / Azure SQL:mart", "label": "mart", "layer": "object", "layerLabel": "Source Endpoint / Object", "sub": "SQL Server / Azure SQL (sql-fin-prod.database.windows.net)", "detail": "Read by table 'Fact GL Margin'", "href": "", "hrefLabel": "Open model documentation"}, {"id": "sys:Snowflake", "label": "Snowflake", "layer": "source", "layerLabel": "Source Platform", "sub": "Connector technology", "detail": "", "href": "", "hrefLabel": "Open model documentation"}, {"id": "ep:Snowflake:DIM_CALENDAR_ISO", "label": "DIM_CALENDAR_ISO", "layer": "object", "layerLabel": "Source Endpoint / Object", "sub": "Snowflake (northwind.eu-central-1.snowflakecomputing.com)", "detail": "Read by table 'Dim Calendar'", "href": "", "hrefLabel": "Open model documentation"}, {"id": "kpi:corporate-finance-fp-a-group-working-capital-margin:Fact GL Margin[Gross Revenue]", "label": "Gross Revenue", "layer": "kpi", "layerLabel": "DAX KPI Measure", "sub": "Group Working Capital & Margin (Fact GL Margin)", "detail": "", "href": "models/corporate-finance-fp-a-group-working-capital-margin.html#m-fact-gl-margin-gross-revenue", "hrefLabel": "Inspect DAX formula"}, {"id": "kpi:corporate-finance-fp-a-group-working-capital-margin:Fact GL Margin[COGS]", "label": "COGS", "layer": "kpi", "layerLabel": "DAX KPI Measure", "sub": "Group Working Capital & Margin (Fact GL Margin)", "detail": "", "href": "models/corporate-finance-fp-a-group-working-capital-margin.html#m-fact-gl-margin-cogs", "hrefLabel": "Inspect DAX formula"}, {"id": "kpi:corporate-finance-fp-a-group-working-capital-margin:Fact GL Margin[Gross Margin %]", "label": "Gross Margin %", "layer": "kpi", "layerLabel": "DAX KPI Measure", "sub": "Group Working Capital & Margin (Fact GL Margin)", "detail": "", "href": "models/corporate-finance-fp-a-group-working-capital-margin.html#m-fact-gl-margin-gross-margin", "hrefLabel": "Inspect DAX formula"}, {"id": "rep:r-3", "label": "CFO Monthly Margin & Cashflow Pack", "layer": "report", "layerLabel": "Power BI Report", "sub": "Workspace: Corporate Finance & FP&A", "detail": "", "href": "models/corporate-finance-fp-a-group-working-capital-margin.html", "hrefLabel": "Open model documentation"}, {"id": "mdl:enterprise-core-semantic-models-global-supply-chain-otif-core", "label": "Global Supply Chain & OTIF Core", "layer": "model", "layerLabel": "Semantic Model", "sub": "Enterprise Core Semantic Models - 5 tables, 7 measures", "detail": "Sources: SAP HANA, Snowflake", "href": "models/enterprise-core-semantic-models-global-supply-chain-otif-core.html", "hrefLabel": "Open model documentation"}, {"id": "sys:SAP HANA", "label": "SAP HANA", "layer": "source", "layerLabel": "Source Platform", "sub": "Connector technology", "detail": "", "href": "", "hrefLabel": "Open model documentation"}, {"id": "ep:SAP HANA:CV_MD_MATERIAL", "label": "CV_MD_MATERIAL", "layer": "object", "layerLabel": "Source Endpoint / Object", "sub": "SAP HANA (pHanaServer)", "detail": "Read by table 'Dim Material'", "href": "", "hrefLabel": "Open model documentation"}, {"id": "ep:SAP HANA:CV_MD_PLANT_NETWORK", "label": "CV_MD_PLANT_NETWORK", "layer": "object", "layerLabel": "Source Endpoint / Object", "sub": "SAP HANA (pHanaServer)", "detail": "Read by table 'Dim Plant'", "href": "", "hrefLabel": "Open model documentation"}, {"id": "ep:SAP HANA:CV_SD_DELIVERY_OTIF", "label": "CV_SD_DELIVERY_OTIF", "layer": "object", "layerLabel": "Source Endpoint / Object", "sub": "SAP HANA (pHanaServer)", "detail": "Read by table 'Fact Deliveries'", "href": "", "hrefLabel": "Open model documentation"}, {"id": "ep:Snowflake:EDW_CORE/DIM_CALENDAR_ISO", "label": "EDW_CORE/DIM_CALENDAR_ISO", "layer": "object", "layerLabel": "Source Endpoint / Object", "sub": "Snowflake (northwind.eu-central-1.snowflakecomputing.com)", "detail": "Read by table 'Dim Calendar'", "href": "", "hrefLabel": "Open model documentation"}, {"id": "ep:Snowflake:DIM_CUSTOMER_MDM", "label": "DIM_CUSTOMER_MDM", "layer": "object", "layerLabel": "Source Endpoint / Object", "sub": "Snowflake (northwind.eu-central-1.snowflakecomputing.com)", "detail": "Read by table 'Dim Customer'", "href": "", "hrefLabel": "Open model documentation"}, {"id": "kpi:enterprise-core-semantic-models-global-supply-chain-otif-core:Fact Deliveries[OTIF %]", "label": "OTIF %", "layer": "kpi", "layerLabel": "DAX KPI Measure", "sub": "Global Supply Chain & OTIF Core (Fact Deliveries)", "detail": "", "href": "models/enterprise-core-semantic-models-global-supply-chain-otif-core.html#m-fact-deliveries-otif", "hrefLabel": "Inspect DAX formula"}, {"id": "kpi:enterprise-core-semantic-models-global-supply-chain-otif-core:Fact Deliveries[Delivery Lines]", "label": "Delivery Lines", "layer": "kpi", "layerLabel": "DAX KPI Measure", "sub": "Global Supply Chain & OTIF Core (Fact Deliveries)", "detail": "", "href": "models/enterprise-core-semantic-models-global-supply-chain-otif-core.html#m-fact-deliveries-delivery-lines", "hrefLabel": "Inspect DAX formula"}, {"id": "kpi:enterprise-core-semantic-models-global-supply-chain-otif-core:Fact Deliveries[OTIF Lines]", "label": "OTIF Lines", "layer": "kpi", "layerLabel": "DAX KPI Measure", "sub": "Global Supply Chain & OTIF Core (Fact Deliveries)", "detail": "", "href": "models/enterprise-core-semantic-models-global-supply-chain-otif-core.html#m-fact-deliveries-otif-lines", "hrefLabel": "Inspect DAX formula"}, {"id": "kpi:enterprise-core-semantic-models-global-supply-chain-otif-core:Fact Deliveries[OTIF % YTD]", "label": "OTIF % YTD", "layer": "kpi", "layerLabel": "DAX KPI Measure", "sub": "Global Supply Chain & OTIF Core (Fact Deliveries)", "detail": "", "href": "models/enterprise-core-semantic-models-global-supply-chain-otif-core.html#m-fact-deliveries-otif-ytd", "hrefLabel": "Inspect DAX formula"}, {"id": "kpi:enterprise-core-semantic-models-global-supply-chain-otif-core:Fact Deliveries[OTIF % vs PY]", "label": "OTIF % vs PY", "layer": "kpi", "layerLabel": "DAX KPI Measure", "sub": "Global Supply Chain & OTIF Core (Fact Deliveries)", "detail": "", "href": "models/enterprise-core-semantic-models-global-supply-chain-otif-core.html#m-fact-deliveries-otif-vs-py", "hrefLabel": "Inspect DAX formula"}, {"id": "rep:r-1", "label": "Executive OTIF & Carrier Performance", "layer": "report", "layerLabel": "Power BI Report", "sub": "Workspace: Supply Chain & Procurement Analytics (Cross-Workspace)", "detail": "", "href": "models/enterprise-core-semantic-models-global-supply-chain-otif-core.html", "hrefLabel": "Open model documentation"}, {"id": "rep:r-2", "label": "Warehouse Dispatch Daily Monitor", "layer": "report", "layerLabel": "Power BI Report", "sub": "Workspace: Supply Chain & Procurement Analytics (Cross-Workspace)", "detail": "", "href": "models/enterprise-core-semantic-models-global-supply-chain-otif-core.html", "hrefLabel": "Open model documentation"}, {"id": "mdl:supply-chain-procurement-analytics-regional-vendor-spend-tracker", "label": "Regional Vendor Spend Tracker", "layer": "model", "layerLabel": "Semantic Model", "sub": "Supply Chain & Procurement Analytics - 2 tables, 1 measures", "detail": "Sources: Excel, File, SQL Server / Azure SQL", "href": "models/supply-chain-procurement-analytics-regional-vendor-spend-tracker.html", "hrefLabel": "Open model documentation"}, {"id": "sys:Excel", "label": "Excel", "layer": "source", "layerLabel": "Source Platform", "sub": "Connector technology", "detail": "", "href": "", "hrefLabel": "Open model documentation"}, {"id": "ep:Excel:File.Contents", "label": "File.Contents", "layer": "object", "layerLabel": "Source Endpoint / Object", "sub": "Excel (File.Contents)", "detail": "Read by table 'Dim Vendor'", "href": "", "hrefLabel": "Open model documentation"}, {"id": "sys:File", "label": "File", "layer": "source", "layerLabel": "Source Platform", "sub": "Connector technology", "detail": "", "href": "", "hrefLabel": "Open model documentation"}, {"id": "ep:File:C:\\Users\\Public\\VendorMapping_2025.xlsx", "label": "C:\\Users\\Public\\VendorMapping_2025.xlsx", "layer": "object", "layerLabel": "Source Endpoint / Object", "sub": "File (C:\\Users\\Public\\VendorMapping_2025.xlsx)", "detail": "Read by table 'Dim Vendor'", "href": "", "hrefLabel": "Open model documentation"}, {"id": "ep:SQL Server / Azure SQL:sql-procurement-dev.northwind.internal", "label": "sql-procurement-dev.northwind.internal", "layer": "object", "layerLabel": "Source Endpoint / Object", "sub": "SQL Server / Azure SQL (sql-procurement-dev.northwind.internal)", "detail": "Read by table 'Fact Spend'", "href": "", "hrefLabel": "Open model documentation"}, {"id": "kpi:supply-chain-procurement-analytics-regional-vendor-spend-tracker:Fact Spend[Total Spend]", "label": "Total Spend", "layer": "kpi", "layerLabel": "DAX KPI Measure", "sub": "Regional Vendor Spend Tracker (Fact Spend)", "detail": "", "href": "models/supply-chain-procurement-analytics-regional-vendor-spend-tracker.html#m-fact-spend-total-spend", "hrefLabel": "Inspect DAX formula"}, {"id": "rep:r-4", "label": "Vendor Rebate & Spend Variance", "layer": "report", "layerLabel": "Power BI Report", "sub": "Workspace: Supply Chain & Procurement Analytics", "detail": "", "href": "models/supply-chain-procurement-analytics-regional-vendor-spend-tracker.html", "hrefLabel": "Open model documentation"}], "edges": [{"from": "sys:SQL Server / Azure SQL", "to": "ep:SQL Server / Azure SQL:mart"}, {"from": "ep:SQL Server / Azure SQL:mart", "to": "mdl:corporate-finance-fp-a-group-working-capital-margin"}, {"from": "sys:Snowflake", "to": "ep:Snowflake:DIM_CALENDAR_ISO"}, {"from": "ep:Snowflake:DIM_CALENDAR_ISO", "to": "mdl:corporate-finance-fp-a-group-working-capital-margin"}, {"from": "mdl:corporate-finance-fp-a-group-working-capital-margin", "to": "kpi:corporate-finance-fp-a-group-working-capital-margin:Fact GL Margin[Gross Revenue]"}, {"from": "mdl:corporate-finance-fp-a-group-working-capital-margin", "to": "kpi:corporate-finance-fp-a-group-working-capital-margin:Fact GL Margin[COGS]"}, {"from": "mdl:corporate-finance-fp-a-group-working-capital-margin", "to": "kpi:corporate-finance-fp-a-group-working-capital-margin:Fact GL Margin[Gross Margin %]"}, {"from": "kpi:corporate-finance-fp-a-group-working-capital-margin:Fact GL Margin[Gross Revenue]", "to": "rep:r-3"}, {"from": "kpi:corporate-finance-fp-a-group-working-capital-margin:Fact GL Margin[COGS]", "to": "rep:r-3"}, {"from": "kpi:corporate-finance-fp-a-group-working-capital-margin:Fact GL Margin[Gross Margin %]", "to": "rep:r-3"}, {"from": "sys:SAP HANA", "to": "ep:SAP HANA:CV_MD_MATERIAL"}, {"from": "ep:SAP HANA:CV_MD_MATERIAL", "to": "mdl:enterprise-core-semantic-models-global-supply-chain-otif-core"}, {"from": "sys:SAP HANA", "to": "ep:SAP HANA:CV_MD_PLANT_NETWORK"}, {"from": "ep:SAP HANA:CV_MD_PLANT_NETWORK", "to": "mdl:enterprise-core-semantic-models-global-supply-chain-otif-core"}, {"from": "sys:SAP HANA", "to": "ep:SAP HANA:CV_SD_DELIVERY_OTIF"}, {"from": "ep:SAP HANA:CV_SD_DELIVERY_OTIF", "to": "mdl:enterprise-core-semantic-models-global-supply-chain-otif-core"}, {"from": "sys:Snowflake", "to": "ep:Snowflake:EDW_CORE/DIM_CALENDAR_ISO"}, {"from": "ep:Snowflake:EDW_CORE/DIM_CALENDAR_ISO", "to": "mdl:enterprise-core-semantic-models-global-supply-chain-otif-core"}, {"from": "sys:Snowflake", "to": "ep:Snowflake:DIM_CUSTOMER_MDM"}, {"from": "ep:Snowflake:DIM_CUSTOMER_MDM", "to": "mdl:enterprise-core-semantic-models-global-supply-chain-otif-core"}, {"from": "mdl:enterprise-core-semantic-models-global-supply-chain-otif-core", "to": "kpi:enterprise-core-semantic-models-global-supply-chain-otif-core:Fact Deliveries[OTIF %]"}, {"from": "mdl:enterprise-core-semantic-models-global-supply-chain-otif-core", "to": "kpi:enterprise-core-semantic-models-global-supply-chain-otif-core:Fact Deliveries[Delivery Lines]"}, {"from": "mdl:enterprise-core-semantic-models-global-supply-chain-otif-core", "to": "kpi:enterprise-core-semantic-models-global-supply-chain-otif-core:Fact Deliveries[OTIF Lines]"}, {"from": "mdl:enterprise-core-semantic-models-global-supply-chain-otif-core", "to": "kpi:enterprise-core-semantic-models-global-supply-chain-otif-core:Fact Deliveries[OTIF % YTD]"}, {"from": "mdl:enterprise-core-semantic-models-global-supply-chain-otif-core", "to": "kpi:enterprise-core-semantic-models-global-supply-chain-otif-core:Fact Deliveries[OTIF % vs PY]"}, {"from": "kpi:enterprise-core-semantic-models-global-supply-chain-otif-core:Fact Deliveries[OTIF %]", "to": "rep:r-1"}, {"from": "kpi:enterprise-core-semantic-models-global-supply-chain-otif-core:Fact Deliveries[Delivery Lines]", "to": "rep:r-1"}, {"from": "kpi:enterprise-core-semantic-models-global-supply-chain-otif-core:Fact Deliveries[OTIF Lines]", "to": "rep:r-1"}, {"from": "kpi:enterprise-core-semantic-models-global-supply-chain-otif-core:Fact Deliveries[OTIF % YTD]", "to": "rep:r-1"}, {"from": "kpi:enterprise-core-semantic-models-global-supply-chain-otif-core:Fact Deliveries[OTIF % vs PY]", "to": "rep:r-1"}, {"from": "kpi:enterprise-core-semantic-models-global-supply-chain-otif-core:Fact Deliveries[OTIF %]", "to": "rep:r-2"}, {"from": "kpi:enterprise-core-semantic-models-global-supply-chain-otif-core:Fact Deliveries[Delivery Lines]", "to": "rep:r-2"}, {"from": "kpi:enterprise-core-semantic-models-global-supply-chain-otif-core:Fact Deliveries[OTIF Lines]", "to": "rep:r-2"}, {"from": "kpi:enterprise-core-semantic-models-global-supply-chain-otif-core:Fact Deliveries[OTIF % YTD]", "to": "rep:r-2"}, {"from": "kpi:enterprise-core-semantic-models-global-supply-chain-otif-core:Fact Deliveries[OTIF % vs PY]", "to": "rep:r-2"}, {"from": "sys:Excel", "to": "ep:Excel:File.Contents"}, {"from": "ep:Excel:File.Contents", "to": "mdl:supply-chain-procurement-analytics-regional-vendor-spend-tracker"}, {"from": "sys:File", "to": "ep:File:C:\\Users\\Public\\VendorMapping_2025.xlsx"}, {"from": "ep:File:C:\\Users\\Public\\VendorMapping_2025.xlsx", "to": "mdl:supply-chain-procurement-analytics-regional-vendor-spend-tracker"}, {"from": "sys:SQL Server / Azure SQL", "to": "ep:SQL Server / Azure SQL:sql-procurement-dev.northwind.internal"}, {"from": "ep:SQL Server / Azure SQL:sql-procurement-dev.northwind.internal", "to": "mdl:supply-chain-procurement-analytics-regional-vendor-spend-tracker"}, {"from": "mdl:supply-chain-procurement-analytics-regional-vendor-spend-tracker", "to": "kpi:supply-chain-procurement-analytics-regional-vendor-spend-tracker:Fact Spend[Total Spend]"}, {"from": "kpi:supply-chain-procurement-analytics-regional-vendor-spend-tracker:Fact Spend[Total Spend]", "to": "rep:r-4"}], "defaultFocus": "mdl:enterprise-core-semantic-models-global-supply-chain-otif-core"}</script>
+  </section>
+
+  <section class="tab-pane" id="tab-health">
+    <div class="table-scroll">
+      <table class="data-table">
+        <thead>
+          <tr><th>Semantic Model</th><th>Workspace</th><th>Severity</th><th>Finding</th><th>Recommended Action</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><a href="models/supply-chain-procurement-analytics-regional-vendor-spend-tracker.html"><b>Regional Vendor Spend Tracker</b></a></td><td>Supply Chain &amp; Procurement Analytics</td><td><span class='badge badge-bad'>BAD</span></td><td><b>Last scheduled refresh failed</b></td><td>Last attempt ended 2026-11-11T23:10:00Z. Downstream reports may show stale figures.</td></tr><tr><td><a href="models/supply-chain-procurement-analytics-regional-vendor-spend-tracker.html"><b>Regional Vendor Spend Tracker</b></a></td><td>Supply Chain &amp; Procurement Analytics</td><td><span class='badge badge-bad'>BAD</span></td><td><b>Connected to non-production source endpoint</b></td><td>Detected non-prod identifier in: sql-procurement-dev.northwind.internal.</td></tr><tr><td><a href="models/supply-chain-procurement-analytics-regional-vendor-spend-tracker.html"><b>Regional Vendor Spend Tracker</b></a></td><td>Supply Chain &amp; Procurement Analytics</td><td><span class='badge badge-bad'>BAD</span></td><td><b>Reads from local or mapped network drive</b></td><td>Tables (Dim Vendor) reference a file path that breaks cloud refresh without a personal gateway.</td></tr><tr><td><a href="models/supply-chain-procurement-analytics-regional-vendor-spend-tracker.html"><b>Regional Vendor Spend Tracker</b></a></td><td>Supply Chain &amp; Procurement Analytics</td><td><span class='badge badge-warn'>WARN</span></td><td><b>1 embedded native SQL query</b></td><td>Embedded SQL breaks query folding diagnostics and requires attention during database schema changes.</td></tr><tr><td><a href="models/supply-chain-procurement-analytics-regional-vendor-spend-tracker.html"><b>Regional Vendor Spend Tracker</b></a></td><td>Supply Chain &amp; Procurement Analytics</td><td><span class='badge badge-warn'>WARN</span></td><td><b>1 bidirectional relationship(s)</b></td><td>Both-direction cross-filtering can introduce ambiguous filter paths and degrade DAX performance.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<script src="assets/portal_common.js"></script>
+<script src="assets/lineage_widget.js"></script>
+<script>
+(function () {
+  var search = document.getElementById("catalogSearch");
+  var sortSelect = document.getElementById("catalogSort");
+  var countLbl = document.getElementById("catalogCountLabel");
+  var resetBtn = document.getElementById("catalogResetBtn");
+  var gridWrap = document.getElementById("modelGrid");
+  var listWrap = document.getElementById("modelListWrap");
+  var listBody = document.getElementById("modelListBody");
+  var wsWrap = document.getElementById("modelWsGroups");
+
+  var activeStatus = "all";
+  var activeWs = "all";
+  var activeView = localStorage.getItem("pbidoc-v1-catalog-view") || "grid";
+  var sortDir = 1;
+  var totalCount = 3;
+
+  function setCatalogView(v) {
+    if (["grid", "list", "workspace"].indexOf(v) === -1) v = "grid";
+    activeView = v;
+    localStorage.setItem("pbidoc-v1-catalog-view", v);
+    document.querySelectorAll("[data-catalog-view]").forEach(function (b) {
+      b.classList.toggle("active", b.getAttribute("data-catalog-view") === v);
+    });
+    if (gridWrap) gridWrap.style.display = (v === "grid") ? "" : "none";
+    if (listWrap) listWrap.style.display = (v === "list") ? "" : "none";
+    if (wsWrap) wsWrap.style.display = (v === "workspace") ? "" : "none";
+  }
+
+  function compareItems(a, b, key, dir) {
+    var numCols = ["measures", "tables", "columns", "rels", "reports", "sev"];
+    if (numCols.indexOf(key) !== -1) {
+      var na = parseFloat(a.getAttribute("data-" + key) || "0");
+      var nb = parseFloat(b.getAttribute("data-" + key) || "0");
+      if (na !== nb) return (nb - na) * dir;
+    } else {
+      var sa = (a.getAttribute("data-" + key) || "");
+      var sb = (b.getAttribute("data-" + key) || "");
+      if (sa !== sb) return sa.localeCompare(sb) * dir;
+    }
+    return (a.getAttribute("data-name") || "").localeCompare(b.getAttribute("data-name") || "");
+  }
+
+  function applySort(key, dir) {
+    var d = dir || 1;
+    if (gridWrap) {
+      Array.from(gridWrap.querySelectorAll('[data-model-item="card"]'))
+        .sort(function (a, b) { return compareItems(a, b, key, d); })
+        .forEach(function (el) { gridWrap.appendChild(el); });
+    }
+    if (listBody) {
+      Array.from(listBody.querySelectorAll('[data-model-item="row"]'))
+        .sort(function (a, b) { return compareItems(a, b, key, d); })
+        .forEach(function (el) { listBody.appendChild(el); });
+    }
+    if (wsWrap) {
+      wsWrap.querySelectorAll(".model-grid").forEach(function (wg) {
+        Array.from(wg.querySelectorAll('[data-model-item="wscard"]'))
+          .sort(function (a, b) { return compareItems(a, b, key, d); })
+          .forEach(function (el) { wg.appendChild(el); });
+      });
+    }
+  }
+
+  function matchesFilter(el, q) {
+    var okStatus = activeStatus === "all" || el.getAttribute("data-status") === activeStatus;
+    var okWs = activeWs === "all" || el.getAttribute("data-ws") === activeWs;
+    var okQ = !q || (el.getAttribute("data-search") || "").indexOf(q) !== -1;
+    return okStatus && okWs && okQ;
+  }
+
+  function applyFilters() {
+    var q = (search && search.value || "").toLowerCase().trim();
+    var shown = 0;
+    document.querySelectorAll('[data-model-item="card"]').forEach(function (el) {
+      var ok = matchesFilter(el, q);
+      el.style.display = ok ? "" : "none";
+      if (ok) shown++;
+    });
+    document.querySelectorAll('[data-model-item="row"]').forEach(function (el) {
+      el.style.display = matchesFilter(el, q) ? "" : "none";
+    });
+    document.querySelectorAll('[data-model-item="wscard"]').forEach(function (el) {
+      el.style.display = matchesFilter(el, q) ? "" : "none";
+    });
+    document.querySelectorAll("[data-ws-group]").forEach(function (grp) {
+      var hasVisible = Array.from(grp.querySelectorAll('[data-model-item="wscard"]')).some(function (c) { return c.style.display !== "none"; });
+      grp.style.display = hasVisible ? "" : "none";
+    });
+    if (countLbl) {
+      countLbl.innerHTML = "Showing <b>" + shown + "</b> of <b>" + totalCount + "</b> semantic models";
+    }
+    if (resetBtn) {
+      resetBtn.style.display = (q || activeStatus !== "all" || activeWs !== "all") ? "" : "none";
+    }
+  }
+
+  setCatalogView(activeView);
+  if (search) search.addEventListener("input", applyFilters);
+  if (sortSelect) {
+    sortSelect.addEventListener("change", function () {
+      sortDir = 1;
+      applySort(sortSelect.value, 1);
+    });
+  }
+  if (resetBtn) {
+    resetBtn.addEventListener("click", function () {
+      if (search) search.value = "";
+      activeStatus = "all";
+      activeWs = "all";
+      document.querySelectorAll("[data-status-chip]").forEach(function (b) { b.classList.toggle("active", b.getAttribute("data-status-chip") === "all"); });
+      document.querySelectorAll("[data-ws-chip]").forEach(function (b) { b.classList.remove("active"); });
+      applyFilters();
+    });
+  }
+
+  document.addEventListener("click", function (e) {
+    var vb = e.target.closest("[data-catalog-view]");
+    if (vb) {
+      setCatalogView(vb.getAttribute("data-catalog-view"));
+      return;
+    }
+    var th = e.target.closest("[data-sort-col]");
+    if (th) {
+      var col = th.getAttribute("data-sort-col");
+      if (sortSelect && ["name", "measures", "tables", "ws", "sev"].indexOf(col) !== -1) {
+        if (sortSelect.value === col) sortDir = -sortDir; else sortDir = 1;
+        sortSelect.value = col;
+      } else {
+        sortDir = -sortDir;
+      }
+      applySort(col, sortDir);
+      return;
+    }
+    var sb = e.target.closest("[data-status-chip]");
+    if (sb) {
+      activeStatus = sb.getAttribute("data-status-chip");
+      document.querySelectorAll("[data-status-chip]").forEach(function (b) { b.classList.toggle("active", b === sb); });
+      applyFilters();
+      return;
+    }
+    var wb = e.target.closest("[data-ws-chip]");
+    if (wb) {
+      var val = wb.getAttribute("data-ws-chip");
+      activeWs = (activeWs === val) ? "all" : val;
+      document.querySelectorAll("[data-ws-chip]").forEach(function (b) { b.classList.toggle("active", b.getAttribute("data-ws-chip") === activeWs); });
+      applyFilters();
+    }
+  });
+})();
+</script>
+</body>
+</html>

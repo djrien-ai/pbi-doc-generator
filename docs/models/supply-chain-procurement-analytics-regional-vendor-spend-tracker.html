@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Regional Vendor Spend Tracker - Semantic Model Documentation</title>
+  <link rel="stylesheet" href="../assets/portal.css">
+</head>
+<body>
+<div class="doc-shell">
+  <aside class="doc-sidebar">
+    <a class="doc-back studio-only-link" href="/" style="display:none;margin-bottom:6px">&larr; 1. Scanner &amp; Setup</a>
+    <a class="doc-back" href="../index.html">&larr; Catalog Home (All Models)</a>
+    <div class="doc-brand">
+      <h2>Regional Vendor Spend Tracker</h2>
+      <div class="sub">Workspace: <b>Supply Chain &amp; Procurement Analytics</b></div>
+    </div>
+    <input type="search" class="doc-search" data-quick-search="1" id="modelQuickFilter" placeholder="Filter measures &amp; tables (Ctrl+K)">
+    <ul class="toc-list">
+      <li><a href="#sec-overview"><span>1. Overview &amp; Health</span><span class="toc-count">5</span></a></li>
+      <li><a href="#sec-schema"><span>2. Data Model &amp; Star Schema</span><span class="toc-count">1</span></a></li>
+      <li><a href="#sec-tables"><span>3. Sources &amp; Tables</span><span class="toc-count">2</span></a></li>
+      <li><a href="#sec-dax"><span>4. DAX Measure Catalog</span><span class="toc-count">1</span></a></li>
+      <li><a href="#sec-lineage"><span>5. Live Lineage Explorer</span><span class="toc-count">Interactive</span></a></li>
+      <li><a href="#sec-security"><span>6. Security &amp; Reports</span><span class="toc-count">1</span></a></li>
+    </ul>
+    <div style="margin-top:auto;padding-top:12px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;font-size:11.5px;color:var(--fg-muted)">
+      <span>PBI Doc Generator v1.0</span>
+      <button type="button" class="theme-icon-btn surface-btn" data-toggle-theme="1" title="Toggle Light / Dark theme" aria-label="Toggle Light / Dark theme">
+        <svg class="icon-moon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        <svg class="icon-sun" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+      </button>
+    </div>
+  </aside>
+
+  <main class="doc-main">
+    <section class="section" id="sec-overview">
+      <div class="section-header">
+        <div>
+          <h2>1. Executive Overview &amp; Health Summary</h2>
+          <div class="hint">Owner: <b>marcus.lindqvist@northwind-global.example</b> &bull; Upstream Connectors: <b>Excel, File, SQL Server / Azure SQL</b></div>
+        </div>
+        <span class="badge badge-bad">Refresh: Failed</span>
+      </div>
+
+      <div class="kpi-grid">
+        <div class="kpi-card"><div class="val">2</div><div class="lbl">Tables (2 Import / 0 DQ)</div></div>
+        <div class="kpi-card"><div class="val">3</div><div class="lbl">Columns (0 Calculated)</div></div>
+        <div class="kpi-card"><div class="val">1</div><div class="lbl">DAX Measures</div></div>
+        <div class="kpi-card"><div class="val">1</div><div class="lbl">Relationships (1 Bi-Di)</div></div>
+        <div class="kpi-card"><div class="val">2</div><div class="lbl">Power Query Steps</div></div>
+        <div class="kpi-card"><div class="val">1</div><div class="lbl">Bound Reports</div></div>
+      </div>
+
+      <div class="finding-list"><div class="finding bad"><div><strong>Last scheduled refresh failed</strong><span>Last attempt ended 2026-11-11T23:10:00Z. Downstream reports may show stale figures.</span></div></div><div class="finding bad"><div><strong>Connected to non-production source endpoint</strong><span>Detected non-prod identifier in: sql-procurement-dev.northwind.internal.</span></div></div><div class="finding bad"><div><strong>Reads from local or mapped network drive</strong><span>Tables (Dim Vendor) reference a file path that breaks cloud refresh without a personal gateway.</span></div></div><div class="finding warn"><div><strong>1 embedded native SQL query</strong><span>Embedded SQL breaks query folding diagnostics and requires attention during database schema changes.</span></div></div><div class="finding warn"><div><strong>1 bidirectional relationship(s)</strong><span>Both-direction cross-filtering can introduce ambiguous filter paths and degrade DAX performance.</span></div></div></div>
+    </section>
+
+    <section class="section" id="sec-schema">
+      <div class="section-header">
+        <h2>2. Data Model &amp; Star Schema</h2>
+        <span class="hint">Fact tables (blue) vs. Dimension tables (teal) &bull; Hover or click any table to highlight relationships</span>
+      </div>
+      <pre class="mermaid">flowchart LR
+    classDef factNode fill:#e8f1fd,stroke:#0b63ce,stroke-width:2px,color:#0f172a;
+    classDef dimNode fill:#e6f6f4,stroke:#0f766e,stroke-width:1.5px,color:#0f172a;
+    classDef standaloneNode fill:#f8fafc,stroke:#94a3b8,stroke-width:1px,color:#334155;
+    T1[&quot;[DIM] Dim Vendor (1 cols, 0 meas)&quot;]
+    T2[&quot;[FACT] Fact Spend (2 cols, 1 meas)&quot;]
+    T2 &lt;--&gt;|&quot;VendorID = VendorID (*:1)&quot;| T1
+    class T1 dimNode;
+    class T2 factNode;</pre>
+      <div class="table-scroll" style="margin-top:14px"><table class="data-table"><thead><tr><th>Many / Fact Side</th><th>Cardinality</th><th>One / Dimension Side</th><th>Filter Direction</th><th>State</th></tr></thead><tbody><tr><td><b>Fact Spend</b>.<code>VendorID</code></td><td><code>* : 1</code></td><td><b>Dim Vendor</b>.<code>VendorID</code></td><td><span class='badge badge-warn'>Both (Bidirectional)</span></td><td><span class='badge badge-ok'>Active</span></td></tr></tbody></table></div>
+    </section>
+
+    <section class="section" id="sec-tables">
+      <div class="section-header">
+        <div>
+          <h2>3. Data Sources &amp; Tables Blueprint</h2>
+          <div class="hint">Storage modes, source endpoints, business descriptions, visual Power Query pipelines, and column definitions</div>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button type="button" class="lin-btn" data-details-toggle="tablesBlueprintContainer" data-open="1">Expand All</button>
+          <button type="button" class="lin-btn" data-details-toggle="tablesBlueprintContainer" data-open="0">Collapse All</button>
+        </div>
+      </div>
+      <div class="table-scroll" style="margin-bottom:18px">
+        <table class="data-table">
+          <thead>
+            <tr><th>Table</th><th>Role</th><th>Mode</th><th>Connector</th><th>Endpoint / Database</th><th>Description</th><th>Cols</th><th>Measures</th><th>PQ Steps</th></tr>
+          </thead>
+          <tbody><tr><td><a href="#t-dim-vendor"><b>Dim Vendor</b></a></td><td><span class="badge badge-dim">Dimension</span></td><td><code>import</code></td><td>Excel, File</td><td>Excel: File.Contents, File: C:\Users\Public\VendorMapping_2025.xlsx</td><td>-</td><td>1</td><td>0</td><td>1</td></tr><tr><td><a href="#t-fact-spend"><b>Fact Spend</b></a></td><td><span class="badge badge-fact">Fact</span></td><td><code>import</code></td><td>SQL Server / Azure SQL <span class="badge badge-warn">1 Native SQL</span></td><td>SQL Server / Azure SQL: sql-procurement-dev.northwind.internal</td><td>-</td><td>2</td><td>1</td><td>1</td></tr></tbody>
+        </table>
+      </div>
+      <div id="tablesBlueprintContainer"><details class="table-blueprint" id="t-dim-vendor" open data-searchable="dim vendor "><summary><span>Dim Vendor</span><div class="model-meta"><span class="badge badge-accent">Dimension</span><span class="badge">1 cols</span><span class="badge">1 PQ steps</span></div></summary><div class="blueprint-body"><div class="table-scroll"><table class="data-table"><thead><tr><th>Column</th><th>Data Type</th><th>Origin / Source Column</th><th>Format</th><th>Description</th></tr></thead><tbody><tr><td><b>VendorID</b> <span class="badge badge-accent">Key</span></td><td><code>string</code></td><td>VendorID</td><td>-</td><td>-</td></tr></tbody></table></div><div style="margin-top:12px;font-size:12px;font-weight:650">Power Query Transformation Pipeline (1 steps)</div><div class="pq-pipeline"><span class="pq-step"><b>1. Source</b><small>Excel.Workbook</small></span></div><details class="m-script-toggle"><summary>View Power Query M Script - Partition Dim Vendor (import)</summary><div style="padding:8px 10px"><div class="code-block"><button type="button" class="copy-btn" data-copy="1">Copy M</button><pre><span class="kw">let</span>
+    Source = <span class="fn">Excel.Workbook</span>(<span class="fn">File.Contents</span>(<span class="str">&quot;C:\Users\Public\VendorMapping_2025.xlsx&quot;</span>))
+<span class="kw">in</span>
+    Source</pre></div></div></details></div></details><details class="table-blueprint" id="t-fact-spend" data-searchable="fact spend "><summary><span>Fact Spend</span><div class="model-meta"><span class="badge badge-accent">Fact</span><span class="badge">2 cols</span><span class="badge">1 PQ steps</span></div></summary><div class="blueprint-body"><div class="table-scroll"><table class="data-table"><thead><tr><th>Column</th><th>Data Type</th><th>Origin / Source Column</th><th>Format</th><th>Description</th></tr></thead><tbody><tr><td><b>VendorID</b> <span class="badge badge-accent">Key</span></td><td><code>string</code></td><td>VendorID</td><td>-</td><td>-</td></tr><tr><td><b>SpendEUR</b></td><td><code>decimal</code></td><td>SpendEUR</td><td>-</td><td>-</td></tr></tbody></table></div><div style="margin-top:12px;font-size:12px;font-weight:650">Power Query Transformation Pipeline (1 steps)</div><div class="pq-pipeline"><span class="pq-step"><b>1. Source</b><small>Sql.Database</small></span></div><details class="m-script-toggle"><summary>View Power Query M Script - Partition Fact Spend (import)</summary><div style="padding:8px 10px"><div class="code-block"><button type="button" class="copy-btn" data-copy="1">Copy M</button><pre><span class="kw">let</span>
+    Source = <span class="fn">Sql.Database</span>(<span class="str">&quot;sql-procurement-dev.northwind.internal&quot;</span>, <span class="str">&quot;ProcurementDB&quot;</span>, [Query=<span class="str">&quot;SELECT VendorID, SpendEUR FROM dbo.SpendLines&quot;</span>])
+<span class="kw">in</span>
+    Source</pre></div></div></details></div></details></div>
+      
+    </section>
+
+    <section class="section" id="sec-dax">
+      <div class="section-header">
+        <div>
+          <h2>4. DAX Measure Catalog</h2>
+          <div class="hint">Auto-formatted &amp; organized by Table &rarr; Display Folder &rarr; Base Aggregations first, Derived KPIs second</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <div class="view-toggle">
+            <button type="button" class="view-btn active" data-dax-view="list">Compact Table</button>
+            <button type="button" class="view-btn" data-dax-view="cards">Formatted Cards</button>
+          </div>
+          <button type="button" class="lin-btn" data-details-toggle="daxCardsContainer" data-open="1">Expand All</button>
+          <button type="button" class="lin-btn" data-details-toggle="daxCardsContainer" data-open="0">Collapse All</button>
+        </div>
+      </div>
+      <div id="daxListContainer"><div class="table-scroll"><table class="data-table"><thead><tr><th>Measure</th><th>Host Table</th><th>Display Folder</th><th>Tier</th><th>Format</th><th>Reads</th><th>Used By</th><th>DAX Preview</th></tr></thead><tbody><tr data-searchable="total spend fact spend  sum(&#x27;fact spend&#x27;[spendeur])"><td><a href="#m-fact-spend-total-spend" onclick="document.querySelector('[data-dax-view=cards]').click()"><b>Total Spend</b></a></td><td>Fact Spend</td><td>General</td><td><span class='badge badge-dim'>Base</span></td><td><code>#,##0</code></td><td>1</td><td>0</td><td><code style='font-size:11.5px'>SUM(&#x27;Fact Spend&#x27;[SpendEUR])</code></td></tr></tbody></table></div></div><div id="daxCardsContainer" style="display:none"><details class="dax-table-group" open><summary><span>Measure Host Table: Fact Spend</span><span class="badge badge-accent">1 measures</span></summary><div class="dax-folder"><div class="dax-folder-title">Display Folder: General Measures (1)</div><div class="dax-tier-label">Tier 1: Base Aggregations (1)</div><div class="measure-grid"><div class="measure-card" id="m-fact-spend-total-spend" data-searchable="total spend  sum(&#x27;fact spend&#x27;[spendeur])"><div class="measure-head"><span class="measure-name">Total Spend</span><div class="model-meta"><span class="badge badge-dim">Base Measure</span><span class="badge">Format: #,##0</span></div></div><div class="code-block"><button type="button" class="copy-btn" data-copy="1">Copy DAX</button><pre><span class="kw">SUM</span>(&#x27;Fact Spend&#x27;[SpendEUR])</pre></div><div class="dep-row"><span>Reads:</span><a class="dep-chip" href="#t-fact-spend">Fact Spend[SpendEUR]</a></div></div></div></div></details></div>
+    </section>
+
+    <section class="section" id="sec-lineage">
+      <div class="section-header">
+        <h2>5. Interactive End-to-End Live Lineage</h2>
+        <span class="hint">Click any source, table, column, DAX measure, or report to trace live upstream &amp; downstream impact</span>
+      </div>
+      <div class="lineage-app" data-lineage-id="modelLineageData"></div>
+      <script type="application/json" id="modelLineageData">{"layers": [{"id": "source", "label": "1. Data Sources"}, {"id": "table", "label": "2. Model Tables"}, {"id": "column", "label": "3. Referenced Columns"}, {"id": "base_measure", "label": "4. Base Measures"}, {"id": "kpi_measure", "label": "5. Derived KPIs & Reports"}], "nodes": [{"id": "tbl:Dim Vendor", "label": "Dim Vendor", "layer": "table", "layerLabel": "Model Table", "sub": "IMPORT - 1 cols, 0 measures", "detail": "Power Query steps: 1", "href": "#t-dim-vendor", "hrefLabel": "Jump to section", "code": ""}, {"id": "src:Excel: File.Contents", "label": "Excel: File.Contents", "layer": "source", "layerLabel": "External Data Source", "sub": "Excel, File", "detail": "Upstream connection or source object read by Power Query.", "href": "", "hrefLabel": "Jump to section", "code": ""}, {"id": "src:File: C:\\Users\\Public\\VendorMapping_2025.xlsx", "label": "File: C:\\Users\\Public\\VendorMapping_2025.xlsx", "layer": "source", "layerLabel": "External Data Source", "sub": "Excel, File", "detail": "Upstream connection or source object read by Power Query.", "href": "", "hrefLabel": "Jump to section", "code": ""}, {"id": "tbl:Fact Spend", "label": "Fact Spend", "layer": "table", "layerLabel": "Model Table", "sub": "IMPORT - 2 cols, 1 measures", "detail": "Power Query steps: 1", "href": "#t-fact-spend", "hrefLabel": "Jump to section", "code": ""}, {"id": "src:SQL Server / Azure SQL: sql-procurement-dev.northwind.internal", "label": "SQL Server / Azure SQL: sql-procurement-dev.northwind.internal", "layer": "source", "layerLabel": "External Data Source", "sub": "SQL Server / Azure SQL", "detail": "Upstream connection or source object read by Power Query.", "href": "", "hrefLabel": "Jump to section", "code": ""}, {"id": "meas:Fact Spend[Total Spend]", "label": "Total Spend", "layer": "base_measure", "layerLabel": "Base Measure", "sub": "Fact Spend", "detail": "Format: #,##0", "href": "#m-fact-spend-total-spend", "hrefLabel": "Jump to section", "code": "SUM('Fact Spend'[SpendEUR])"}, {"id": "col:Fact Spend[SpendEUR]", "label": "Fact Spend[SpendEUR]", "layer": "column", "layerLabel": "Table Column", "sub": "Table: Fact Spend", "detail": "", "href": "#t-fact-spend", "hrefLabel": "Jump to section", "code": ""}, {"id": "rep:r-4", "label": "Vendor Rebate & Spend Variance", "layer": "kpi_measure", "layerLabel": "Power BI Report", "sub": "Workspace: Supply Chain & Procurement Analytics", "detail": "Downstream report bound to this semantic model.", "href": "", "hrefLabel": "Jump to section", "code": ""}], "edges": [{"from": "src:Excel: File.Contents", "to": "tbl:Dim Vendor"}, {"from": "src:File: C:\\Users\\Public\\VendorMapping_2025.xlsx", "to": "tbl:Dim Vendor"}, {"from": "src:SQL Server / Azure SQL: sql-procurement-dev.northwind.internal", "to": "tbl:Fact Spend"}, {"from": "tbl:Fact Spend", "to": "col:Fact Spend[SpendEUR]"}, {"from": "col:Fact Spend[SpendEUR]", "to": "meas:Fact Spend[Total Spend]"}, {"from": "meas:Fact Spend[Total Spend]", "to": "rep:r-4"}], "defaultFocus": "meas:Fact Spend[Total Spend]"}</script>
+    </section>
+
+    <section class="section" id="sec-security">
+      <div class="section-header">
+        <h2>6. Row-Level Security (RLS), Downstream Reports &amp; Access</h2>
+        <span class="hint">0 RLS role(s) &bull; 1 bound report(s)</span>
+      </div>
+      <div class="card"><p style="margin:0;color:var(--fg-muted)">No Row-Level Security (RLS) roles defined in this model.</p></div>
+      <div class="table-scroll" style="margin-top:14px"><table class="data-table"><thead><tr><th>Downstream Report</th><th>Report Workspace</th><th>Report Type</th></tr></thead><tbody><tr><td><b>Vendor Rebate &amp; Spend Variance</b></td><td>Supply Chain &amp; Procurement Analytics</td><td><code>PowerBIReport</code></td></tr></tbody></table></div>
+      
+    </section>
+  </main>
+</div>
+
+<script src="../assets/mermaid.min.js"></script>
+<script src="../assets/portal_common.js"></script>
+<script src="../assets/interactive_mermaid.js"></script>
+<script src="../assets/lineage_widget.js"></script>
+<script>
+(function () {
+  var input = document.getElementById("modelQuickFilter");
+  if (!input) return;
+  input.addEventListener("input", function () {
+    var q = (input.value || "").toLowerCase().trim();
+    document.querySelectorAll("[data-searchable]").forEach(function (el) {
+      var match = !q || (el.getAttribute("data-searchable") || "").indexOf(q) !== -1;
+      el.style.display = match ? "" : "none";
+      if (q && match && el.tagName === "DETAILS") el.open = true;
+    });
+  });
+})();
+</script>
+</body>
+</html>

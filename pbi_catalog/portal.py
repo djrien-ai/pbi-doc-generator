@@ -2212,9 +2212,10 @@ def render_model_html(analysis: dict, slug: str, anonymous: bool = False) -> str
             else ('<span class="badge badge-dim">Dimension</span>' if ts["name"] in dims else '<span class="badge">KPI / Table</span>')
         )
         sql_badge = f' <span class="badge badge-warn">{len(ts["native_queries"])} Native SQL</span>' if ts["native_queries"] else ""
+        hid_tbl_badge = ' <span class="badge">Hidden</span>' if ts["hidden"] else ""
         summary_rows.append(
             f"<tr>"
-            f'<td><a href="#{_table_anchor(ts["name"])}"><b>{esc(ts["name"])}</b></a>{" <span class=\"badge\">Hidden</span>" if ts["hidden"] else ""}</td>'
+            f'<td><a href="#{_table_anchor(ts["name"])}"><b>{esc(ts["name"])}</b></a>{hid_tbl_badge}</td>'
             f"<td>{role_badge}</td>"
             f"<td><code>{esc(ts['mode'])}</code></td>"
             f"<td>{esc(', '.join(ts['source_types']) or 'Calculated / Measures')}{sql_badge}</td>"
@@ -2233,11 +2234,13 @@ def render_model_html(analysis: dict, slug: str, anonymous: bool = False) -> str
         if not raw_t:
             continue
         key_set = rel_key_cols.get(ts["name"], set())
+        key_badge_html = ' <span class="badge badge-accent">Key</span>'
+        hid_col_badge_html = ' <span class="badge">Hidden</span>'
         col_rows = "".join(
             f"<tr>"
             f"<td><b>{esc(c['name'])}</b>"
-            f"{' <span class=\"badge badge-accent\">Key</span>' if c['name'] in key_set else ''}"
-            f"{' <span class=\"badge\">Hidden</span>' if c['hidden'] else ''}</td>"
+            f"{key_badge_html if c['name'] in key_set else ''}"
+            f"{hid_col_badge_html if c['hidden'] else ''}</td>"
             f"<td><code>{esc(c['type'] or '-')}</code></td>"
             f"<td>{esc(c['source'] or ('Calculated DAX' if c['expr'] else '-'))}</td>"
             f"<td>{esc(c['format'] or '-')}</td>"
@@ -2772,12 +2775,13 @@ def generate_portal(store: CatalogStore, output_dir: str | Path | None = None, a
             f'data-sev="{sev_rank}"'
         )
 
+        internal_badge = '<span class="badge">Internal</span>'
         card_markup = (
             f'<a class="model-card" href="models/{slug}.html" data-model-item="card" {data_attrs} style="color:inherit;text-decoration:none">'
             f'<div class="card-eyebrow"><span class="eyebrow-type">Semantic Model</span><span>{esc(fmt_short)}</span></div>'
             f'<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px"><h3>{esc(a["name"])}</h3>{status_badge}</div>'
             f'<div style="font-size:12px;color:var(--fg-muted)">Workspace: <b>{esc(a["workspace"])}</b></div>'
-            f'<div class="model-meta">{src_badges or "<span class=\"badge\">Internal</span>"}</div>'
+            f'<div class="model-meta">{src_badges or internal_badge}</div>'
             f'<div class="model-stats">'
             f'<div><b>{st["tables"]}</b>Tables</div>'
             f'<div><b>{st["measures"]}</b>Measures</div>'
@@ -2795,7 +2799,7 @@ def generate_portal(store: CatalogStore, output_dir: str | Path | None = None, a
             f'<td><a href="models/{slug}.html"><b>{esc(a["name"])}</b></a></td>'
             f"<td>{esc(a['workspace'])}</td>"
             f"<td><span class='badge'>{esc(fmt_short)}</span></td>"
-            f"<td>{src_badges or '<span class=\"badge\">Internal</span>'}</td>"
+            f"<td>{src_badges or internal_badge}</td>"
             f"<td><b>{st['tables']}</b></td>"
             f"<td>{st['columns']}</td>"
             f"<td><b>{st['measures']}</b></td>"

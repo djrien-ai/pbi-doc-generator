@@ -8,8 +8,8 @@ Power BI .pbix file.
 Usage:
     python extract.py <path_to.pbix>  [--output <output.html>]
 
-    # Or via GUI:
-    python gui.py
+    # Or launch the interactive Web Studio:
+    pbi-doc-generator
 """
 
 import argparse

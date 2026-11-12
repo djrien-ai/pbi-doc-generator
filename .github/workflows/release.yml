@@ -10,8 +10,8 @@ permissions:
   contents: write
 
 jobs:
-  build-windows-portable-and-wheels:
-    name: Build Windows Portable ZIP & Python Packages
+  build-windows-portable:
+    name: Build Windows Portable ZIP & Publish Release
     runs-on: windows-latest
 
     steps:
@@ -24,16 +24,13 @@ jobs:
           python-version: "3.12"
           cache: "pip"
 
-      - name: Install dependencies and build tools
+      - name: Install dependencies and PyInstaller
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt pyinstaller build
+          python -m pip install -r requirements.txt pyinstaller
 
       - name: Run automated test suite
         run: python tests/test_v1_suite.py
-
-      - name: Build Python wheel and sdist
-        run: python -m build
 
       - name: Build zero-install Windows Portable folder (PyInstaller onedir, no UPX)
         run: |
@@ -50,37 +47,57 @@ jobs:
             --hidden-import dax_parser `
             launcher.py
 
-      - name: Smoke-test compiled portable executable
+      - name: Add START_HERE.txt & smoke-test compiled executable
         shell: pwsh
         run: |
           & "dist/PBI_Doc_Generator/PBI_Doc_Generator.exe" --version
+          @(
+            "PBI Doc Generator v1.0 - Quick Start"
+            "===================================="
+            ""
+            "1. Double-click PBI_Doc_Generator.exe in this folder."
+            "2. Your browser will open automatically at http://127.0.0.1:8765"
+            "   (Keep the small console window open while using the Studio)."
+            ""
+            "Note: Keep PBI_Doc_Generator.exe together with the _internal folder."
+          ) | Set-Content -Path "dist/PBI_Doc_Generator/START_HERE.txt" -Encoding UTF8
 
-      - name: Create Portable ZIP archive
+      - name: Create Portable ZIP archive & Release Notes
         shell: pwsh
         run: |
-          $tag = "${{ github.ref_name }}"
-          if (-not $tag) { $tag = "v1.0.0" }
-          $zipName = "PBI_Doc_Generator_${tag}_Windows_Portable.zip"
-          Compress-Archive -Path "dist/PBI_Doc_Generator/*" -DestinationPath "dist/$zipName" -Force
-          Write-Host "Created dist/$zipName"
+          Compress-Archive -Path "dist/PBI_Doc_Generator/*" -DestinationPath "dist/PBI_Doc_Generator_Windows_Portable.zip" -Force
+          $hdr = Get-Content -Raw ".github/RELEASE_HEADER.md"
+          $chg = Get-Content -Raw "CHANGELOG.md"
+          ($hdr + "`r`n" + $chg) | Set-Content -Path "dist/RELEASE_NOTES.md" -Encoding UTF8
 
-      - name: Upload build artifacts to workflow run
+      - name: Upload Portable ZIP to workflow artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: release-packages
-          path: |
-            dist/*.zip
-            dist/*.whl
-            dist/*.tar.gz
+          name: PBI_Doc_Generator_Windows_Portable
+          path: dist/PBI_Doc_Generator_Windows_Portable.zip
 
-      - name: Publish GitHub Release with Portable ZIP & Python packages
+      - name: Clean any pre-existing release assets for this tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $headers = @{ Authorization = "Bearer $env:GH_TOKEN"; Accept = "application/vnd.github+json" }
+          try {
+            $rel = Invoke-RestMethod -Uri "https://api.github.com/repos/${{ github.repository }}/releases/tags/$tag" -Headers $headers
+            foreach ($a in $rel.assets) {
+              Invoke-RestMethod -Method Delete -Uri "https://api.github.com/repos/${{ github.repository }}/releases/assets/$($a.id)" -Headers $headers
+            }
+          } catch {
+            Write-Host "No existing release for $tag yet."
+          }
+
+      - name: Publish GitHub Release with single clear Portable ZIP asset
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           name: "PBI Doc Generator ${{ github.ref_name }}"
-          body_path: CHANGELOG.md
-          files: |
-            dist/*.zip
-            dist/*.whl
-            dist/*.tar.gz
+          body_path: dist/RELEASE_NOTES.md
+          files: dist/PBI_Doc_Generator_Windows_Portable.zip
           generate_release_notes: false
