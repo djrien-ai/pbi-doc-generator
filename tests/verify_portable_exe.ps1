@@ -170,7 +170,7 @@ table 'Dim Customer'
     # 7. Verify MCP stdio server inside frozen EXE
     $mcpInput = @(
         '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}'
-        '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"get_catalog_overview","arguments":{}}}'
+        '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"pbi_list_models","arguments":{}}}'
     ) -join "`n"
     $mcpOut = $mcpInput | & $exePath mcp --catalog $catalogDir 2>&1 | Out-String
     if ($mcpOut -notmatch "RetailAnalytics" -or $mcpOut -notmatch "protocolVersion") {
