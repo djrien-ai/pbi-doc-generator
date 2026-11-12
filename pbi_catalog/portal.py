@@ -601,6 +601,112 @@ code, pre {
   color: var(--fg-muted);
 }
 .model-stats b { color: var(--fg); font-size: 14px; display: block; }
+.card-eyebrow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 10.5px;
+  font-weight: 750;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--fg-muted);
+}
+.eyebrow-type {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--accent);
+  background: var(--accent-soft);
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+.card-footer-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11.5px;
+  color: var(--fg-muted);
+  padding-top: 6px;
+}
+.app-switcher {
+  display: inline-flex;
+  background: rgba(255,255,255,0.12);
+  padding: 4px;
+  border-radius: 11px;
+  border: 1px solid rgba(255,255,255,0.24);
+  gap: 4px;
+  align-items: center;
+}
+.app-switcher a, .app-switcher span {
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 650;
+  text-decoration: none;
+  color: #fff;
+}
+.app-switcher .active-seg {
+  background: #fff;
+  color: #072854;
+  font-weight: 700;
+}
+.view-toggle {
+  display: inline-flex;
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 3px;
+  gap: 2px;
+}
+.view-btn {
+  border: none;
+  background: transparent;
+  color: var(--fg-muted);
+  padding: 5px 11px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.view-btn.active {
+  background: var(--surface);
+  color: var(--accent);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+}
+.sort-select {
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface-alt);
+  color: var(--fg);
+  font-size: 12px;
+  font-weight: 600;
+}
+.ws-group-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 16px;
+  overflow: hidden;
+  box-shadow: var(--shadow);
+}
+.ws-group-card > summary {
+  padding: 13px 18px;
+  cursor: pointer;
+  background: var(--surface-alt);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-weight: 700;
+  font-size: 14px;
+  list-style: none;
+}
+.ws-group-card > summary::-webkit-details-marker { display: none; }
+.ws-group-body { padding: 14px 16px; }
+th.sortable-th { cursor: pointer; user-select: none; }
+th.sortable-th:hover { color: var(--accent); }
 
 /* Tables */
 .table-scroll { overflow-x: auto; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
@@ -1533,7 +1639,38 @@ PORTAL_COMMON_JS = r"""
     var saved = localStorage.getItem("pbidoc-v1-theme");
     if (saved) document.documentElement.setAttribute("data-theme", saved);
 
+    // Reveal "Back to Scanner & Setup" switcher only when served by the local Studio HTTP server
+    document.addEventListener("DOMContentLoaded", function () {
+        var isLocalStudio = (location.protocol === "http:" || location.protocol === "https:") &&
+            (location.hostname === "127.0.0.1" || location.hostname === "localhost");
+        if (isLocalStudio) {
+            document.querySelectorAll(".studio-only-link").forEach(function (el) {
+                el.style.display = "";
+            });
+        }
+    });
+
     document.addEventListener("click", function (e) {
+        var expBtn = e.target.closest("[data-details-toggle]");
+        if (expBtn) {
+            var scopeId = expBtn.getAttribute("data-details-toggle");
+            var shouldOpen = expBtn.getAttribute("data-open") === "1";
+            var root = document.getElementById(scopeId) || document;
+            root.querySelectorAll("details").forEach(function (d) { d.open = shouldOpen; });
+            return;
+        }
+        var daxViewBtn = e.target.closest("[data-dax-view]");
+        if (daxViewBtn) {
+            var v = daxViewBtn.getAttribute("data-dax-view");
+            document.querySelectorAll("[data-dax-view]").forEach(function (b) { b.classList.toggle("active", b === daxViewBtn); });
+            var cardsBox = document.getElementById("daxCardsContainer");
+            var listBox = document.getElementById("daxListContainer");
+            if (cardsBox && listBox) {
+                cardsBox.style.display = (v === "cards") ? "" : "none";
+                listBox.style.display = (v === "list") ? "" : "none";
+            }
+            return;
+        }
         var themeBtn = e.target.closest("[data-toggle-theme]");
         if (themeBtn) {
             var cur = document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark";
@@ -2164,7 +2301,40 @@ def render_model_html(analysis: dict, slug: str, anonymous: bool = False) -> str
             + "</details>"
         )
 
-    dax_section_body = "".join(dax_groups_html) if dax_groups_html else '<div class="card"><p style="margin:0;color:var(--fg-muted)">No DAX measures are defined in this semantic model.</p></div>'
+    dax_list_rows: list[str] = []
+    for tbl in sorted(parsed["tables"], key=lambda x: x["name"].lower()):
+        for m in sorted(tbl["measures"], key=lambda x: ((x.get("folder") or "").lower(), x["name"].lower())):
+            m_key = f"{tbl['name']}[{m['name']}]"
+            d_val = depths.get(m_key, 0)
+            tier_txt = "Base" if d_val == 0 else f"Tier {d_val}"
+            li = lin_measures.get(m_key) or {}
+            reads_cnt = len(li.get("upstream_measures", [])) + len(li.get("upstream_columns", []))
+            used_cnt = len(li.get("downstream_measures", []))
+            one_line = re.sub(r"\s+", " ", m.get("expr", "")).strip()
+            preview = (one_line[:110] + "...") if len(one_line) > 110 else one_line
+            anchor = _measure_anchor(tbl["name"], m["name"])
+            dax_list_rows.append(
+                f'<tr data-searchable="{esc((m["name"] + " " + tbl["name"] + " " + (m.get("folder") or "") + " " + one_line).lower())}">'
+                f'<td><a href="#{anchor}" onclick="document.querySelector(\'[data-dax-view=cards]\').click()"><b>{esc(m["name"])}</b></a></td>'
+                f"<td>{esc(tbl['name'])}</td>"
+                f"<td>{esc(m.get('folder') or 'General')}</td>"
+                f"<td><span class='badge {'badge-dim' if d_val == 0 else 'badge-accent'}'>{tier_txt}</span></td>"
+                f"<td><code>{esc(m.get('format') or '-')}</code></td>"
+                f"<td>{reads_cnt}</td>"
+                f"<td>{used_cnt}</td>"
+                f"<td><code style='font-size:11.5px'>{esc(preview)}</code></td>"
+                f"</tr>"
+            )
+
+    if dax_groups_html:
+        dax_section_body = (
+            f'<div id="daxCardsContainer">{"".join(dax_groups_html)}</div>'
+            f'<div id="daxListContainer" style="display:none"><div class="table-scroll"><table class="data-table">'
+            f"<thead><tr><th>Measure</th><th>Host Table</th><th>Display Folder</th><th>Tier</th><th>Format</th><th>Reads</th><th>Used By</th><th>DAX Preview</th></tr></thead>"
+            f'<tbody>{"".join(dax_list_rows)}</tbody></table></div></div>'
+        )
+    else:
+        dax_section_body = '<div class="card"><p style="margin:0;color:var(--fg-muted)">No DAX measures are defined in this semantic model.</p></div>'
 
     # 5. Model Live Lineage JSON
     lineage_json = json.dumps(_build_model_lineage_json(analysis), ensure_ascii=False).replace("</", "<\\/")
@@ -2220,7 +2390,8 @@ def render_model_html(analysis: dict, slug: str, anonymous: bool = False) -> str
 <body>
 <div class="doc-shell">
   <aside class="doc-sidebar">
-    <a class="doc-back" href="../index.html">&larr; Workspace &amp; Lineage Catalog</a>
+    <a class="doc-back studio-only-link" href="/" style="display:none;margin-bottom:6px">&larr; 1. Scanner &amp; Setup</a>
+    <a class="doc-back" href="../index.html">&larr; Catalog Home (All Models)</a>
     <div class="doc-brand">
       <h2>{esc(analysis['name'])}</h2>
       <div class="sub">Workspace: <b>{esc(analysis['workspace'])}</b></div>
@@ -2273,8 +2444,14 @@ def render_model_html(analysis: dict, slug: str, anonymous: bool = False) -> str
 
     <section class="section" id="sec-tables">
       <div class="section-header">
-        <h2>3. Data Sources &amp; Tables Blueprint</h2>
-        <span class="hint">Storage modes, source endpoints, business descriptions, visual Power Query pipelines, and column definitions</span>
+        <div>
+          <h2>3. Data Sources &amp; Tables Blueprint</h2>
+          <div class="hint">Storage modes, source endpoints, business descriptions, visual Power Query pipelines, and column definitions</div>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button type="button" class="lin-btn" data-details-toggle="tablesBlueprintContainer" data-open="1">Expand All</button>
+          <button type="button" class="lin-btn" data-details-toggle="tablesBlueprintContainer" data-open="0">Collapse All</button>
+        </div>
       </div>
       <div class="table-scroll" style="margin-bottom:18px">
         <table class="data-table">
@@ -2284,14 +2461,24 @@ def render_model_html(analysis: dict, slug: str, anonymous: bool = False) -> str
           <tbody>{''.join(summary_rows)}</tbody>
         </table>
       </div>
-      {''.join(blueprint_cards)}
+      <div id="tablesBlueprintContainer">{''.join(blueprint_cards)}</div>
       {expr_html}
     </section>
 
     <section class="section" id="sec-dax">
       <div class="section-header">
-        <h2>4. DAX Measure Catalog</h2>
-        <span class="hint">Auto-formatted &amp; organized by Table &rarr; Display Folder &rarr; Base Aggregations first, Derived KPIs second</span>
+        <div>
+          <h2>4. DAX Measure Catalog</h2>
+          <div class="hint">Auto-formatted &amp; organized by Table &rarr; Display Folder &rarr; Base Aggregations first, Derived KPIs second</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <div class="view-toggle">
+            <button type="button" class="view-btn active" data-dax-view="cards">Formatted Cards</button>
+            <button type="button" class="view-btn" data-dax-view="list">Compact Table</button>
+          </div>
+          <button type="button" class="lin-btn" data-details-toggle="daxCardsContainer" data-open="1">Expand All</button>
+          <button type="button" class="lin-btn" data-details-toggle="daxCardsContainer" data-open="0">Collapse All</button>
+        </div>
       </div>
       {dax_section_body}
     </section>
@@ -2445,24 +2632,58 @@ def generate_portal(store: CatalogStore, output_dir: str | Path | None = None, a
         )
         orphan_html = f'<div class="card" style="margin-top:16px"><h3 style="margin-top:0;font-size:15px">Models Without Bound Reports ({len(orphan_models)})</h3><p style="font-size:12.5px;color:var(--fg-muted);margin-top:0">Semantic models with zero reports in scanned workspaces (shared core datasets consumed via Excel/XMLA, or candidates for cleanup):</p><ul style="margin:0">{o_items}</ul></div>'
 
-    # Semantic Model Cards & Health Rows
-    cards_html = []
-    health_rows = []
+    def _short_format_label(raw_fmt: str) -> str:
+        low = (raw_fmt or "").lower()
+        if "pbip" in low or "tmdl" in low:
+            return "PBIP / TMDL"
+        if "pbix" in low:
+            return "Local .pbix"
+        if "xlsx" in low or "excel" in low or "powerpivot" in low:
+            return "Excel PowerPivot"
+        if raw_fmt and raw_fmt != "Power BI Service":
+            return f"Service ({raw_fmt})"
+        return "Power BI Service"
+
+    # Semantic Model Cards, Compact List Rows, By-Workspace Groups & Health Rows
+    cards_html: list[str] = []
+    list_rows_html: list[str] = []
+    cards_by_ws: dict[str, list[tuple[str, dict, str]]] = collections.defaultdict(list)
+    health_rows: list[str] = []
+
     for slug, a in analyses:
         st = a["stats"]
         bad_cnt = sum(1 for f in a["findings"] if f["severity"] == "bad")
         warn_cnt = sum(1 for f in a["findings"] if f["severity"] == "warn")
         status_cls = "bad" if bad_cnt else ("warn" if warn_cnt else "ok")
+        sev_rank = 2 if bad_cnt else (1 if warn_cnt else 0)
         status_badge = (
             f'<span class="badge badge-bad">{bad_cnt} critical</span>'
             if bad_cnt
             else (f'<span class="badge badge-warn">{warn_cnt} warning(s)</span>' if warn_cnt else '<span class="badge badge-ok">Healthy</span>')
         )
+        fmt_short = _short_format_label(a.get("storage_mode", ""))
         src_badges = "".join(f'<span class="badge badge-accent">{esc(s)}</span>' for s in a["source_types"][:4])
-        search_blob = f"{a['name']} {a['workspace']} {' '.join(a['source_types'])} {' '.join(t['name'] for t in a['table_summaries'])}".lower()
+        owner_val = "Redacted" if anonymous else (a.get("configured_by") or "Local / Unassigned")
+        last_ref = a["refresh"][0] if a.get("refresh") else None
+        ref_txt = last_ref.get("status", "Completed") if last_ref else "Snapshot"
+        search_blob = f"{a['name']} {a['workspace']} {fmt_short} {' '.join(a['source_types'])} {' '.join(t['name'] for t in a['table_summaries'])}".lower()
 
-        cards_html.append(
-            f'<a class="model-card" href="models/{slug}.html" data-card="1" data-status="{status_cls}" data-ws="{esc(a["workspace"].lower())}" data-search="{esc(search_blob)}" style="color:inherit;text-decoration:none">'
+        data_attrs = (
+            f'data-status="{status_cls}" '
+            f'data-ws="{esc(a["workspace"].lower())}" '
+            f'data-search="{esc(search_blob)}" '
+            f'data-name="{esc(a["name"].lower())}" '
+            f'data-measures="{st["measures"]}" '
+            f'data-tables="{st["tables"]}" '
+            f'data-columns="{st["columns"]}" '
+            f'data-rels="{st["relationships"]}" '
+            f'data-reports="{len(a["reports"])}" '
+            f'data-sev="{sev_rank}"'
+        )
+
+        card_markup = (
+            f'<a class="model-card" href="models/{slug}.html" data-model-item="card" {data_attrs} style="color:inherit;text-decoration:none">'
+            f'<div class="card-eyebrow"><span class="eyebrow-type">Semantic Model</span><span>{esc(fmt_short)}</span></div>'
             f'<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px"><h3>{esc(a["name"])}</h3>{status_badge}</div>'
             f'<div style="font-size:12px;color:var(--fg-muted)">Workspace: <b>{esc(a["workspace"])}</b></div>'
             f'<div class="model-meta">{src_badges or "<span class=\"badge\">Internal</span>"}</div>'
@@ -2471,7 +2692,26 @@ def generate_portal(store: CatalogStore, output_dir: str | Path | None = None, a
             f'<div><b>{st["measures"]}</b>Measures</div>'
             f'<div><b>{st["relationships"]}</b>Rels</div>'
             f'<div><b>{len(a["reports"])}</b>Reports</div>'
-            f"</div></a>"
+            f"</div>"
+            f'<div class="card-footer-meta"><span>Owner: {esc(owner_val)}</span><span>Refresh: {esc(ref_txt)}</span></div>'
+            f"</a>"
+        )
+        cards_html.append(card_markup)
+        cards_by_ws[a["workspace"]].append((slug, a, card_markup))
+
+        list_rows_html.append(
+            f'<tr data-model-item="row" {data_attrs}>'
+            f'<td><a href="models/{slug}.html"><b>{esc(a["name"])}</b></a></td>'
+            f"<td>{esc(a['workspace'])}</td>"
+            f"<td><span class='badge'>{esc(fmt_short)}</span></td>"
+            f"<td>{src_badges or '<span class=\"badge\">Internal</span>'}</td>"
+            f"<td><b>{st['tables']}</b></td>"
+            f"<td>{st['columns']}</td>"
+            f"<td><b>{st['measures']}</b></td>"
+            f"<td>{st['relationships']}</td>"
+            f"<td>{len(a['reports'])}</td>"
+            f"<td>{status_badge}</td>"
+            f"</tr>"
         )
 
         for f in a["findings"]:
@@ -2486,8 +2726,28 @@ def generate_portal(store: CatalogStore, output_dir: str | Path | None = None, a
                 f"</tr>"
             )
 
+    ws_groups_html: list[str] = []
+    for ws_name in sorted(cards_by_ws.keys(), key=lambda s: s.lower()):
+        ws_items = cards_by_ws[ws_name]
+        ws_rep_cnt = sum(len(item_a["reports"]) for _, item_a, _ in ws_items)
+        ws_meas_cnt = sum(item_a["stats"]["measures"] for _, item_a, _ in ws_items)
+        ws_cards_joined = "".join(c_html.replace('data-model-item="card"', 'data-model-item="wscard"') for _, _, c_html in ws_items)
+        ws_groups_html.append(
+            f'<details class="ws-group-card" data-ws-group="{esc(ws_name.lower())}" open>'
+            f"<summary>"
+            f'<span>Workspace: <b>{esc(ws_name)}</b></span>'
+            f'<span style="display:flex;gap:8px;align-items:center">'
+            f'<span class="badge badge-accent">{len(ws_items)} semantic model(s)</span>'
+            f'<span class="badge">{ws_meas_cnt} DAX measures</span>'
+            f'<span class="badge">{ws_rep_cnt} report(s)</span>'
+            f"</span>"
+            f"</summary>"
+            f'<div class="ws-group-body"><div class="model-grid">{ws_cards_joined}</div></div>'
+            f"</details>"
+        )
+
     ws_chips = "".join(
-        f'<button type="button" class="chip-btn" data-ws-chip="{esc(ws.lower())}">{esc(ws)}</button>'
+        f'<button type="button" class="chip-btn" data-ws-chip="{esc(ws.lower())}">Workspace: {esc(ws)}</button>'
         for ws in sorted({a["workspace"] for _, a in analyses})
     )
 
@@ -2507,7 +2767,13 @@ def generate_portal(store: CatalogStore, output_dir: str | Path | None = None, a
       <h1>Power BI Documentation &amp; Live Lineage Portal</h1>
       <p>{total_ws} Workspaces &bull; {len(analyses)} Semantic Models &bull; {total_reports} Reports &bull; Generated {esc(gen_ts)}</p>
     </div>
-    <button type="button" class="btn-ghost" data-toggle-theme="1">Switch Light / Dark</button>
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <div class="app-switcher studio-only-link" style="display:none">
+        <a href="/">&larr; 1. Scanner &amp; Setup</a>
+        <span class="active-seg">2. Documentation Portal</span>
+      </div>
+      <button type="button" class="btn-ghost" data-toggle-theme="1">Switch Light / Dark</button>
+    </div>
   </div>
   <nav class="top-tabs">
     <button type="button" class="top-tab active" data-tab="tab-portfolio">1. Semantic Models ({len(analyses)})</button>
@@ -2528,16 +2794,64 @@ def generate_portal(store: CatalogStore, output_dir: str | Path | None = None, a
   </div>
 
   <section class="tab-pane active" id="tab-portfolio">
-    <div class="filter-bar">
-      <input type="search" id="catalogSearch" data-quick-search="1" placeholder="Search semantic models, workspaces, source connectors, or tables (Ctrl+K)...">
-      <button type="button" class="chip-btn active" data-status-chip="all">All ({len(analyses)})</button>
-      <button type="button" class="chip-btn" data-status-chip="ok">Healthy</button>
-      <button type="button" class="chip-btn" data-status-chip="warn">Warnings</button>
-      <button type="button" class="chip-btn" data-status-chip="bad">Critical</button>
-      {ws_chips}
+    <div class="filter-bar" style="justify-content:space-between">
+      <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;flex:1;min-width:260px">
+        <input type="search" id="catalogSearch" data-quick-search="1" placeholder="Search semantic models, workspaces, source connectors, or tables (Ctrl+K)...">
+        <button type="button" class="chip-btn active" data-status-chip="all">All ({len(analyses)})</button>
+        <button type="button" class="chip-btn" data-status-chip="ok">Healthy</button>
+        <button type="button" class="chip-btn" data-status-chip="warn">Warnings</button>
+        <button type="button" class="chip-btn" data-status-chip="bad">Critical</button>
+        {ws_chips}
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+        <select id="catalogSort" class="sort-select" aria-label="Sort semantic models">
+          <option value="name">Sort: Name (A-Z)</option>
+          <option value="measures">Sort: Most DAX Measures</option>
+          <option value="tables">Sort: Most Tables</option>
+          <option value="ws">Sort: Workspace (A-Z)</option>
+          <option value="sev">Sort: Health / Warnings First</option>
+        </select>
+        <div class="view-toggle" role="group" aria-label="Catalog layout view">
+          <button type="button" class="view-btn active" data-catalog-view="grid">Grid</button>
+          <button type="button" class="view-btn" data-catalog-view="list">List</button>
+          <button type="button" class="view-btn" data-catalog-view="workspace">By Workspace</button>
+        </div>
+      </div>
     </div>
+
+    <div style="display:flex;justify-content:space-between;align-items:center;margin:-6px 2px 12px 2px;font-size:12.5px;color:var(--fg-muted)">
+      <span id="catalogCountLabel">Showing <b>{len(analyses)}</b> of <b>{len(analyses)}</b> semantic models</span>
+      <button type="button" id="catalogResetBtn" class="lin-btn" style="display:none">Reset filters</button>
+    </div>
+
     <div class="model-grid" id="modelGrid">
-      {''.join(cards_html) or '<div class="card">No semantic models documented yet. Open PBI Doc Studio (`pbi-doc-generator`) to connect or drop a local model.</div>'}
+      {''.join(cards_html) or '<div class="card">No semantic models documented yet. Open 1. Scanner &amp; Setup to connect or import a local model.</div>'}
+    </div>
+
+    <div class="table-scroll" id="modelListWrap" style="display:none">
+      <table class="data-table" id="modelListTable">
+        <thead>
+          <tr>
+            <th class="sortable-th" data-sort-col="name">Semantic Model &updownarrow;</th>
+            <th class="sortable-th" data-sort-col="ws">Workspace &updownarrow;</th>
+            <th>Format</th>
+            <th>Connectors</th>
+            <th class="sortable-th" data-sort-col="tables">Tables &updownarrow;</th>
+            <th class="sortable-th" data-sort-col="columns">Cols &updownarrow;</th>
+            <th class="sortable-th" data-sort-col="measures">DAX Measures &updownarrow;</th>
+            <th class="sortable-th" data-sort-col="rels">Rels &updownarrow;</th>
+            <th class="sortable-th" data-sort-col="reports">Reports &updownarrow;</th>
+            <th class="sortable-th" data-sort-col="sev">Health &updownarrow;</th>
+          </tr>
+        </thead>
+        <tbody id="modelListBody">
+          {''.join(list_rows_html) or '<tr><td colspan="10">No semantic models documented yet.</td></tr>'}
+        </tbody>
+      </table>
+    </div>
+
+    <div id="modelWsGroups" style="display:none">
+      {''.join(ws_groups_html) or '<div class="card">No workspaces documented yet.</div>'}
     </div>
   </section>
 
@@ -2595,24 +2909,143 @@ def generate_portal(store: CatalogStore, output_dir: str | Path | None = None, a
 <script>
 (function () {{
   var search = document.getElementById("catalogSearch");
+  var sortSelect = document.getElementById("catalogSort");
+  var countLbl = document.getElementById("catalogCountLabel");
+  var resetBtn = document.getElementById("catalogResetBtn");
+  var gridWrap = document.getElementById("modelGrid");
+  var listWrap = document.getElementById("modelListWrap");
+  var listBody = document.getElementById("modelListBody");
+  var wsWrap = document.getElementById("modelWsGroups");
+
   var activeStatus = "all";
   var activeWs = "all";
+  var activeView = localStorage.getItem("pbidoc-v1-catalog-view") || "grid";
+  var sortDir = 1;
+  var totalCount = {len(analyses)};
+
+  function setCatalogView(v) {{
+    if (["grid", "list", "workspace"].indexOf(v) === -1) v = "grid";
+    activeView = v;
+    localStorage.setItem("pbidoc-v1-catalog-view", v);
+    document.querySelectorAll("[data-catalog-view]").forEach(function (b) {{
+      b.classList.toggle("active", b.getAttribute("data-catalog-view") === v);
+    }});
+    if (gridWrap) gridWrap.style.display = (v === "grid") ? "" : "none";
+    if (listWrap) listWrap.style.display = (v === "list") ? "" : "none";
+    if (wsWrap) wsWrap.style.display = (v === "workspace") ? "" : "none";
+  }}
+
+  function compareItems(a, b, key, dir) {{
+    var numCols = ["measures", "tables", "columns", "rels", "reports", "sev"];
+    if (numCols.indexOf(key) !== -1) {{
+      var na = parseFloat(a.getAttribute("data-" + key) || "0");
+      var nb = parseFloat(b.getAttribute("data-" + key) || "0");
+      if (na !== nb) return (nb - na) * dir;
+    }} else {{
+      var sa = (a.getAttribute("data-" + key) || "");
+      var sb = (b.getAttribute("data-" + key) || "");
+      if (sa !== sb) return sa.localeCompare(sb) * dir;
+    }}
+    return (a.getAttribute("data-name") || "").localeCompare(b.getAttribute("data-name") || "");
+  }}
+
+  function applySort(key, dir) {{
+    var d = dir || 1;
+    if (gridWrap) {{
+      Array.from(gridWrap.querySelectorAll('[data-model-item="card"]'))
+        .sort(function (a, b) {{ return compareItems(a, b, key, d); }})
+        .forEach(function (el) {{ gridWrap.appendChild(el); }});
+    }}
+    if (listBody) {{
+      Array.from(listBody.querySelectorAll('[data-model-item="row"]'))
+        .sort(function (a, b) {{ return compareItems(a, b, key, d); }})
+        .forEach(function (el) {{ listBody.appendChild(el); }});
+    }}
+    if (wsWrap) {{
+      wsWrap.querySelectorAll(".model-grid").forEach(function (wg) {{
+        Array.from(wg.querySelectorAll('[data-model-item="wscard"]'))
+          .sort(function (a, b) {{ return compareItems(a, b, key, d); }})
+          .forEach(function (el) {{ wg.appendChild(el); }});
+      }});
+    }}
+  }}
+
+  function matchesFilter(el, q) {{
+    var okStatus = activeStatus === "all" || el.getAttribute("data-status") === activeStatus;
+    var okWs = activeWs === "all" || el.getAttribute("data-ws") === activeWs;
+    var okQ = !q || (el.getAttribute("data-search") || "").indexOf(q) !== -1;
+    return okStatus && okWs && okQ;
+  }}
+
   function applyFilters() {{
     var q = (search && search.value || "").toLowerCase().trim();
-    document.querySelectorAll("[data-card]").forEach(function (card) {{
-      var okStatus = activeStatus === "all" || card.getAttribute("data-status") === activeStatus;
-      var okWs = activeWs === "all" || card.getAttribute("data-ws") === activeWs;
-      var okQ = !q || (card.getAttribute("data-search") || "").indexOf(q) !== -1;
-      card.style.display = (okStatus && okWs && okQ) ? "" : "none";
+    var shown = 0;
+    document.querySelectorAll('[data-model-item="card"]').forEach(function (el) {{
+      var ok = matchesFilter(el, q);
+      el.style.display = ok ? "" : "none";
+      if (ok) shown++;
+    }});
+    document.querySelectorAll('[data-model-item="row"]').forEach(function (el) {{
+      el.style.display = matchesFilter(el, q) ? "" : "none";
+    }});
+    document.querySelectorAll('[data-model-item="wscard"]').forEach(function (el) {{
+      el.style.display = matchesFilter(el, q) ? "" : "none";
+    }});
+    document.querySelectorAll("[data-ws-group]").forEach(function (grp) {{
+      var hasVisible = Array.from(grp.querySelectorAll('[data-model-item="wscard"]')).some(function (c) {{ return c.style.display !== "none"; }});
+      grp.style.display = hasVisible ? "" : "none";
+    }});
+    if (countLbl) {{
+      countLbl.innerHTML = "Showing <b>" + shown + "</b> of <b>" + totalCount + "</b> semantic models";
+    }}
+    if (resetBtn) {{
+      resetBtn.style.display = (q || activeStatus !== "all" || activeWs !== "all") ? "" : "none";
+    }}
+  }}
+
+  setCatalogView(activeView);
+  if (search) search.addEventListener("input", applyFilters);
+  if (sortSelect) {{
+    sortSelect.addEventListener("change", function () {{
+      sortDir = 1;
+      applySort(sortSelect.value, 1);
     }});
   }}
-  if (search) search.addEventListener("input", applyFilters);
+  if (resetBtn) {{
+    resetBtn.addEventListener("click", function () {{
+      if (search) search.value = "";
+      activeStatus = "all";
+      activeWs = "all";
+      document.querySelectorAll("[data-status-chip]").forEach(function (b) {{ b.classList.toggle("active", b.getAttribute("data-status-chip") === "all"); }});
+      document.querySelectorAll("[data-ws-chip]").forEach(function (b) {{ b.classList.remove("active"); }});
+      applyFilters();
+    }});
+  }}
+
   document.addEventListener("click", function (e) {{
+    var vb = e.target.closest("[data-catalog-view]");
+    if (vb) {{
+      setCatalogView(vb.getAttribute("data-catalog-view"));
+      return;
+    }}
+    var th = e.target.closest("[data-sort-col]");
+    if (th) {{
+      var col = th.getAttribute("data-sort-col");
+      if (sortSelect && ["name", "measures", "tables", "ws", "sev"].indexOf(col) !== -1) {{
+        if (sortSelect.value === col) sortDir = -sortDir; else sortDir = 1;
+        sortSelect.value = col;
+      }} else {{
+        sortDir = -sortDir;
+      }}
+      applySort(col, sortDir);
+      return;
+    }}
     var sb = e.target.closest("[data-status-chip]");
     if (sb) {{
       activeStatus = sb.getAttribute("data-status-chip");
       document.querySelectorAll("[data-status-chip]").forEach(function (b) {{ b.classList.toggle("active", b === sb); }});
       applyFilters();
+      return;
     }}
     var wb = e.target.closest("[data-ws-chip]");
     if (wb) {{

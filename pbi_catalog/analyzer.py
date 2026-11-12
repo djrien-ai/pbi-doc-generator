@@ -732,6 +732,7 @@ def analyze_full_model(model_meta: dict, tmdl_bundle: str, reports: list[dict] |
         "workspace_id": model_meta.get("workspace_id", ""),
         "workspace": model_meta.get("workspace", "Local"),
         "owner": model_meta.get("configured_by", ""),
+        "storage_mode": model_meta.get("target_storage_mode", "") or "Power BI Service",
         "created_date": model_meta.get("created_date", ""),
         "last_refresh": refresh_info,
         "age_days": age_days,

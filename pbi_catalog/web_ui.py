@@ -281,10 +281,13 @@ STUDIO_HTML = r"""<!DOCTYPE html>
 <header class="hero">
   <div class="hero-inner">
     <div>
-      <h1>Power BI Documentation &amp; Live Lineage Studio</h1>
-      <p>Zero-admin workspace catalog, auto-formatted DAX, Star-Schema diagrams, and AI MCP server &bull; Runs 100% locally</p>
+      <h1>Power BI Documentation &amp; Live Lineage</h1>
+      <p>Step 1: Scan Power BI workspaces or import local files here &bull; Step 2: Explore &amp; share in the Documentation Portal</p>
     </div>
-    <a class="btn btn-secondary" href="/portal/index.html" target="_blank" id="topOpenPortalBtn" style="background:rgba(255,255,255,0.16);color:#fff;border-color:rgba(255,255,255,0.3)">Open Portal &rarr;</a>
+    <div style="display:inline-flex;background:rgba(255,255,255,0.12);padding:4px;border-radius:11px;border:1px solid rgba(255,255,255,0.24);gap:4px;align-items:center">
+      <span style="padding:7px 13px;border-radius:8px;background:#fff;color:#072854;font-weight:700;font-size:12.5px">1. Scanner &amp; Setup</span>
+      <a href="/portal/index.html" id="topOpenPortalBtn" style="padding:7px 13px;border-radius:8px;color:#fff;text-decoration:none;font-weight:650;font-size:12.5px">2. Documentation Portal &rarr;</a>
+    </div>
   </div>
   <nav class="mode-tabs">
     <button type="button" class="mode-tab active" data-pane="pane-service">1. Power BI Service (Workspaces &amp; Catalog)</button>
@@ -367,7 +370,7 @@ STUDIO_HTML = r"""<!DOCTYPE html>
       <div style="display:flex;flex-wrap:wrap;gap:10px">
         <button type="button" class="btn btn-primary" id="btnScanBuild" onclick="runScanAndBuild()">Scan Selected Workspaces &amp; Build Portal</button>
         <button type="button" class="btn btn-secondary" id="btnRebuildOnly" onclick="rebuildPortalOnly()">Rebuild HTML Portal from Local Cache</button>
-        <a class="btn btn-success" href="/portal/index.html" target="_blank">Open Generated Portal &rarr;</a>
+        <a class="btn btn-success" href="/portal/index.html">Open Documentation Portal &rarr;</a>
       </div>
 
       <div class="log-box" id="logBox">Ready. Catalog folder: {{CATALOG_DIR}}</div>
@@ -387,7 +390,7 @@ STUDIO_HTML = r"""<!DOCTYPE html>
       </div>
       <div style="display:flex;gap:10px">
         <button type="button" class="btn btn-primary" id="btnImportLocal" onclick="importLocalPath()">Generate Documentation</button>
-        <a class="btn btn-success" href="/portal/index.html" target="_blank">Open Portal &rarr;</a>
+        <a class="btn btn-success" href="/portal/index.html">Open Documentation Portal &rarr;</a>
       </div>
       <div id="localBanner" class="inline-banner info" style="display:none"></div>
       <div class="log-box" id="localLogBox">Select a local .pbip / .SemanticModel folder or .pbix / .xlsx file above.</div>
@@ -500,6 +503,11 @@ async function refreshStatus() {
       document.getElementById("logBox").scrollTop = document.getElementById("logBox").scrollHeight;
     }
 
+    var topPortalBtn = document.getElementById("topOpenPortalBtn");
+    if (topPortalBtn && typeof st.models_count === "number") {
+      topPortalBtn.innerHTML = "2. Documentation Portal" + (st.models_count > 0 ? " (" + st.models_count + ")" : "") + " &rarr;";
+    }
+
     var scanBtn = document.getElementById("btnScanBuild");
     if (st.busy) {
       wasBusy = true;
@@ -516,7 +524,7 @@ async function refreshStatus() {
       } else {
         setBanner("scanBanner", "ok",
           "<span><b>Portal ready!</b> All selected workspaces and models have been documented.</span>" +
-          "<a class='btn btn-success' style='padding:6px 14px;font-size:12.5px' href='/portal/index.html' target='_blank'>Open Generated Portal &rarr;</a>"
+          "<a class='btn btn-success' style='padding:6px 14px;font-size:12.5px' href='/portal/index.html'>Open Documentation Portal &rarr;</a>"
         );
       }
     }
@@ -660,7 +668,7 @@ async function rebuildPortalOnly() {
     if (res.ok) {
       setBanner("scanBanner", "ok",
         "<span><b>Portal regenerated!</b> Ready to view.</span>" +
-        "<a class='btn btn-success' style='padding:6px 14px;font-size:12.5px' href='/portal/index.html' target='_blank'>Open Generated Portal &rarr;</a>"
+        "<a class='btn btn-success' style='padding:6px 14px;font-size:12.5px' href='/portal/index.html'>Open Documentation Portal &rarr;</a>"
       );
     } else {
       setBanner("scanBanner", "err", "<span><b>Error rebuilding portal:</b> " + escHtml(res.error) + "</span>");
@@ -697,7 +705,7 @@ async function importLocalPath() {
       appendLog("Done! Imported '" + (res.model_name || "") + "' into Portal (" + res.output + ").", "localLogBox");
       setBanner("localBanner", "ok",
         "<span><b>Imported '" + escHtml(res.model_name || p) + "'!</b> Added to your v1.0 Documentation &amp; Live Lineage Portal.</span>" +
-        "<a class='btn btn-success' style='padding:6px 14px;font-size:12.5px' href='/portal/index.html' target='_blank'>Open Portal &rarr;</a>"
+        "<a class='btn btn-success' style='padding:6px 14px;font-size:12.5px' href='/portal/index.html'>Open Documentation Portal &rarr;</a>"
       );
     } else {
       appendLog("Error: " + res.error, "localLogBox");
@@ -776,11 +784,16 @@ def create_studio_server(catalog_dir: str | Path, host: str = "127.0.0.1", port:
                 return
 
             if parsed.path == "/api/status":
+                try:
+                    models_cnt = len(state.store.load().get("models", {}))
+                except Exception:
+                    models_cnt = 0
                 self._json(
                     {
                         "auth": state.auth.status(),
                         "busy": state.busy,
                         "last_scan_error": state.last_scan_error,
+                        "models_count": models_cnt,
                         "logs": state.logs[-80:],
                     }
                 )
