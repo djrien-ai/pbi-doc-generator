@@ -486,7 +486,7 @@ STUDIO_HTML = r"""<!DOCTYPE html>
 
 <footer style="max-width:1120px;margin:24px auto 14px auto;padding:14px 24px;border-top:1px solid var(--border);display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;font-size:12px;color:var(--fg-muted)">
   <span><a href="https://github.com/djrien-ai/pbi-doc-generator" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none;font-weight:600">PBI Doc Generator v1.0</a> &bull; 100% Local &amp; Read-Only (MIT Open Source)</span>
-  <span>Created by <a href="https://www.linkedin.com/in/rien-scheerlinck/" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none;font-weight:600">Rien Scheerlinck</a></span>
+  <span>Created by <a href="https://www.linkedin.com/in/rienscheerlinck/" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none;font-weight:600">Rien Scheerlinck</a></span>
 </footer>
 
 <script>

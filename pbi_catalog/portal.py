@@ -2497,7 +2497,7 @@ def render_model_html(analysis: dict, slug: str, anonymous: bool = False) -> str
       <li><a href="#sec-security"><span>6. Security &amp; Reports</span><span class="toc-count">{len(analysis['reports'])}</span></a></li>
     </ul>
     <div style="margin-top:auto;padding-top:12px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;font-size:11.5px;color:var(--fg-muted)">
-      <span><a href="https://github.com/djrien-ai/pbi-doc-generator" target="_blank" rel="noopener" style="color:inherit;text-decoration:none;font-weight:600">PBI Doc Generator v1.0</a> &bull; <a href="https://www.linkedin.com/in/rien-scheerlinck/" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none">Rien Scheerlinck</a></span>
+      <span><a href="https://github.com/djrien-ai/pbi-doc-generator" target="_blank" rel="noopener" style="color:inherit;text-decoration:none;font-weight:600">PBI Doc Generator v1.0</a> &bull; <a href="https://www.linkedin.com/in/rienscheerlinck/" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none">Rien Scheerlinck</a></span>
       <button type="button" class="theme-icon-btn surface-btn" data-toggle-theme="1" title="Toggle Light / Dark theme" aria-label="Toggle Light / Dark theme">
         <svg class="icon-moon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
         <svg class="icon-sun" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
@@ -3004,7 +3004,7 @@ def generate_portal(store: CatalogStore, output_dir: str | Path | None = None, a
 
 <footer style="max-width:1440px;margin:28px auto 14px auto;padding:14px 24px;border-top:1px solid var(--border);display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;font-size:12px;color:var(--fg-muted)">
   <span>Generated locally with <a href="https://github.com/djrien-ai/pbi-doc-generator" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none;font-weight:600">PBI Doc Generator v1.0</a> (MIT Open Source)</span>
-  <span>Created by <a href="https://www.linkedin.com/in/rien-scheerlinck/" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none;font-weight:600">Rien Scheerlinck</a></span>
+  <span>Created by <a href="https://www.linkedin.com/in/rienscheerlinck/" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none;font-weight:600">Rien Scheerlinck</a></span>
 </footer>
 
 <script src="assets/portal_common.js"></script>

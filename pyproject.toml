@@ -47,7 +47,7 @@ Homepage = "https://github.com/djrien-ai/pbi-doc-generator"
 "Live Demo" = "https://djrien-ai.github.io/pbi-doc-generator/"
 Repository = "https://github.com/djrien-ai/pbi-doc-generator"
 Issues = "https://github.com/djrien-ai/pbi-doc-generator/issues"
-"Author LinkedIn" = "https://www.linkedin.com/in/rien-scheerlinck/"
+"Author LinkedIn" = "https://www.linkedin.com/in/rienscheerlinck/"
 
 [project.scripts]
 pbi-doc-generator = "pbi_catalog.cli:main"
