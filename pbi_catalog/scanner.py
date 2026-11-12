@@ -4,6 +4,7 @@ Workspace, Semantic Model, Report, Dataflow, and Governance Metadata Scanner.
 
 from __future__ import annotations
 
+import hashlib
 import re
 from pathlib import Path
 from typing import Callable
@@ -220,7 +221,8 @@ class WorkspaceScanner:
         """Import a local `.pbip` or `.SemanticModel` directory directly into the catalog store."""
         p = Path(path).resolve()
         model_name, bundle = bundle_from_local_tmdl_dir(p)
-        ds_id = f"local-{abs(hash(str(p).lower())) % 10**10:010d}"
+        h12 = hashlib.sha1(f"{str(p.parent).lower()}::{model_name.lower()}".encode("utf-8")).hexdigest()[:12]
+        ds_id = f"{h12}-local"
         ws_id = "local-workspace"
 
         state = store.load()
@@ -254,21 +256,27 @@ class WorkspaceScanner:
             "definition_read_at": utc_now_iso(),
         }
 
-        # Register sibling .Report folder if present so downstream report lineage lights up
+        # Register matching sibling .Report folder if present so downstream report lineage lights up
         search_root = p.parent if (p.is_file() or p.name.endswith(".SemanticModel")) else p
-        rep_dirs = list(search_root.glob("*.Report"))
-        if rep_dirs:
-            for rdir in rep_dirs:
-                rep_name = rdir.name[: -len(".Report")]
-                rep_id = f"rep-{abs(hash(str(rdir).lower())) % 10**10:010d}"
-                state["reports"][rep_id] = {
-                    "id": rep_id,
-                    "name": rep_name,
-                    "workspace_id": ws_id,
-                    "workspace": workspace_name,
-                    "dataset_id": ds_id,
-                    "report_type": "PowerBIReport (PBIP)",
-                }
+        exact_rep = search_root / f"{model_name}.Report"
+        if exact_rep.is_dir():
+            rep_dirs = [exact_rep]
+        elif len(list(search_root.glob("*.SemanticModel"))) <= 1:
+            rep_dirs = sorted(search_root.glob("*.Report"))
+        else:
+            rep_dirs = []
+        for rdir in rep_dirs:
+            rep_name = rdir.name[: -len(".Report")]
+            rh12 = hashlib.sha1(str(rdir).lower().encode("utf-8")).hexdigest()[:12]
+            rep_id = f"rep-{rh12}"
+            state["reports"][rep_id] = {
+                "id": rep_id,
+                "name": rep_name,
+                "workspace_id": ws_id,
+                "workspace": workspace_name,
+                "dataset_id": ds_id,
+                "report_type": "PowerBIReport (PBIP)",
+            }
 
         store.save(state)
         return state["models"][ds_id]
@@ -297,10 +305,17 @@ class WorkspaceScanner:
                 raise ValueError(f"Could not read PBIX data model from '{p.name}': {exc}") from exc
 
         pq_override = None
+        mashup_fallback_df = None
         if is_excel:
             import excel_extractor  # type: ignore
 
             pq_override = excel_extractor.extract_excel_power_query(str(p))
+        elif model is not None:
+            raw_pq = getattr(model, "power_query", None)
+            if raw_pq is None or getattr(raw_pq, "empty", True):
+                import excel_extractor  # type: ignore
+
+                mashup_fallback_df = excel_extractor.extract_pbix_datamashup_power_query(str(p))
 
         def _q(name: str) -> str:
             escaped = str(name).replace("'", "''")
@@ -357,12 +372,25 @@ class WorkspaceScanner:
                     _add_tbl(t)
 
         pq_by_tbl: dict[str, list[str]] = {}
+        extra_expressions: list[tuple[str, str]] = []
         if pq_df is not None and not getattr(pq_df, "empty", True) and "TableName" in pq_df.columns:
             for _, row in pq_df.iterrows():
                 t = _clean_str(row.get("TableName"))
                 expr = _clean_str(row.get("Expression"))
                 if t and expr:
                     pq_by_tbl.setdefault(t, []).append(expr)
+        elif mashup_fallback_df is not None and not getattr(mashup_fallback_df, "empty", True):
+            lower_to_tbl = {t.lower(): t for t in all_tables}
+            for _, row in mashup_fallback_df.iterrows():
+                qname = _clean_str(row.get("TableName"))
+                expr = _clean_str(row.get("Expression"))
+                if not qname or not expr:
+                    continue
+                matched_tbl = lower_to_tbl.get(qname.lower())
+                if matched_tbl:
+                    pq_by_tbl.setdefault(matched_tbl, []).append(expr)
+                else:
+                    extra_expressions.append((qname, expr))
 
         dax_tbl_by_name: dict[str, str] = {}
         if dax_tables_df is not None and not getattr(dax_tables_df, "empty", True) and "TableName" in dax_tables_df.columns:
@@ -415,21 +443,29 @@ class WorkspaceScanner:
 
         files_dict: dict[str, str] = {"definition/model.tmdl": "model Model\n\tculture: en-US\n"}
 
+        expr_lines: list[str] = []
+        seen_expr_names: set[str] = set()
         if params_df is not None and not getattr(params_df, "empty", True):
-            expr_lines: list[str] = []
             for _, row in params_df.iterrows():
                 pname = _clean_str(row.get("ParameterName", row.get("Name")))
                 pexpr = _clean_str(row.get("Expression"))
                 pdesc = _clean_str(row.get("Description"))
-                if not pname or not pexpr:
+                if not pname or not pexpr or pname.lower() in seen_expr_names:
                     continue
+                seen_expr_names.add(pname.lower())
                 if pdesc:
                     for dln in pdesc.splitlines():
                         expr_lines.append(f"/// {dln}")
                 expr_lines.append(f"expression {_q(pname)} = {_fenced(pexpr, 2)}")
                 expr_lines.append("")
-            if expr_lines:
-                files_dict["definition/expressions.tmdl"] = "\n".join(expr_lines)
+        for qname, qexpr in extra_expressions:
+            if qname.lower() in seen_expr_names:
+                continue
+            seen_expr_names.add(qname.lower())
+            expr_lines.append(f"expression {_q(qname)} = {_fenced(qexpr, 2)}")
+            expr_lines.append("")
+        if expr_lines:
+            files_dict["definition/expressions.tmdl"] = "\n".join(expr_lines)
 
         if rels_df is not None and not getattr(rels_df, "empty", True):
             rel_lines: list[str] = []
@@ -493,7 +529,8 @@ class WorkspaceScanner:
             files_dict[f"definition/tables/{idx:03d}_{safe_file}.tmdl"] = "\n".join(tlines) + "\n"
 
         model_name = p.stem
-        ds_id = f"local-{abs(hash(str(p).lower())) % 10**10:010d}"
+        h12 = hashlib.sha1(str(p).lower().encode("utf-8")).hexdigest()[:12]
+        ds_id = f"{h12}-local"
         ws_id = "local-workspace"
 
         state = store.load()

@@ -1573,6 +1573,11 @@ def _extract_documentation_pipeline(input_path, output_path=None, include_system
             else:
                 type(model).power_query = property(lambda self: getattr(self, '_pq_override', pq_df))
                 model._pq_override = pq_df
+        elif model is not None and (getattr(model, 'power_query', None) is None or len(model.power_query) == 0):
+            dm_df = excel_extractor.extract_pbix_datamashup_power_query(input_path)
+            if dm_df is not None and len(dm_df) > 0:
+                type(model).power_query = property(lambda self: getattr(self, '_pq_override', self._metadata_handler.metadata.m_df))
+                model._pq_override = dm_df
     elif input_path.lower().endswith('.pbip') or os.path.isdir(input_path):
         from pbip_adapter import PbipAdapter
         print(f"Loading PBIP/Folder: {input_path}")

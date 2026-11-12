@@ -511,7 +511,7 @@ class StudioState:
 def create_studio_server(catalog_dir: str | Path, host: str = "127.0.0.1", port: int = 8765) -> tuple[http.server.ThreadingHTTPServer, StudioState]:
     state = StudioState(catalog_dir)
     # Ensure initial portal exists if store already has models
-    if (state.store.root / "state.json").exists():
+    if state.store.state_file.exists():
         try:
             generate_portal(state.store)
         except Exception:

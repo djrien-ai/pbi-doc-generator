@@ -127,13 +127,21 @@ def _props(body: list[str], level: int) -> dict:
 
 
 def bundle_from_local_tmdl_dir(folder: str | Path) -> tuple[str, str]:
-    """Read a local `.pbip` or `.SemanticModel` directory and pack its `.tmdl` files into a bundle string."""
+    """Read a local `.pbip`, `.SemanticModel`, or project directory and pack its `.tmdl` files into a bundle string."""
     p = Path(folder).resolve()
     if p.is_file() and p.suffix.lower() == ".pbip":
-        candidates = list(p.parent.glob(f"{p.stem}.SemanticModel")) + list(p.parent.glob("*.SemanticModel"))
-        if not candidates:
-            raise FileNotFoundError(f"No .SemanticModel folder found next to {p}")
-        p = candidates[0]
+        exact_sm = p.parent / f"{p.stem}.SemanticModel"
+        if exact_sm.is_dir():
+            p = exact_sm
+        else:
+            candidates = sorted(p.parent.glob("*.SemanticModel"))
+            if not candidates:
+                raise FileNotFoundError(f"No .SemanticModel folder found next to {p}")
+            p = candidates[0]
+    elif p.is_dir() and not (p / "definition").is_dir() and not p.name.endswith(".SemanticModel"):
+        sm_dirs = sorted(p.glob("*.SemanticModel"))
+        if sm_dirs:
+            p = sm_dirs[0]
 
     def_dir = p / "definition" if (p / "definition").is_dir() else p
     tmdl_files = sorted(def_dir.rglob("*.tmdl"))
