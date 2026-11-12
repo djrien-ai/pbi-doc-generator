@@ -6,6 +6,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-3776AB.svg)](https://www.python.org/)
 [![100% Local & Read-Only](https://img.shields.io/badge/Privacy-100%25_Local_%26_Read--Only-0f766e.svg)](SECURITY.md)
+[![Support on Ko-fi](https://img.shields.io/badge/Support_on_Ko--fi-Buy_me_a_coffee-FF5E5B?logo=ko-fi&logoColor=white)](https://ko-fi.com/rienscheerlinck)
 
 Turn **Power BI Service Workspaces** and local **`.pbix` / `.pbip` / `.xlsx`** files into clean, searchable HTML documentation with **interactive Star-Schema diagrams**, **auto-formatted DAX catalogs**, **visual Power Query pipelines**, **3-panel end-to-end Live Lineage**, and a **built-in local Model Context Protocol (MCP) server** for AI assistants.
 
@@ -105,7 +106,7 @@ The core of `pbi-doc-generator` is and remains 100% free and open-source under t
 
 Special thanks to community contributors `@jakubpokusa` (interactive Mermaid relationship viewer), `@okiyuki99` (Xpress9 `pbixray` support), and `@nblankes` (TMDL table doc-comment bug report).
 
-If `pbi-doc-generator` saves your BI team hours of manual documentation or impact analysis, consider starring the repository or supporting ongoing open-source development via **GitHub Sponsors** on this repository.
+If `pbi-doc-generator` saves your BI team hours of manual documentation or impact analysis, consider starring the repository or [**supporting ongoing open-source development on Ko-fi**](https://ko-fi.com/rienscheerlinck).
 
 ## License
 

@@ -7,6 +7,8 @@
    - *Power BI Service workspace note:* Documenting workspaces in the Power BI Service requires at least **Contributor** (or **Member** / **Admin**) access in the target workspace. Documenting local `.pbix`, `.pbip`, and `.xlsx` files works 100% offline.
 
 > **Prefer Python / macOS / Linux?** Run `pip install "git+https://github.com/djrien-ai/pbi-doc-generator.git"` and start with `pbi-doc-generator`.
+>
+> ☕ **Saves your team time?** Consider [**supporting ongoing open-source development on Ko-fi**](https://ko-fi.com/rienscheerlinck) or starring the repository!
 
 ---
 
