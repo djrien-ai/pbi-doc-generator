@@ -17,6 +17,7 @@ import http.server
 import json
 import os
 import secrets
+import socket
 import subprocess
 import sys
 import threading
@@ -73,8 +74,11 @@ def read_windows_clipboard() -> str:
 def fetch_token_via_oauth_pkce(
     tenant: str = "organizations",
     client_id: str = DEFAULT_PUBLIC_CLIENT_ID,
-    timeout_sec: int = 180,
+    timeout_sec: int = 120,
     log_fn: Callable[[str], None] | None = None,
+    cancel_event: threading.Event | None = None,
+    on_auth_url: Callable[[str], None] | None = None,
+    open_browser: bool = True,
 ) -> tuple[str, str]:
     """
     Standard "Sign in with Microsoft" OAuth 2.0 Authorization Code + PKCE flow.
@@ -100,7 +104,13 @@ def fetch_token_via_oauth_pkce(
                 return
             if "error" in params:
                 result_box["error"] = params.get("error_description", params["error"])[0]
-                html = "<html><body style='font-family:Segoe UI,sans-serif;padding:40px'><h2>Sign-in did not complete</h2><p>Please return to PBI Doc Generator Studio.</p></body></html>"
+                html = (
+                    "<html><body style='font-family:Segoe UI,sans-serif;padding:48px;text-align:center;background:#fef2f2;color:#7f1d1d'>"
+                    "<div style='max-width:480px;margin:0 auto;background:#fff;padding:32px;border-radius:14px;border:1px solid #fecaca'>"
+                    "<h2 style='color:#b91c1c;margin-top:0'>Microsoft sign-in did not complete</h2>"
+                    "<p style='color:#475569'>Return to PBI Doc Generator Studio for details or use 'Sign in via Power BI Web Window'.</p>"
+                    "</div></body></html>"
+                )
             else:
                 result_box["code"] = params.get("code", [""])[0]
                 html = (
@@ -108,7 +118,7 @@ def fetch_token_via_oauth_pkce(
                     "<div style='max-width:440px;margin:0 auto;background:#fff;padding:32px;border-radius:14px;border:1px solid #e2e8f0;box-shadow:0 4px 16px rgba(0,0,0,0.06)'>"
                     "<h2 style='color:#15803d;margin-top:0'>Signed in with Microsoft</h2>"
                     "<p style='color:#475569'>Your Power BI session is ready. You can close this browser tab and return to PBI Doc Generator Studio.</p>"
-                    "</div><script>setTimeout(function(){window.close();},1500);</script></body></html>"
+                    "</div><script>setTimeout(function(){window.close();},1200);</script></body></html>"
                 )
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -119,6 +129,17 @@ def fetch_token_via_oauth_pkce(
     httpd = http.server.HTTPServer(("127.0.0.1", 0), _CallbackHandler)
     port = httpd.server_port
     redirect_uri = f"http://localhost:{port}"
+
+    # Also bind IPv6 loopback [::1] on the same port so Windows browsers resolving localhost -> ::1 connect immediately
+    httpd6 = None
+    try:
+        class _IPv6Server(http.server.HTTPServer):
+            address_family = socket.AF_INET6
+
+        httpd6 = _IPv6Server(("::1", port), _CallbackHandler)
+        threading.Thread(target=httpd6.serve_forever, daemon=True).start()
+    except Exception:
+        httpd6 = None
 
     srv_thread = threading.Thread(target=httpd.serve_forever, daemon=True)
     srv_thread.start()
@@ -137,16 +158,33 @@ def fetch_token_via_oauth_pkce(
         }
     )
     auth_url = f"https://login.microsoftonline.com/{tenant or 'organizations'}/oauth2/v2.0/authorize?{auth_params}"
+    if on_auth_url:
+        on_auth_url(auth_url)
     if log_fn:
         log_fn("Opening Microsoft sign-in page in your default browser...")
-    webbrowser.open(auth_url)
+    if open_browser:
+        webbrowser.open(auth_url)
 
+    deadline = time.time() + timeout_sec
     try:
-        if not done_event.wait(timeout=timeout_sec):
-            raise RuntimeError("Microsoft sign-in timed out before completing in the browser.")
+        while time.time() < deadline:
+            if done_event.wait(timeout=0.25):
+                break
+            if cancel_event is not None and cancel_event.is_set():
+                raise RuntimeError("Sign-in cancelled.")
+        if not done_event.is_set():
+            raise RuntimeError(
+                "Microsoft sign-in timed out in the browser. If your corporate IT blocks standard OAuth apps, use 'Sign in via Power BI Web Window' right below."
+            )
     finally:
         httpd.shutdown()
         httpd.server_close()
+        if httpd6 is not None:
+            try:
+                httpd6.shutdown()
+                httpd6.server_close()
+            except Exception:
+                pass
 
     if "error" in result_box:
         raise RuntimeError(f"Microsoft OAuth sign-in declined or restricted by tenant: {result_box['error']}")
@@ -298,6 +336,16 @@ class TokenProvider:
     _refresh_token: str = ""
     _expires_at: float = 0.0
     _claims: dict | None = None
+    _pending_cancel: threading.Event | None = None
+    _pending_auth_url: str = ""
+    auth_in_progress: bool = False
+    last_error: str = ""
+
+    def cancel_pending(self) -> None:
+        if self._pending_cancel is not None:
+            self._pending_cancel.set()
+        self._pending_auth_url = ""
+        self.auth_in_progress = False
 
     def set_manual_token(self, raw_token: str) -> dict:
         tok = clean_token(raw_token)
@@ -339,43 +387,64 @@ class TokenProvider:
         mode = (self.mode or "oauth").lower()
         tok = ""
 
-        if mode == "token" or (mode == "auto" and (self.manual_token or os.environ.get("PBI_TOKEN"))):
-            tok = clean_token(self.manual_token or os.environ.get("PBI_TOKEN", ""))
-            if not tok:
-                raise RuntimeError("No manual token or PBI_TOKEN environment variable set.")
-        elif mode == "clipboard":
-            tok = clean_token(read_windows_clipboard())
-            if not tok.startswith("eyJ"):
-                raise RuntimeError("Clipboard does not contain a valid session token.")
-        elif mode == "spn" or (
-            mode == "auto"
-            and (self.client_secret or os.environ.get("PBI_CLIENT_SECRET"))
-            and (self.client_id or os.environ.get("PBI_CLIENT_ID"))
-        ):
-            tok = fetch_token_via_spn(
-                self.tenant_id or os.environ["PBI_TENANT_ID"],
-                self.client_id or os.environ["PBI_CLIENT_ID"],
-                self.client_secret or os.environ["PBI_CLIENT_SECRET"],
-            )
-        elif mode == "az":
-            tok = fetch_token_via_az_cli()
-        elif mode == "oauth":
-            tok, ref = fetch_token_via_oauth_pkce(
-                tenant=self.tenant_id or "organizations",
-                client_id=self.client_id or DEFAULT_PUBLIC_CLIENT_ID,
-                log_fn=self.log_fn,
-            )
-            self._refresh_token = ref
-        elif mode in ("browser", "auto"):
-            tok = fetch_token_via_browser(browser_channel=self.browser_channel, log_fn=self.log_fn)
-        else:
-            raise ValueError(f"Unknown authentication mode: {self.mode}")
+        # Cancel any previous hanging browser listener before starting a new attempt
+        if self._pending_cancel is not None:
+            self._pending_cancel.set()
+        cancel_ev = threading.Event()
+        self._pending_cancel = cancel_ev
+        self._pending_auth_url = ""
+        self.auth_in_progress = True
+        self.last_error = ""
 
-        exp, claims = decode_jwt_exp(tok)
-        self._cached_token = tok
-        self._expires_at = exp
-        self._claims = claims
-        return self._cached_token
+        try:
+            if mode == "token" or (mode == "auto" and (self.manual_token or os.environ.get("PBI_TOKEN"))):
+                tok = clean_token(self.manual_token or os.environ.get("PBI_TOKEN", ""))
+                if not tok:
+                    raise RuntimeError("No manual token or PBI_TOKEN environment variable set.")
+            elif mode == "clipboard":
+                tok = clean_token(read_windows_clipboard())
+                if not tok.startswith("eyJ"):
+                    raise RuntimeError("Clipboard does not contain a valid session token.")
+            elif mode == "spn" or (
+                mode == "auto"
+                and (self.client_secret or os.environ.get("PBI_CLIENT_SECRET"))
+                and (self.client_id or os.environ.get("PBI_CLIENT_ID"))
+            ):
+                tok = fetch_token_via_spn(
+                    self.tenant_id or os.environ["PBI_TENANT_ID"],
+                    self.client_id or os.environ["PBI_CLIENT_ID"],
+                    self.client_secret or os.environ["PBI_CLIENT_SECRET"],
+                )
+            elif mode == "az":
+                tok = fetch_token_via_az_cli()
+            elif mode == "oauth":
+                def _set_url(u: str) -> None:
+                    self._pending_auth_url = u
+
+                tok, ref = fetch_token_via_oauth_pkce(
+                    tenant=self.tenant_id or "organizations",
+                    client_id=self.client_id or DEFAULT_PUBLIC_CLIENT_ID,
+                    log_fn=self.log_fn,
+                    cancel_event=cancel_ev,
+                    on_auth_url=_set_url,
+                )
+                self._refresh_token = ref
+            elif mode in ("browser", "auto"):
+                tok = fetch_token_via_browser(browser_channel=self.browser_channel, log_fn=self.log_fn)
+            else:
+                raise ValueError(f"Unknown authentication mode: {self.mode}")
+
+            exp, claims = decode_jwt_exp(tok)
+            self._cached_token = tok
+            self._expires_at = exp
+            self._claims = claims
+            return self._cached_token
+        except Exception as exc:
+            self.last_error = str(exc)
+            raise
+        finally:
+            self.auth_in_progress = False
+            self._pending_auth_url = ""
 
     def status(self) -> dict:
         remaining = max(0, int(self._expires_at - time.time())) if self._cached_token else 0
@@ -387,4 +456,7 @@ class TokenProvider:
             "seconds_remaining": remaining,
             "minutes_remaining": round(remaining / 60, 1),
             "principal": user,
+            "auth_in_progress": self.auth_in_progress,
+            "pending_auth_url": self._pending_auth_url,
+            "last_error": self.last_error,
         }
