@@ -182,8 +182,14 @@ class WorkspaceScanner:
                 m["definition_status"] = "ok"
                 m["definition_read_at"] = utc_now_iso()
             except Exception as exc:
-                m["definition_status"] = f"error: {str(exc)[:180]}"
-                state["errors"].append({"step": "getDefinition", "workspace": m["workspace"], "model": m["name"], "error": str(exc)})
+                err_txt = str(exc)
+                low_err = err_txt.lower()
+                if any(tok in low_err for tok in ("403", "401", "forbidden", "insufficientprivileges", "unauthorized")):
+                    hint = "Requires at least Contributor workspace role (Viewer role cannot extract TMDL definitions)"
+                    err_txt = f"{hint} - {err_txt}"
+                    self.log(f"    Skipped TMDL for '{m['name']}': {hint}")
+                m["definition_status"] = f"error: {err_txt[:180]}"
+                state["errors"].append({"step": "getDefinition", "workspace": m["workspace"], "model": m["name"], "error": err_txt})
 
             if include_access:
                 if ws_id not in ws_users_cache:

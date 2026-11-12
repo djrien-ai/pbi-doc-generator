@@ -392,6 +392,9 @@ STUDIO_HTML = r"""<!DOCTYPE html>
           <button type="button" class="btn btn-secondary" style="padding:5px 10px;font-size:12px" onclick="toggleAllWs(false)">Clear</button>
         </div>
       </div>
+      <p style="margin:0 0 10px 0;color:var(--fg-muted);font-size:12.5px">
+        <b>Workspace permission required:</b> You need at least <b>Contributor</b> (or Member / Admin) access in a workspace to extract full semantic model definitions (tables, DAX &amp; Power Query). Workspaces where you only have <b>Viewer</b> access return basic inventory only.
+      </p>
       <input type="search" id="wsFilter" placeholder="Filter workspaces by name (e.g. Finance, Sales, PROD)..." oninput="filterWs()" style="margin-bottom:10px">
       <div class="ws-list" id="wsList">
         <div style="color:var(--fg-muted);padding:8px;font-size:12.5px">Sign in above to load your visible Power BI workspaces.</div>
@@ -955,8 +958,10 @@ def _locate_local_pbip_on_disk(filename: str, raw_bytes: bytes, timeout_sec: flo
                     name_low = entry.name.lower()
                     if name_low == want_name and entry.is_file(follow_symlinks=False):
                         st = entry.stat(follow_symlinks=False)
-                        if st.st_size == want_size and hashlib.sha256(Path(entry.path).read_bytes()).hexdigest() == want_sha:
-                            return Path(entry.path)
+                        cand = Path(entry.path)
+                        if st.st_size == want_size and hashlib.sha256(cand.read_bytes()).hexdigest() == want_sha:
+                            if any(cand.parent.glob("*.SemanticModel")) or any(cand.parent.glob("*.Dataset")):
+                                return cand
                     elif depth < 7 and entry.is_dir(follow_symlinks=False):
                         if name_low not in skip_dirs and not name_low.startswith("."):
                             nc = os.path.normcase(entry.path)
@@ -1015,11 +1020,14 @@ def create_studio_server(catalog_dir: str | Path, host: str = "127.0.0.1", port:
 
         def _json(self, payload: dict, code: int = 200) -> None:
             raw = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-            self.send_response(code)
-            self.send_header("Content-Type", "application/json; charset=utf-8")
-            self.send_header("Content-Length", str(len(raw)))
-            self.end_headers()
-            self.wfile.write(raw)
+            try:
+                self.send_response(code)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Content-Length", str(len(raw)))
+                self.end_headers()
+                self.wfile.write(raw)
+            except (ConnectionAbortedError, BrokenPipeError, ConnectionResetError):
+                pass
 
         def do_GET(self) -> None:  # noqa: N802
             parsed = urllib.parse.urlparse(self.path)

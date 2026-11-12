@@ -31,6 +31,12 @@ pbi-doc-generator
 
 *(Or clone/download the source repository and double-click **`Start_Studio.cmd`** on Windows - it automatically installs `requirements.txt` on first launch.)*
 
+> [!IMPORTANT]
+> **Power BI Service Workspace Role Prerequisite (`Contributor` or higher)**
+> To extract full semantic model definitions (tables, relationships, DAX measures, and Power Query M) from Power BI Service workspaces, your Microsoft account must have at least the **Contributor** role (**Contributor**, **Member**, or **Admin**) in each workspace you want to document.
+> - Workspaces where you only have the **Viewer** role will list basic workspace and report inventory, because Microsoft's Fabric `getDefinition` (TMDL) API blocks `Viewer`-only accounts (`HTTP 403`).
+> - Documenting local `.pbix`, `.pbip`, and `.xlsx` files works 100% offline and requires no Power BI Service permissions.
+
 ---
 
 ## What Is Inside v1.0
