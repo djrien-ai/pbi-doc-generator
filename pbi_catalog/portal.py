@@ -243,8 +243,14 @@ PORTAL_CSS = r"""
   --warn-bg: #fef3c7;
   --bad: #b91c1c;
   --bad-bg: #fee2e2;
-  --code-bg: #0f172a;
-  --code-fg: #e2e8f0;
+  --code-bg: #f8fafc;
+  --code-fg: #1e293b;
+  --code-border: #dce4f0;
+  --code-accent-bar: #93c5fd;
+  --tok-kw: #0550ae;
+  --tok-fn: #6d28d9;
+  --tok-str: #116329;
+  --tok-cmt: #64748b;
   --shadow: 0 2px 10px rgba(15, 23, 42, 0.05);
   --radius: 12px;
 }
@@ -268,8 +274,14 @@ PORTAL_CSS = r"""
   --warn-bg: #451a03;
   --bad: #f87171;
   --bad-bg: #450a0a;
-  --code-bg: #090d16;
+  --code-bg: #172235;
   --code-fg: #e2e8f0;
+  --code-border: #2b3b54;
+  --code-accent-bar: #3b82f6;
+  --tok-kw: #7dd3fc;
+  --tok-fn: #c4b5fd;
+  --tok-str: #6ee7b7;
+  --tok-cmt: #94a3b8;
   --shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
 }
 
@@ -845,11 +857,13 @@ details.m-script-toggle > summary {
   position: relative;
   background: var(--code-bg);
   color: var(--code-fg);
+  border: 1px solid var(--code-border);
+  border-left: 3px solid var(--code-accent-bar);
   border-radius: 8px;
-  padding: 11px 14px;
+  padding: 11px 74px 11px 14px;
   overflow-x: auto;
   font-size: 12.5px;
-  line-height: 1.52;
+  line-height: 1.56;
   margin: 4px 0;
 }
 .code-block pre { margin: 0; white-space: pre-wrap; word-break: break-word; }
@@ -857,19 +871,20 @@ details.m-script-toggle > summary {
   position: absolute;
   top: 7px;
   right: 8px;
-  background: rgba(255,255,255,0.12);
-  color: #cbd5e1;
-  border: 1px solid rgba(255,255,255,0.2);
+  background: var(--surface);
+  color: var(--fg-muted);
+  border: 1px solid var(--border);
   border-radius: 6px;
   padding: 2px 8px;
   font-size: 11px;
+  font-weight: 600;
   cursor: pointer;
 }
-.copy-btn:hover { background: rgba(255,255,255,0.24); color: #fff; }
-.kw { color: #93c5fd; font-weight: 600; }
-.fn { color: #fde68a; }
-.str { color: #86efac; }
-.cmt { color: #94a3b8; font-style: italic; }
+.copy-btn:hover { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.kw { color: var(--tok-kw); font-weight: 650; }
+.fn { color: var(--tok-fn); font-weight: 550; }
+.str { color: var(--tok-str); }
+.cmt { color: var(--tok-cmt); font-style: italic; }
 
 .dep-row {
   display: flex;
