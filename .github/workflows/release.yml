@@ -50,6 +50,11 @@ jobs:
             --hidden-import dax_parser `
             launcher.py
 
+      - name: Smoke-test compiled portable executable
+        shell: pwsh
+        run: |
+          & "dist/PBI_Doc_Generator/PBI_Doc_Generator.exe" --version
+
       - name: Create Portable ZIP archive
         shell: pwsh
         run: |
@@ -68,10 +73,12 @@ jobs:
             dist/*.whl
             dist/*.tar.gz
 
-      - name: Attach Portable ZIP & Python packages to GitHub Release
+      - name: Publish GitHub Release with Portable ZIP & Python packages
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
+          name: "PBI Doc Generator ${{ github.ref_name }}"
+          body_path: CHANGELOG.md
           files: |
             dist/*.zip
             dist/*.whl
