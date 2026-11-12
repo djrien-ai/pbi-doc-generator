@@ -1,0 +1,6 @@
+# GitHub Sponsors & Open-Source Support Configuration
+# Enables the "Sponsor" button on https://github.com/djrien-ai/pbi-doc-generator
+github: [djrien-ai]
+# Uncomment and fill in your handle once created (optional):
+# ko_fi: rienscheerlinck
+# buy_me_a_coffee: rienscheerlinck

@@ -1,124 +1,92 @@
-# PBI Doc Generator
+# Power BI Documentation & Live Lineage Studio (`pbi-doc-generator` v1.0)
 
-> Automatically generate complete data documentation from any Power BI `.pbix` or `.pbip` file. No installation required.
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-3776AB.svg)](https://www.python.org/)
+[![100% Local & Read-Only](https://img.shields.io/badge/Privacy-100%25%20Local%20%26%20Read--Only-15803d.svg)](#security--privacy)
 
-![License](https://img.shields.io/badge/license-MIT-blue.svg)
-![Python](https://img.shields.io/badge/python-3.10%2B-brightgreen.svg)
-![Platform](https://img.shields.io/badge/platform-Windows-lightgrey.svg)
+Generate clean, executive-ready HTML documentation, **Star-Schema relationship diagrams**, **auto-formatted DAX catalogs**, **visual Power Query pipelines**, **interactive end-to-end Live Lineage**, and a **local AI Model Context Protocol (MCP) server** from both **Power BI Service Workspaces** and **local `.pbip` / `.pbix` / `.xlsx` files**.
 
-## What it does
+---
 
-Drop a `.pbix` file, a `.pbip` project, or a `.SemanticModel` folder → get a **standalone HTML documentation page** containing:
+## What Is New in v1.0
 
-| Section | Contents |
-|---------|----------|
-| **Data Sources** | HANA views, manual tables, parameters, helper functions |
-| **Power Query Transformations** | Step-by-step M query logic per table |
-| **Relationships** | Relationship table + interactive Mermaid.js diagram |
-| **DAX Measures** | All measures grouped by table with full expressions |
-| **Measure Lineage** | Measure→measure and measure→column Mermaid.js dependency graph |
-| **DAX Calculated Columns** | Calculated columns per table |
-| **Calculation Groups** | Calculation groups and items (for TMDL models) |
-| **Observations** | Hardcoded connections, bidirectional filters, unused measures, duplicate DAX |
-| **Report Pages & Visuals** | Per-page visual inventory with semantic data-role labels (X-axis, Y-axis, Legend, …) |
+1. **Power BI Service Multi-Workspace Scanner (Zero Azure Admin Setup Required)**
+   - Sign in with your normal Microsoft account (`Sign in with Microsoft` OAuth 2.0 PKCE in your default browser, plus a fallback Web Window mode for locked-down corporate tenants and Azure CLI / Service Principal support for CI/CD).
+   - Document 1 or 50+ workspaces into one searchable, 100% offline HTML portal: **Semantic Models**, **Workspaces & Reports Mapping** (highlighting **Cross-Workspace Shared Datasets / Thin Reports** and **Orphan Models**), **Interactive Live Lineage**, and **Governance & Health Audits**.
+2. **Effortless-to-Read Model Documentation**
+   - **Interactive Star-Schema Diagram:** Automatically classifies **Fact** vs. **Dimension** tables with zoom, pan, fullscreen, and click-to-pin relationship highlighting (contributed by `@jakubpokusa`).
+   - **Visual Power Query Pipelines:** Displays an easy-to-scan transformation step ribbon (`1. Source -> 2. Filtered Rows -> 3. Typed Columns`) above collapsible syntax-highlighted M code, recognizing 28+ enterprise connectors (SAP HANA, SAP BW, Snowflake, Databricks, Microsoft Fabric, SQL Server, SharePoint, Excel, BigQuery, and more).
+   - **Auto-Formatted & Structured DAX Library:** Organizes measures by `Table -> Display Folder -> Dependency Tier` (**Base Aggregations** first, **Derived & Time-Intelligence KPIs** second), automatically pretty-printing single-line DAX formulas and linking `Reads:` / `Used by:` dependencies.
+3. **Interactive 3-Panel Live Lineage Explorer**
+   - Click any upstream database/view, Power Query table, column, DAX measure, or Power BI report to trace live upstream origins and downstream impact with smooth SVG connectors.
+4. **Built-In Model Context Protocol (MCP) Server for AI Assistants**
+   - Connect **VS Code GitHub Copilot**, **Claude Desktop**, **Cursor**, or **Antigravity** directly to your local catalog to run instant cross-workspace impact analysis (`"Which reports break if view CV_SD_DELIVERY_OTIF changes?"`) with automatic secret masking.
+5. **100% Pure Python Core (Zero Unsigned `.exe` False Positives)**
+   - Core workspace scanning, TMDL parsing, HTML portal generation, and MCP server use **zero third-party runtime packages** (Python standard library only), eliminating Windows SmartScreen and Microsoft Defender `.exe` false positives.
+
+---
 
 ## Quick Start
 
-### Portable .exe (no install)
-[Download from GitHub Releases (v0.7)](https://github.com/djrien-ai/pbi-doc-generator/releases/tag/v0.7)
-
-## Run without the .exe (Python)
-
-**Prerequisites:** Python 3.10+ from [python.org](https://python.org)
-
-### First-time install
-
-Open a terminal in the folder where you want the tool, then run:
+### 1. Install via `pip`
 
 ```bash
-python -m venv pbidoc
-pbidoc\Scripts\activate
-pip install git+https://github.com/djrien-ai/pbi-doc-generator.git
+# Core Studio, Power BI Service Scanner, TMDL (.pbip), Live Lineage & MCP Server (Zero external dependencies!)
+pip install pbi-doc-generator
+
+# Optional: add local binary .pbix & Excel PowerPivot (.xlsx) extraction + corporate browser fallback
+pip install "pbi-doc-generator[all]"
 ```
 
-### Updating to the latest version
-
-This is an active beta, so the version number isn't always bumped between releases.
-A plain `pip install` will report "already satisfied" and keep your old build. To force
-the latest code, activate your environment first, then run:
-
-```bash
-pbidoc\Scripts\activate
-pip install --upgrade --force-reinstall --no-deps --no-cache-dir git+https://github.com/djrien-ai/pbi-doc-generator.git
-```
-
-### Launch
+### 2. Launch the Local Web Studio
 
 ```bash
 pbi-doc-generator
 ```
 
-### Verify your version
+Your browser opens **`http://127.0.0.1:8765`** where you can:
+- **Mode 1 - Power BI Service:** Click **Sign in with Microsoft**, select your workspaces, pick a preset (*Documentation & Lineage*, *Full Governance Audit*, or *Anonymized / External Share*), and build your portal.
+- **Mode 2 - Local File or Project:** Point to any local `.pbip` / `.SemanticModel` folder, `.pbix` file, or `.xlsx` workbook.
+- **Mode 3 - AI Assistant (MCP):** Copy the ready-made JSON snippet for Copilot, Claude Desktop, Cursor, or Antigravity.
+
+---
+
+## Command-Line Usage (CLI & CI/CD)
 
 ```bash
-pip show pbi-doc-generator
+# Scan specific workspaces incrementally and generate the offline HTML portal
+pbi-doc-generator scan --workspace "Supply Chain"
+
+# Generate an anonymized portal safe for external sharing (hides user/owner names)
+pbi-doc-generator portal --anonymous
+
+# Import a local Git-backed Power BI Project (.pbip / .SemanticModel) into the catalog
+pbi-doc-generator import-local ./SalesModel.SemanticModel
+
+# Document a single standalone .pbix or .xlsx file
+pbi-doc-generator file ./Report.pbix
+
+# Start the stdio MCP server for AI assistants
+pbi-doc-generator mcp
 ```
 
-## How it works
+---
 
-```
-┌─────────────┐     ┌─────────────┐     ┌────────────┐     ┌──────────────────┐
-│  .pbix /    │ ──► │ PBIXRay or  │ ──► │ extract.py │ ──► │ Standalone .html │
-│  .pbip      │     │ TMDL parser │     └────────────┘     └──────────────────┘
-└─────────────┘     └─────────────┘     Classifies &        GitHub-style CSS
-                   Reads DataModel      parses metadata     Mermaid.js diagrams
-```
+## Security & Privacy by Design
 
-## Project structure
+- **100% Local Execution:** Metadata, TMDL definitions, and generated HTML files stay on your machine. Zero telemetry or external CDN calls.
+- **Enforced Read-Only API Guard:** `PowerBiReadOnlyClient` blocks `DELETE`, `PATCH`, `PUT`, and mutating `POST` requests in code, allowing only `GET` metadata calls and the read-only Fabric `getDefinition` endpoint.
+- **In-Memory Tokens Only:** OAuth access tokens live strictly in Python RAM for the active session and are never written to disk.
+- **Automatic Secret Redaction:** Connection passwords, SAS tokens, API keys, and bearer tokens are automatically masked in both HTML pages and MCP responses.
 
-| File | Description |
-|------|-------------|
-| `gui.py` | Tkinter GUI with file picker |
-| `extract.py` | Main extraction engine (DataModel → HTML) |
-| `pbip_adapter.py` | Connects TMDL parsing to the extraction engine |
-| `tmdl_parser.py` | Natively parses PBIP SemanticModel folders |
-| `html_template.py` | HTML/CSS/JS template (GitHub-style) |
-| `installer.iss` | Inno Setup compile script for Windows |
+---
 
-## Requirements (source only)
+## Community & Support
 
-- Python 3.10+
-- `pbixray` and `pandas`
+Special thanks to community contributors `@jakubpokusa` (interactive Mermaid relationship viewer), `@okiyuki99` (Xpress9 `pbixray` support), and `@nblankes` (TMDL table doc-comment bug report).
 
-The standalone installer/exe has **no requirements** — everything is bundled.
-
-## Credits
-
-- [PBIXRay](https://github.com/Hugoberry/pbixray) by Igor Cotruta — PBIX parsing engine (MIT)
-- [Mermaid.js](https://mermaid.js.org/) — Relationship diagrams
+If `pbi-doc-generator` saves your BI team hours of manual documentation or impact analysis, consider starring the repository or supporting ongoing open-source development via **GitHub Sponsors** on this repository.
 
 ## License
 
-MIT — see [LICENSE](LICENSE)
-
-## Author
-
-**Rien Scheerlinck** — [GitHub](https://github.com/djrien-ai) · [LinkedIn](https://www.linkedin.com/in/rienscheerlinck/) · [Email](mailto:dj.rien@gmail.com)
-
-## What's New in v0.7.0
-
-- **AI Prompt-Pack Generator** — Select "Both" or "AI Prompt-Pack (.md) only" to generate a `prompt_pack.md` file alongside your HTML. It contains an intelligent zero-shot LLM prompt containing your model's exact TMDL definition payload, pre-engineered to instruct ChatGPT/Claude to instantly generate missing Data Dictionary definitions and Business Logic explanations.
-- **Auto-Inject AI Definitions** — Copy the JSON array generated by your AI directly into the new HTML feature! The HTML viewer now includes a sidebar button to instantly inject the AI-generated descriptions directly into the documentation UI, syncing tables, columns, and measures in memory!
-- **Universal Format Parity** — Total compatibility for `.pbix`, `.pbip`, and Excel `.xlsx` Power Query connections. The AI Generator now seamlessly supports every format with perfect object parity.
-- **Smart UI Prompts** — The GUI now features intelligent dark-mode walkthrough dialogs that gracefully explain the AI Prompt-Pack copy-paste workflow the first time it is used, with a persistent 'Don't show this again' toggle.
-- **Enhanced Reliability** — Resolved PyInstaller bundle extraction sizing, Pandas dependency issues, and `KeyError` crashes in edge-case schemas.
-
-## What's New in v0.6.0
-
-- **Enhanced Report Pages** — Full to-scale SVG wireframe layouts for every page in the report. See exactly where visuals are placed without opening Power BI.
-- **Data Fields Detection** — The report page visual inventory now lists the exact fields assigned to each visual's data roles (e.g., X-axis, Y-axis, Values, Legend).
-- **Collapsible Sidebar & Smart Search** — The sidebar now features nested collapsible groups for cleaner navigation. A lightning-fast, client-side search automatically finds and expands matching items.
-- **Matrix Startup Splash & Progress** — Say goodbye to static loading screens! The generator now features a dynamic, hacker-style Matrix terminal that shows real-time extraction progress.
-- **Excel Power Query Extraction** — You can now drop `.xlsx` files into the generator to extract and document Excel Power Query (M-code) scripts!
-- **Bulletproof Crash Safety** — The extraction pipeline is now fully crash-safe. If an error occurs, it falls back to rendering a safe HTML report containing the error logs, without crashing the app.
-- **Zero-Network Strict Mode** — The generator makes absolutely zero network connections. Fully offline, enterprise-safe.
+MIT License - Copyright (c) Rien Scheerlinck.
