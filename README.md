@@ -26,27 +26,35 @@ Generate clean, executive-ready HTML documentation, **Star-Schema relationship d
 
 ---
 
-## Quick Start
+## Quick Start (2 Ways to Install & Run)
 
-### 1. Install via `pip`
+**Prerequisite:** [Python 3.10+](https://www.python.org/downloads/) (available in 1 click from the Microsoft Store on Windows, or pre-installed on macOS/Linux).
+
+### Option A: Download ZIP & Double-Click (No Terminal Needed - Windows)
+
+1. Click **Code -> Download ZIP** (or download the `v1.0.0` Release ZIP) and extract the folder anywhere on your PC.
+2. *(Optional)* If you also want to parse local binary **`.pbix` / `.xlsx`** files or use **Power BI Web Window** sign-in on locked-down corporate tenants, double-click **`Install_Optional_Extras.cmd`** once. *(Core Power BI Service scanning, `.pbip` / TMDL folders, Live Lineage, and MCP require zero extra packages.)*
+3. Double-click **`Start_Studio.cmd`** -> your browser opens **`http://127.0.0.1:8765`**.
+
+### Option B: Install via `pip` (CLI & Cross-Platform)
 
 ```bash
 # Core Studio, Power BI Service Scanner, TMDL (.pbip), Live Lineage & MCP Server (Zero external dependencies!)
-pip install pbi-doc-generator
+pip install "git+https://github.com/djrien-ai/pbi-doc-generator.git"
 
-# Optional: add local binary .pbix & Excel PowerPivot (.xlsx) extraction + corporate browser fallback
-pip install "pbi-doc-generator[all]"
+# Full edition: adds local binary .pbix & Excel PowerPivot (.xlsx) extraction + corporate Web Window fallback
+pip install "pbi-doc-generator[all] @ git+https://github.com/djrien-ai/pbi-doc-generator.git"
 ```
 
-### 2. Launch the Local Web Studio
+Then launch the local Web Studio from anywhere:
 
 ```bash
 pbi-doc-generator
 ```
 
-Your browser opens **`http://127.0.0.1:8765`** where you can:
-- **Mode 1 - Power BI Service:** Click **Sign in with Microsoft**, select your workspaces, pick a preset (*Documentation & Lineage*, *Full Governance Audit*, or *Anonymized / External Share*), and build your portal.
-- **Mode 2 - Local File or Project:** Point to any local `.pbip` / `.SemanticModel` folder, `.pbix` file, or `.xlsx` workbook.
+Your browser opens **`http://127.0.0.1:8765`** where you can switch seamlessly between **`1. Scanner & Setup`** and **`2. Documentation Portal`**:
+- **Mode 1 - Power BI Service:** Click **Sign in with Microsoft** (or **Sign in via Power BI Web Window** on restricted corporate tenants), select your workspaces, pick a preset (*Documentation & Lineage*, *Full Governance Audit*, or *Anonymized / External Share*), and build your portal.
+- **Mode 2 - Local File or Project:** Click **Browse File...** or **Browse Folder...** to import any local `.pbip` / `.SemanticModel` folder, `.pbix` file, or `.xlsx` workbook into the same unified portal.
 - **Mode 3 - AI Assistant (MCP):** Copy the ready-made JSON snippet for Copilot, Claude Desktop, Cursor, or Antigravity.
 
 ---
