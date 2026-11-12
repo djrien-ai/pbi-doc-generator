@@ -29,17 +29,13 @@ classifiers = [
     "Topic :: Database",
 ]
 
-# 100% Pure Python core (zero third-party runtime packages required for Power BI Service, TMDL, Lineage & MCP!)
-dependencies = []
-
-[project.optional-dependencies]
-pbix = [
+dependencies = [
     "pbixray>=0.15.5",
     "pandas>=2.0.0,<3.0.0",
-]
-browser = [
     "playwright>=1.40.0",
 ]
+
+[project.optional-dependencies]
 all = [
     "pbixray>=0.15.5",
     "pandas>=2.0.0,<3.0.0",
@@ -59,4 +55,4 @@ pbi-doc-generator-legacy-gui = "gui:main"
 
 [tool.setuptools]
 packages = ["pbi_catalog"]
-py-modules = ["gui", "extract", "html_template", "pbip_adapter", "tmdl_parser", "dax_parser", "mermaid_js", "excel_extractor"]
+py-modules = ["launcher", "gui", "extract", "html_template", "pbip_adapter", "tmdl_parser", "dax_parser", "mermaid_js", "excel_extractor"]

@@ -1,65 +1,48 @@
 # Contributing to PBI Doc Generator
 
-Thanks for your interest in contributing! Whether it's a bug report, feature idea, or code contribution — all input is welcome.
+Thank you for your interest in contributing! Bug reports, connector improvements, UI polish, and pull requests are all welcome.
 
-## Ways to contribute
+## Ways to Contribute
 
-### 🐛 Report a bug
-- [Open an issue](https://github.com/djrien-ai/pbi-doc-generator/issues/new) with steps to reproduce
-- Include the error message and which `.pbix` file type you used (if possible)
+### Report a Bug
+- [Open a bug report](https://github.com/djrien-ai/pbi-doc-generator/issues/new/choose) with steps to reproduce.
+- Mention whether the issue occurred with Power BI Service scanning, `.pbip` / TMDL folders, `.pbix`, or `.xlsx` files.
 
-### 💡 Suggest a feature
-- Check the [Roadmap](ROADMAP.md) to see what's already planned
-- Open an issue with the `enhancement` label, or start a Discussion
+### Suggest an Enhancement
+- Check [ROADMAP.md](ROADMAP.md) to see planned capabilities.
+- Open a feature request issue describing your use case.
 
-### 🔧 Submit code
+### Submit a Pull Request
 
-1. **Fork** this repository
-2. **Create a branch** for your feature or fix:
+1. Fork this repository and create a feature branch:
    ```bash
-   git checkout -b feature/my-feature
+   git checkout -b feat/my-improvement
    ```
-3. **Make your changes** — keep them focused on one thing
-4. **Test** with a `.pbix` file to make sure the output looks correct
-5. **Submit a Pull Request** with a clear description of what you changed and why
+2. Install in editable development mode:
+   ```bash
+   python -m venv .venv
+   # Windows: .venv\Scripts\activate | macOS/Linux: source .venv/bin/activate
+   pip install -e .
+   ```
+3. Run the automated test suite before opening your PR:
+   ```bash
+   python tests/test_v1_suite.py
+   ```
+4. Launch the local Studio to verify UI changes:
+   ```bash
+   pbi-doc-generator
+   ```
 
-### 📖 Improve documentation
-Typos, better explanations, screenshots of generated output — all appreciated.
+## Project Architecture
 
-## Project structure
-
-| File | What it does |
-|------|-------------|
-| `gui.py` | Tkinter GUI — file picker and progress display |
-| `extract.py` | Core engine — reads data models, builds HTML sections |
-| `pbip_adapter.py` | Connects TMDL parsing to the extraction engine |
-| `tmdl_parser.py` | Natively parses PBIP SemanticModel folders |
-| `html_template.py` | HTML/CSS/JS template (GitHub-style design) |
-| `installer.iss` | Inno Setup compile script for Windows executable |
-
-## Development setup
-
-```bash
-# Clone your fork
-git clone https://github.com/YOUR-USERNAME/pbi-doc-generator.git
-cd pbi-doc-generator
-
-# Install dependencies in editable mode
-pip install -e .
-
-# Run the GUI
-python gui.py
-
-# Or run from command line
-python extract.py "path/to/your/file.pbix"
-# (Also supports "path/to/project.pbip" or "path/to/*.SemanticModel")
-```
-
-## Code style
-
-- Keep it simple — this project is intentionally lightweight
-- No additional frameworks unless absolutely necessary
-- Comments in English
+- `pbi_catalog/auth.py` - Zero-admin in-memory OAuth2 PKCE, Edge/Chrome Web Window, Azure CLI, and Service Principal auth.
+- `pbi_catalog/api.py` - Enforced read-only Power BI & Fabric REST client.
+- `pbi_catalog/scanner.py` - Incremental multi-workspace inventory, TMDL extraction, and local `.pbix`/`.pbip`/`.xlsx` importer.
+- `pbi_catalog/analyzer.py` - TMDL parser, 28+ source connector recognizer, Power Query step parser, DAX dependency analyzer, and governance checks.
+- `pbi_catalog/portal.py` - Offline HTML catalog, Grid/List/Workspace views, Star-Schema viewer, DAX/M catalog, and 3-panel Live Lineage Explorer.
+- `pbi_catalog/mcp_server.py` - Zero-dependency JSON-RPC stdio Model Context Protocol (MCP) server.
+- `pbi_catalog/web_ui.py` - Localhost Web Studio (`http://127.0.0.1:8765`).
+- `extract.py` / `pbip_adapter.py` / `tmdl_parser.py` / `excel_extractor.py` - Standalone single-file `.pbix`, `.pbip`, and `.xlsx` extraction engine.
 
 ## License
 

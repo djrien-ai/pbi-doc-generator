@@ -1,0 +1,79 @@
+name: Build & Publish Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows-portable-and-wheels:
+    name: Build Windows Portable ZIP & Python Packages
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies and build tools
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt pyinstaller build
+
+      - name: Run automated test suite
+        run: python tests/test_v1_suite.py
+
+      - name: Build Python wheel and sdist
+        run: python -m build
+
+      - name: Build zero-install Windows Portable folder (PyInstaller onedir, no UPX)
+        run: |
+          pyinstaller --noconfirm --clean --onedir --noupx `
+            --name PBI_Doc_Generator `
+            --collect-all pbixray `
+            --collect-all playwright `
+            --hidden-import mermaid_js `
+            --hidden-import excel_extractor `
+            --hidden-import extract `
+            --hidden-import html_template `
+            --hidden-import pbip_adapter `
+            --hidden-import tmdl_parser `
+            --hidden-import dax_parser `
+            launcher.py
+
+      - name: Create Portable ZIP archive
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          if (-not $tag) { $tag = "v1.0.0" }
+          $zipName = "PBI_Doc_Generator_${tag}_Windows_Portable.zip"
+          Compress-Archive -Path "dist/PBI_Doc_Generator/*" -DestinationPath "dist/$zipName" -Force
+          Write-Host "Created dist/$zipName"
+
+      - name: Upload build artifacts to workflow run
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-packages
+          path: |
+            dist/*.zip
+            dist/*.whl
+            dist/*.tar.gz
+
+      - name: Attach Portable ZIP & Python packages to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.zip
+            dist/*.whl
+            dist/*.tar.gz
+          generate_release_notes: false

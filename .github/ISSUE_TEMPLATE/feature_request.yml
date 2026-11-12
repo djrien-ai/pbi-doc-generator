@@ -1,0 +1,17 @@
+name: Feature Request
+description: Suggest a new connector, governance check, export format, or UI improvement
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Use Case / Problem to Solve
+      placeholder: Describe what would help your Power BI or Fabric workflow...
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed Solution
+    validations:
+      required: true

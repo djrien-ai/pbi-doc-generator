@@ -1740,6 +1740,13 @@ PORTAL_COMMON_JS = r"""
             root.querySelectorAll("details").forEach(function (d) { d.open = shouldOpen; });
             return;
         }
+        var measureJump = e.target.closest('a[href^="#measure-"]');
+        if (measureJump) {
+            var cardsBtn = document.querySelector('[data-dax-view="cards"]');
+            if (cardsBtn && !cardsBtn.classList.contains("active")) {
+                cardsBtn.click();
+            }
+        }
         var daxViewBtn = e.target.closest("[data-dax-view]");
         if (daxViewBtn) {
             var v = daxViewBtn.getAttribute("data-dax-view");
@@ -2409,10 +2416,10 @@ def render_model_html(analysis: dict, slug: str, anonymous: bool = False) -> str
 
     if dax_groups_html:
         dax_section_body = (
-            f'<div id="daxCardsContainer">{"".join(dax_groups_html)}</div>'
-            f'<div id="daxListContainer" style="display:none"><div class="table-scroll"><table class="data-table">'
+            f'<div id="daxListContainer"><div class="table-scroll"><table class="data-table">'
             f"<thead><tr><th>Measure</th><th>Host Table</th><th>Display Folder</th><th>Tier</th><th>Format</th><th>Reads</th><th>Used By</th><th>DAX Preview</th></tr></thead>"
             f'<tbody>{"".join(dax_list_rows)}</tbody></table></div></div>'
+            f'<div id="daxCardsContainer" style="display:none">{"".join(dax_groups_html)}</div>'
         )
     else:
         dax_section_body = '<div class="card"><p style="margin:0;color:var(--fg-muted)">No DAX measures are defined in this semantic model.</p></div>'
@@ -2557,8 +2564,8 @@ def render_model_html(analysis: dict, slug: str, anonymous: bool = False) -> str
         </div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
           <div class="view-toggle">
-            <button type="button" class="view-btn active" data-dax-view="cards">Formatted Cards</button>
-            <button type="button" class="view-btn" data-dax-view="list">Compact Table</button>
+            <button type="button" class="view-btn active" data-dax-view="list">Compact Table</button>
+            <button type="button" class="view-btn" data-dax-view="cards">Formatted Cards</button>
           </div>
           <button type="button" class="lin-btn" data-details-toggle="daxCardsContainer" data-open="1">Expand All</button>
           <button type="button" class="lin-btn" data-details-toggle="daxCardsContainer" data-open="0">Collapse All</button>

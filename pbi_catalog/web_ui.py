@@ -5,6 +5,8 @@ Modern Localhost Web Studio for Power BI Documentation, Live Lineage & MCP Setup
 
 from __future__ import annotations
 
+import collections
+import hashlib
 import http.server
 import json
 import mimetypes
@@ -439,15 +441,14 @@ STUDIO_HTML = r"""<!DOCTYPE html>
         Select local Power BI files directly from your computer (works 100% offline, no Power BI Service sign-in needed): Power BI Desktop files (<code>.pbix</code>), Power BI Project folders (<code>.pbip</code> / <code>.SemanticModel</code>), or Excel PowerPivot workbooks (<code>.xlsx</code>).
       </p>
 
-      <input type="file" id="nativeFilePicker" accept=".pbix,.xlsx,.bim" multiple style="display:none" onchange="handleNativeFiles(this.files)">
+      <input type="file" id="nativeFilePicker" accept=".pbix,.pbip,.xlsx,.bim" multiple style="display:none" onchange="handleNativeFiles(this.files)">
       <input type="file" id="nativeFolderPicker" webkitdirectory directory multiple style="display:none" onchange="handleNativeFolder(this.files)">
 
       <div id="localDropZone" style="border:2px dashed var(--border);border-radius:12px;padding:22px 20px;background:var(--surface-alt);text-align:center;margin-bottom:14px;transition:border-color 0.15s,background 0.15s">
         <div style="font-weight:700;font-size:14.5px;margin-bottom:6px">Choose or drag &amp; drop your Power BI file(s) here</div>
-        <div style="font-size:12.5px;color:var(--fg-muted);margin-bottom:14px">Imports directly into your unified v1.0 Documentation &amp; Live Lineage Portal</div>
+        <div style="font-size:12.5px;color:var(--fg-muted);margin-bottom:14px">Supports <code>.pbix</code>, <code>.pbip</code> (automatically loads its companion <code>.SemanticModel</code>), and Excel PowerPivot <code>.xlsx</code></div>
         <div style="display:flex;justify-content:center;gap:10px;flex-wrap:wrap">
-          <button type="button" class="btn btn-primary" id="btnPickFile" onclick="document.getElementById('nativeFilePicker').click()">Select .pbix or .xlsx File...</button>
-          <button type="button" class="btn btn-secondary" id="btnPickFolder" onclick="document.getElementById('nativeFolderPicker').click()">Select PBIP Project Folder...</button>
+          <button type="button" class="btn btn-primary" id="btnPickFile" onclick="document.getElementById('nativeFilePicker').click()">Select Power BI File (.pbix, .pbip, .xlsx)...</button>
           <a class="btn btn-success" href="/portal/index.html">Open Documentation Portal &rarr;</a>
         </div>
       </div>
@@ -455,14 +456,15 @@ STUDIO_HTML = r"""<!DOCTYPE html>
       <div id="localBanner" class="inline-banner info" style="display:none;margin-bottom:12px"></div>
 
       <details class="subtle">
-        <summary>Or paste a local file or folder path manually</summary>
+        <summary>Advanced: select a standalone .SemanticModel folder or paste a path</summary>
         <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
-          <input type="text" id="localPathInput" style="flex:1;min-width:260px" placeholder="e.g. C:\Reports\Sales.pbix or C:\Projects\Sales.SemanticModel">
+          <input type="text" id="localPathInput" style="flex:1;min-width:260px" placeholder="e.g. C:\Reports\Sales.pbip or C:\Projects\Sales.SemanticModel">
           <button type="button" class="btn btn-primary" id="btnImportLocal" onclick="importLocalPath()">Generate from Path</button>
+          <button type="button" class="btn btn-secondary" id="btnPickFolder" onclick="document.getElementById('nativeFolderPicker').click()">Browse .SemanticModel Folder...</button>
         </div>
       </details>
 
-      <div class="log-box" id="localLogBox">Ready. Click 'Select .pbix or .xlsx File...' or 'Select PBIP Project Folder...' above.</div>
+      <div class="log-box" id="localLogBox">Ready. Click 'Select Power BI File (.pbix, .pbip, .xlsx)...' or drop a file above.</div>
     </div>
   </section>
 
@@ -771,10 +773,6 @@ async function handleNativeFiles(fileList) {
   try {
     for (var i = 0; i < files.length; i++) {
       var f = files[i];
-      if (f.name.toLowerCase().endsWith(".pbip")) {
-        setBanner("localBanner", "err", "<span>A <code>.pbip</code> pointer file references a sibling <code>.SemanticModel</code> folder. Click <b>Select PBIP Project Folder...</b> and choose the project folder instead.</span>");
-        return;
-      }
       setBanner("localBanner", "info", "<span style='display:flex;align-items:center;gap:10px'><span class='spin'></span><span>Importing <b>" + escHtml(f.name) + "</b> (" + (i + 1) + "/" + files.length + ") and building v1.0 Portal...</span></span>");
       appendLog("Importing " + f.name + " ...", "localLogBox");
       var resp = await fetch("/api/upload-local-file?name=" + encodeURIComponent(f.name), {
@@ -785,7 +783,10 @@ async function handleNativeFiles(fileList) {
       var res = await resp.json();
       if (!res.ok) {
         appendLog("Error: " + res.error, "localLogBox");
-        setBanner("localBanner", "err", "<span><b>Import failed for " + escHtml(f.name) + ":</b> " + escHtml(res.error) + "</span>");
+        var extraBtn = res.needs_folder
+          ? "<button type='button' class='btn btn-secondary' style='padding:5px 12px;font-size:12px' onclick=\"document.getElementById('nativeFolderPicker').click()\">Select Project Folder...</button>"
+          : "";
+        setBanner("localBanner", "err", "<span><b>Import failed for " + escHtml(f.name) + ":</b> " + escHtml(res.error) + "</span>" + extraBtn);
         return;
       }
       imported.push(res.model_name || f.name);
@@ -902,6 +903,71 @@ refreshStatus();
 """
 
 
+def _locate_local_pbip_on_disk(filename: str, raw_bytes: bytes, timeout_sec: float = 3.0) -> Path | None:
+    """
+    Browsers strip the local directory path (`C:\\fakepath\\...`) when a user picks a `.pbip` pointer file.
+    Because Studio runs locally on the same machine, locate the exact `.pbip` file via breadth-first `os.scandir`
+    verified by exact filename + byte size + SHA-256 hash so its sibling `.SemanticModel` folder can be read directly.
+    """
+    want_name = filename.lower()
+    want_size = len(raw_bytes)
+    want_sha = hashlib.sha256(raw_bytes).hexdigest()
+    deadline = time.perf_counter() + timeout_sec
+    skip_dirs = {
+        "appdata", "node_modules", ".git", ".venv", "venv", "__pycache__",
+        "$recycle.bin", "windows", "program files", "program files (x86)",
+        "programdata", ".gemini", "library", "music", "pictures", "videos",
+    }
+
+    home = Path.home()
+    seeds: list[Path] = [Path.cwd(), home / "Desktop", home / "Documents", home / "Downloads", home]
+    for env_k in ("OneDrive", "OneDriveCommercial", "OneDriveConsumer"):
+        val = os.environ.get(env_k)
+        if val:
+            seeds.append(Path(val))
+    if sys.platform == "win32":
+        for drv in ("C:\\", "D:\\", "E:\\", "F:\\", "G:\\"):
+            dp = Path(drv)
+            if dp.exists():
+                try:
+                    for sub in os.scandir(dp):
+                        if sub.is_dir(follow_symlinks=False) and sub.name.lower() not in skip_dirs and not sub.name.startswith("."):
+                            seeds.append(Path(sub.path))
+                except OSError:
+                    pass
+
+    queue: collections.deque[tuple[str, int]] = collections.deque()
+    visited: set[str] = set()
+    for s in seeds:
+        if s.exists():
+            nc = os.path.normcase(str(s))
+            if nc not in visited:
+                visited.add(nc)
+                queue.append((str(s), 0))
+
+    while queue:
+        if time.perf_counter() > deadline:
+            return None
+        cur_dir, depth = queue.popleft()
+        try:
+            with os.scandir(cur_dir) as it:
+                for entry in it:
+                    name_low = entry.name.lower()
+                    if name_low == want_name and entry.is_file(follow_symlinks=False):
+                        st = entry.stat(follow_symlinks=False)
+                        if st.st_size == want_size and hashlib.sha256(Path(entry.path).read_bytes()).hexdigest() == want_sha:
+                            return Path(entry.path)
+                    elif depth < 7 and entry.is_dir(follow_symlinks=False):
+                        if name_low not in skip_dirs and not name_low.startswith("."):
+                            nc = os.path.normcase(entry.path)
+                            if nc not in visited:
+                                visited.add(nc)
+                                queue.append((entry.path, depth + 1))
+        except OSError:
+            pass
+    return None
+
+
 class StudioState:
     def __init__(self, catalog_dir: str | Path):
         self.store = CatalogStore(catalog_dir)
@@ -926,12 +992,17 @@ def create_studio_server(catalog_dir: str | Path, host: str = "127.0.0.1", port:
         except Exception:
             pass
 
+    mcp_args = (
+        ["mcp", "--catalog", str(state.store.root)]
+        if getattr(sys, "frozen", False)
+        else ["-m", "pbi_catalog.cli", "mcp", "--catalog", str(state.store.root)]
+    )
     mcp_cfg = json.dumps(
         {
             "mcpServers": {
                 "powerbi-catalog": {
                     "command": sys.executable,
-                    "args": ["-m", "pbi_catalog.cli", "mcp", "--catalog", str(state.store.root)],
+                    "args": mcp_args,
                 }
             }
         },
@@ -1005,6 +1076,31 @@ def create_studio_server(catalog_dir: str | Path, host: str = "127.0.0.1", port:
                 raw_bytes = self.rfile.read(length) if length else b""
                 qs = urllib.parse.parse_qs(parsed.query)
                 safe_name = Path(qs.get("name", ["model.pbix"])[0]).name
+
+                if safe_name.lower().endswith(".pbip"):
+                    real_pbip = _locate_local_pbip_on_disk(safe_name, raw_bytes)
+                    if not real_pbip:
+                        self._json(
+                            {
+                                "ok": False,
+                                "needs_folder": True,
+                                "error": (
+                                    f"Could not automatically locate the companion .SemanticModel folder for '{safe_name}' "
+                                    "(browser hides network/deep folder paths). Click 'Select Project Folder...' to choose its folder."
+                                ),
+                            }
+                        )
+                        return
+                    try:
+                        meta = WorkspaceScanner.register_local_any(state.store, str(real_pbip))
+                        idx = generate_portal(state.store)
+                        state.log(f"Imported PBIP '{meta.get('name', safe_name)}' from {real_pbip}: {idx}")
+                        self._json({"ok": True, "model_name": meta.get("name", real_pbip.stem), "output": str(idx)})
+                    except Exception as exc:
+                        state.log(f"PBIP import error: {exc}")
+                        self._json({"ok": False, "error": str(exc)})
+                    return
+
                 staging_root = (state.store.root / "_staged_imports").resolve()
                 staging_root.mkdir(parents=True, exist_ok=True)
                 staged_file = staging_root / safe_name

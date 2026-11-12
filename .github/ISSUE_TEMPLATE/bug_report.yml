@@ -1,0 +1,30 @@
+name: Bug Report
+description: Report a bug in Power BI Service scanning, local .pbix/.pbip/.xlsx import, Portal UI, or MCP server
+labels: ["bug"]
+body:
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Area / Input Mode
+      options:
+        - Power BI Service Scanner
+        - Local .pbix file
+        - Local .pbip / .SemanticModel project
+        - Local Excel PowerPivot (.xlsx)
+        - Documentation Portal UI / Live Lineage
+        - MCP Server
+        - Windows Portable ZIP
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Describe the issue and how to reproduce it (please redact any private tenant names or credentials).
+    validations:
+      required: true
+  - type: input
+    id: env
+    attributes:
+      label: OS & Installation Method
+      placeholder: e.g. Windows 11 - Portable ZIP v1.0.0, or Python 3.12 via pip
