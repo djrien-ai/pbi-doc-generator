@@ -5,13 +5,40 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
+    inputs:
+      verify_run_id:
+        description: "Optional Actions run ID whose Portable ZIP artifact should be E2E-tested on a clean Windows VM"
+        required: false
+        default: ""
 
 permissions:
   contents: write
+  actions: read
 
 jobs:
+  verify-existing-portable-zip:
+    name: E2E Verify Published Portable ZIP on Clean Windows VM
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.verify_run_id != '' }}
+    runs-on: windows-latest
+    steps:
+      - name: Checkout E2E verification script
+        uses: actions/checkout@v4
+
+      - name: Download exact v1.0.0 Portable ZIP artifact from release build
+        uses: actions/download-artifact@v4
+        with:
+          name: PBI_Doc_Generator_Windows_Portable
+          run-id: ${{ inputs.verify_run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: downloaded_zip
+
+      - name: Run full end-user Windows PC simulation (no Python on PATH)
+        shell: pwsh
+        run: ./tests/verify_portable_exe.ps1 -ZipPath "downloaded_zip/PBI_Doc_Generator_Windows_Portable.zip"
+
   build-windows-portable:
     name: Build Windows Portable ZIP & Publish Release
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.verify_run_id == '' }}
     runs-on: windows-latest
 
     steps:
@@ -69,6 +96,10 @@ jobs:
           $hdr = Get-Content -Raw ".github/RELEASE_HEADER.md"
           $chg = Get-Content -Raw "CHANGELOG.md"
           ($hdr + "`r`n" + $chg) | Set-Content -Path "dist/RELEASE_NOTES.md" -Encoding UTF8
+
+      - name: Run full end-user Windows PC E2E simulation on Portable ZIP
+        shell: pwsh
+        run: ./tests/verify_portable_exe.ps1 -ZipPath "dist/PBI_Doc_Generator_Windows_Portable.zip"
 
       - name: Upload Portable ZIP to workflow artifacts
         uses: actions/upload-artifact@v4
