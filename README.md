@@ -98,7 +98,9 @@ pbi-doc-generator mcp
 
 ## Enterprise Integrations & Architecture Audits
 
-The core of `pbi-doc-generator` is and remains 100% free and open-source under the MIT License. Organizations looking for custom enterprise integrations (automated CI/CD lineage publishing to SharePoint, Confluence, or Microsoft Purview, historical semantic-model drift monitoring, or white-label governance portals) or an independent **Power BI Estate & Semantic Model Architecture Audit** can inquire via **Bohan VOF** ([connect with Rien Scheerlinck on LinkedIn](https://www.linkedin.com/in/rienscheerlinck/)).
+The core of `pbi-doc-generator` is and remains 100% free and open-source under the MIT License. Organizations looking for custom enterprise integrations (automated CI/CD lineage publishing to SharePoint, Confluence, or Microsoft Purview, historical semantic-model drift monitoring, or white-label governance portals) or an independent **Power BI Estate & Semantic Model Architecture Audit** can inquire via **Bohan VOF** ([Rien Scheerlinck](https://github.com/djrien-ai)):
+
+[![Inquire via Email - Bohan VOF](https://img.shields.io/badge/Enterprise_&_Advisory_Inquiries-Email_Bohan_VOF-0b63ce?logo=gmail&logoColor=white)](mailto:dj.rien@gmail.com?subject=Power%20BI%20Enterprise%20%26%20Architecture%20Inquiry)
 
 ---
 
