@@ -231,7 +231,7 @@ def test_end_to_end_portal_and_mcp() -> None:
         assert init_resp and init_resp["result"]["serverInfo"]["name"] == "pbi-doc-generator-mcp"
 
         list_resp = handle_jsonrpc_message(engine, {"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
-        assert list_resp and len(list_resp["result"]["tools"]) == 8
+        assert list_resp and len(list_resp["result"]["tools"]) == 10
 
         impact_resp = handle_jsonrpc_message(
             engine,

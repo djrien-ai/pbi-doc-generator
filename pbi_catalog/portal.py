@@ -9,9 +9,12 @@ from __future__ import annotations
 import base64
 import collections
 import datetime
+import html as _html
 import json
 import re
 from pathlib import Path
+
+import urllib.parse
 
 from .analyzer import analyze_model
 from .security import esc, mask_secrets, slugify
@@ -1717,7 +1720,8 @@ LINEAGE_WIDGET_JS = r"""
 
 PORTAL_COMMON_JS = r"""
 (function () {
-    var saved = localStorage.getItem("pbidoc-v1-theme");
+    var saved = null;
+    try { saved = localStorage.getItem("pbidoc-v1-theme"); } catch (e) { /* storage blocked */ }
     if (saved) document.documentElement.setAttribute("data-theme", saved);
 
     // Reveal "Back to Scanner & Setup" switcher only when served by the local Studio HTTP server
@@ -1763,7 +1767,7 @@ PORTAL_COMMON_JS = r"""
         if (themeBtn) {
             var cur = document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark";
             document.documentElement.setAttribute("data-theme", cur);
-            localStorage.setItem("pbidoc-v1-theme", cur);
+            try { localStorage.setItem("pbidoc-v1-theme", cur); } catch (err) { /* storage blocked */ }
             return;
         }
         var copyBtn = e.target.closest(".copy-btn[data-copy]");
@@ -1934,7 +1938,47 @@ def _build_star_schema_mermaid(analysis: dict) -> tuple[str, set[str], set[str]]
     return "\n".join(lines), facts, dims
 
 
-def _build_model_lineage_json(analysis: dict) -> dict:
+def _xref_df_chip(n: dict, prefix: str) -> str:
+    from .portal_xref import e2e_href
+
+    return (
+        f'<a class="dep-chip" href="{e2e_href(prefix, node=n["id"])}" title="Dataflow query in {esc(n.get("workspace", ""))} - open end-to-end lineage">'
+        f'{esc(n.get("group", ""))} &rsaquo; {esc(n.get("name", ""))}{" (not scanned)" if n.get("external") else ""}</a>'
+    )
+
+
+def _xref_src_chip(n: dict, prefix: str) -> str:
+    from .portal_xref import e2e_href
+
+    sub = n.get("subtitle") or ""
+    return (
+        f'<a class="dep-chip" href="{e2e_href(prefix, node=n["id"])}" title="{esc(sub)}">'
+        f'{esc(n.get("source_type", "Source"))}: {esc(n.get("name", ""))}</a>'
+    )
+
+
+def _status_badge(status: str) -> str:
+    if status == "ok":
+        return '<span class="badge badge-ok">Definition read</span>'
+    if not status or status in ("pending", "not scanned"):
+        return f'<span class="badge badge-warn">{esc(status or "not scanned")}</span>'
+    return f'<span class="badge badge-bad" title="{esc(status)}">{esc(status[:60])}</span>'
+
+
+def _report_measure_cell(rep: dict, xr: dict | None, prefix: str) -> str:
+    """Report-level measure count of a thin report with a link into the end-to-end explorer."""
+    st = rep.get("measures_status") or ""
+    r = (xr or {}).get("reports", {}).get(rep.get("id", ""))
+    if r:
+        return f'<a href="{prefix}{r["href"]}"><b>{len(r["measures"])}</b> report measure(s)</a>'
+    if st == "ok":
+        return '<span style="color:var(--fg-muted)">None</span>'
+    if not st:
+        return '<span style="color:var(--fg-muted)">Not read</span>'
+    return f'<span class="badge badge-warn" title="{esc(st)}">Not readable</span>'
+
+
+def _build_model_lineage_json(analysis: dict, xref: dict | None = None) -> dict:
     layers = [
         {"id": "source", "label": "1. Data Sources"},
         {"id": "table", "label": "2. Model Tables"},
@@ -2046,20 +2090,79 @@ def _build_model_lineage_json(analysis: dict) -> dict:
             for ts in analysis["table_summaries"][:10]:
                 edges.append({"from": f"tbl:{ts['name']}", "to": rid})
 
+    mx = ((xref or {}).get("models") or {}).get(analysis.get("dataset_id", "")) or {}
+    gnodes = (xref or {}).get("nodes") or {}
+    if mx.get("dataflows"):
+        from .portal_xref import e2e_href
+
+        layers[1:1] = [{"id": "df_up", "label": "Upstream Dataflows (L2+)"}, {"id": "dataflow", "label": "Dataflows Loaded by Model (L1)"}]
+        for i, layer in enumerate(layers, 1):
+            layer["label"] = f"{i}. " + re.sub(r"^\d+\.\s*", "", layer["label"])
+        xdfs = xref["dataflows"]
+        for gid, info in mx["dataflows"].items():
+            d = xdfs.get(gid) or {}
+            lid = "dataflow" if info["layer"] == 1 else "df_up"
+            nodes.append(
+                {
+                    "id": f"df:{gid}",
+                    "label": d.get("name", gid),
+                    "layer": lid,
+                    "layerLabel": f"Dataflow (layer {info['layer']})",
+                    "sub": f"{d.get('workspace', '')} - {len(d.get('queries') or [])} queries",
+                    "detail": ("Entities loaded: " + ", ".join(sorted(info["entities"]))) if info["entities"] else "Feeds another dataflow used by this model.",
+                    "href": "../" + e2e_href("", grp=f"df:{gid}", kind="dataflow_query"),
+                    "hrefLabel": "Explore dataflow end-to-end",
+                    "code": "",
+                }
+            )
+            seen_nodes.add(f"df:{gid}")
+            for up in d.get("upstream") or ():
+                if up in mx["dataflows"]:
+                    edges.append({"from": f"df:{up}", "to": f"df:{gid}"})
+            if not any(up in mx["dataflows"] for up in d.get("upstream") or ()):
+                for sid in sorted(d.get("sources") or ())[:6]:
+                    sn = gnodes.get(sid) or {}
+                    if f"src:{sid}" not in seen_nodes:
+                        add_node(f"src:{sid}", sn.get("name", "Source"), "source", "Dataflow Source", sub=sn.get("source_type", ""), detail=sn.get("subtitle", ""))
+                    edges.append({"from": f"src:{sid}", "to": f"df:{gid}"})
+        for tname, tinfo in mx["tables"].items():
+            for q in tinfo["direct"]:
+                gid = (gnodes.get(q) or {}).get("group_id")
+                if gid and f"tbl:{tname}" in seen_nodes:
+                    edges.append({"from": f"df:{gid}", "to": f"tbl:{tname}"})
+    ds_prefix = f"m:{analysis.get('dataset_id', '')}:"
+    for nid in mx.get("report_measures") or []:
+        n = gnodes.get(nid) or {}
+        rid = f"rmeas:{nid}"
+        add_node(rid, n.get("name", ""), "kpi_measure", "Report-level Measure (thin report)", sub=f"Report: {n.get('report', '')}",
+                 detail=n.get("description") or "", href=f"#{_measure_anchor('rpt-' + n.get('report_id', '')[:8] + '-' + n.get('table', ''), n.get('name', ''))}", code=n.get("code", ""))
+        for e in (xref.get("out") or {}).get(nid, []):
+            to = e["to"]
+            if to.startswith(ds_prefix) and not to[len(ds_prefix):].startswith("rpt:"):
+                edges.append({"from": f"meas:{to[len(ds_prefix):]}", "to": rid})
+            elif to.startswith(ds_prefix):
+                edges.append({"from": f"rmeas:{to}", "to": rid})
+            elif to.startswith("t:"):
+                edges.append({"from": f"tbl:{to.split(':', 2)[2]}", "to": rid})
+
     if not default_focus and nodes:
         default_focus = nodes[0]["id"]
 
     return {"layers": layers, "nodes": nodes, "edges": edges, "defaultFocus": default_focus}
 
 
-def _build_workspace_lineage_json(analyses: list[tuple[str, dict]]) -> dict:
+def _build_workspace_lineage_json(analyses: list[tuple[str, dict]], xref: dict | None = None) -> dict:
     layers = [
         {"id": "source", "label": "1. Source Systems"},
         {"id": "object", "label": "2. Views / Databases"},
-        {"id": "model", "label": "3. Semantic Models"},
-        {"id": "kpi", "label": "4. Core KPIs"},
-        {"id": "report", "label": "5. Power BI Reports"},
+        {"id": "dataflow", "label": "3. Dataflows (Gen1)"},
+        {"id": "model", "label": "4. Semantic Models"},
+        {"id": "kpi", "label": "5. Core KPIs"},
+        {"id": "report", "label": "6. Power BI Reports"},
     ]
+    xmodels = (xref or {}).get("models") or {}
+    xdfs = (xref or {}).get("dataflows") or {}
+    xreports = (xref or {}).get("reports") or {}
     nodes: list[dict] = []
     edges: list[dict] = []
     seen_nodes: set[str] = set()
@@ -2143,10 +2246,26 @@ def _build_workspace_lineage_json(analyses: list[tuple[str, dict]]) -> dict:
             )
             add_edge(mid, kid)
 
+        mx = xmodels.get(a.get("dataset_id", "")) or {}
+        for gid, info in (mx.get("dataflows") or {}).items():
+            d = xdfs.get(gid) or {}
+            did = f"pdf:{gid}"
+            add_node(did, d.get("name", gid), "dataflow", "Dataflow (Gen1)", sub=f"{d.get('workspace', '')} - {len(d.get('queries') or [])} queries",
+                     detail=f"Connectors: {', '.join(sorted(d.get('connectors') or {})) or '-'}", href=d.get("href", ""), href_lbl="Explore dataflow end-to-end")
+            if info["direct"]:
+                add_edge(did, mid)
+            for up in d.get("upstream") or ():
+                if up in mx["dataflows"]:
+                    add_edge(f"pdf:{up}", did)
+
         for rep in a["reports"]:
             rid = f"rep:{rep['id']}"
             cross_ws = rep.get("workspace") and rep.get("workspace") != a["workspace"]
             ws_note = f"Workspace: {rep.get('workspace', a['workspace'])}" + (" (Cross-Workspace)" if cross_ws else "")
+            xr = xreports.get(rep["id"])
+            if xr:
+                add_node(rid, rep["name"], "report", "Thin Report with Report-level Measures", sub=ws_note + f" - {len(xr['measures'])} report measure(s)",
+                         href=xr["href"], href_lbl="Explore report measures end-to-end")
             add_node(rid, rep["name"], "report", "Power BI Report", sub=ws_note, href=href)
             if kpi_ids:
                 for kid in kpi_ids:
@@ -2157,10 +2276,18 @@ def _build_workspace_lineage_json(analyses: list[tuple[str, dict]]) -> dict:
     return {"layers": layers, "nodes": nodes, "edges": edges, "defaultFocus": default_focus}
 
 
-def render_model_html(analysis: dict, slug: str, anonymous: bool = False) -> str:
+def render_model_html(analysis: dict, slug: str, anonymous: bool = False, xref: dict | None = None) -> str:
     """Render an effortless-to-read, logically structured HTML documentation page for one Semantic Model."""
+    from .portal_export import HEADER_BUTTONS
+    from .portal_xref import e2e_href
+
     stats = analysis["stats"]
     parsed = analysis["parsed"]
+    ds_id = analysis.get("dataset_id", "")
+    mx = ((xref or {}).get("models") or {}).get(ds_id) or {"tables": {}, "dataflows": {}, "report_measures": [], "reports": {}}
+    gnodes = (xref or {}).get("nodes") or {}
+    xdfs = (xref or {}).get("dataflows") or {}
+    gout = (xref or {}).get("out") or {}
     findings = analysis["findings"]
     owner_txt = "Anonymized" if anonymous else (analysis["owner"] or "Not specified")
     ref = analysis.get("last_refresh") or {}
@@ -2213,6 +2340,10 @@ def render_model_html(analysis: dict, slug: str, anonymous: bool = False) -> str
         )
         sql_badge = f' <span class="badge badge-warn">{len(ts["native_queries"])} Native SQL</span>' if ts["native_queries"] else ""
         hid_tbl_badge = ' <span class="badge">Hidden</span>' if ts["hidden"] else ""
+        tx = mx["tables"].get(ts["name"]) or {}
+        df_cell = "".join(_xref_df_chip(gnodes[q], "../") for q in tx.get("direct") or [] if q in gnodes) or (
+            f'<span style="color:var(--fg-muted)">via {len({gnodes[q].get("group_id") for q in tx["dataflow_queries"]})} dataflow(s)</span>' if tx.get("dataflow_queries") else "-"
+        )
         summary_rows.append(
             f"<tr>"
             f'<td><a href="#{_table_anchor(ts["name"])}"><b>{esc(ts["name"])}</b></a>{hid_tbl_badge}</td>'
@@ -2220,6 +2351,7 @@ def render_model_html(analysis: dict, slug: str, anonymous: bool = False) -> str
             f"<td><code>{esc(ts['mode'])}</code></td>"
             f"<td>{esc(', '.join(ts['source_types']) or 'Calculated / Measures')}{sql_badge}</td>"
             f"<td>{esc(', '.join(ts['details'][:2]) or '-')}</td>"
+            f"<td>{df_cell}</td>"
             f"<td>{esc(ts['description'] or '-')}</td>"
             f"<td>{ts['columns_count']}</td>"
             f"<td>{ts['measures_count']}</td>"
@@ -2291,6 +2423,37 @@ def render_model_html(analysis: dict, slug: str, anonymous: bool = False) -> str
             hier_items = "".join(f"<li><b>{esc(h['name'])}</b>: {' &rarr; '.join(esc(lv) for lv in h['levels'])}</li>" for h in raw_t["hierarchies"])
             hier_html = f'<div style="margin-top:10px"><b>Drill-Down Hierarchies:</b><ul style="margin:4px 0">{hier_items}</ul></div>'
 
+        tx = mx["tables"].get(ts["name"]) or {}
+        up_html = ""
+        if tx:
+            rows_up = []
+            if tx.get("direct"):
+                rows_up.append('<div class="dep-row"><span>Loads dataflow entity:</span>' + "".join(_xref_df_chip(gnodes[q], "../") for q in tx["direct"] if q in gnodes) + "</div>")
+            chain = {}
+            for q in tx.get("dataflow_queries") or []:
+                gid = gnodes[q].get("group_id", "")
+                info = mx["dataflows"].get(gid) or {}
+                chain.setdefault(gid, info.get("layer", 1))
+            upper = sorted((lv, gid) for gid, lv in chain.items() if lv > 1)
+            if upper:
+                rows_up.append(
+                    '<div class="dep-row"><span>Upstream dataflows:</span>'
+                    + "".join(
+                        f'<a class="dep-chip" href="../{esc(xdfs.get(gid, {}).get("href", ""))}">L{lv}: {esc(xdfs.get(gid, {}).get("name", gid))} '
+                        f'<small>({esc(xdfs.get(gid, {}).get("workspace", ""))})</small></a>'
+                        for lv, gid in upper
+                    )
+                    + "</div>"
+                )
+            srcs = [gnodes[x] for x in tx.get("sources") or [] if x in gnodes]
+            if srcs and chain:
+                rows_up.append('<div class="dep-row"><span>Original sources:</span>' + "".join(_xref_src_chip(sn, "../") for sn in srcs[:10])
+                               + (f'<span class="badge">+{len(srcs) - 10} more</span>' if len(srcs) > 10 else "") + "</div>")
+            if chain or srcs:
+                rows_up.append(f'<div class="dep-row"><span>Lineage:</span><a class="dep-chip" href="{e2e_href("../", node=tx["node"])}">Trace this table end-to-end (dataflow layers, SQL, steps)</a></div>')
+            if rows_up:
+                up_html = '<div style="margin:2px 0 12px"><div style="font-size:12px;font-weight:650;margin-bottom:4px">Upstream lineage</div>' + "".join(rows_up) + "</div>"
+
         open_attr = " open" if idx_t == 0 else ""
         role_txt = "Fact" if ts["name"] in facts else ("Dimension" if ts["name"] in dims else "Table")
         blueprint_cards.append(
@@ -2298,7 +2461,7 @@ def render_model_html(analysis: dict, slug: str, anonymous: bool = False) -> str
             f"<summary><span>{esc(ts['name'])}"
             + (f' <span style="font-weight:400;color:var(--fg-muted)">: {esc(ts["description"])}</span>' if ts["description"] else "")
             + f'</span><div class="model-meta"><span class="badge badge-accent">{role_txt}</span><span class="badge">{ts["columns_count"]} cols</span><span class="badge">{ts["pq_steps"]} PQ steps</span></div></summary>'
-            f'<div class="blueprint-body">{cols_html}{hier_html}{calc_col_blocks}{"".join(part_blocks)}</div>'
+            f'<div class="blueprint-body">{up_html}{cols_html}{hier_html}{calc_col_blocks}{"".join(part_blocks)}</div>'
             f"</details>"
         )
 
@@ -2358,7 +2521,8 @@ def render_model_html(analysis: dict, slug: str, anonymous: bool = False) -> str
                     dm_info = lin_measures.get(dm_key) or {"table": tbl["name"], "name": dm_key}
                     down_chips.append(f'<a class="dep-chip" href="#{_measure_anchor(dm_info["table"], dm_info["name"])}">[{esc(dm_info["name"])}]</a>')
 
-                deps_html = ""
+                e2e_link = e2e_href("../", node=f"m:{analysis.get('dataset_id', '')}:{tbl['name']}[{m_name}]")
+                deps_html = f'<div class="dep-row"><span>Lineage:</span><a class="dep-chip" href="{e2e_link}">Trace end-to-end (DAX &rarr; tables &rarr; dataflows &rarr; SQL)</a></div>'
                 if up_chips:
                     deps_html += f'<div class="dep-row"><span>Reads:</span>{"".join(up_chips)}</div>'
                 if down_chips:
@@ -2428,7 +2592,7 @@ def render_model_html(analysis: dict, slug: str, anonymous: bool = False) -> str
         dax_section_body = '<div class="card"><p style="margin:0;color:var(--fg-muted)">No DAX measures are defined in this semantic model.</p></div>'
 
     # 5. Model Live Lineage JSON
-    lineage_json = json.dumps(_build_model_lineage_json(analysis), ensure_ascii=False).replace("</", "<\\/")
+    lineage_json = json.dumps(_build_model_lineage_json(analysis, xref), ensure_ascii=False).replace("</", "<\\/")
 
     # 6. RLS, Downstream Reports & Governance
     rls_blocks = []
@@ -2447,12 +2611,17 @@ def render_model_html(analysis: dict, slug: str, anonymous: bool = False) -> str
         for r in analysis["reports"]:
             cross = r.get("workspace") and r.get("workspace") != analysis["workspace"]
             cross_badge = ' <span class="badge badge-accent">Cross-Workspace Thin Report</span>' if cross else ""
+            # Reports with a stored layout open in the Report Explorer (tab 3 of the portal home)
+            r_name = f"<b>{esc(r['name'])}</b>"
+            if r.get("page_count"):
+                r_name = f'<a href="../index.html#rpt:r={esc(r.get("id", ""))}">{r_name}</a>'
             r_rows.append(
-                f"<tr><td><b>{esc(r['name'])}</b>{cross_badge}</td><td>{esc(r.get('workspace', ''))}</td><td><code>{esc(r.get('report_type', 'PowerBIReport'))}</code></td></tr>"
+                f"<tr><td>{r_name}{cross_badge}</td><td>{esc(r.get('workspace', ''))}</td><td><code>{esc(r.get('report_type', 'PowerBIReport'))}</code></td>"
+                f"<td>{_report_measure_cell(r, xref, '../')}</td></tr>"
             )
         reports_html = (
             '<div class="table-scroll" style="margin-top:14px"><table class="data-table">'
-            "<thead><tr><th>Downstream Report</th><th>Report Workspace</th><th>Report Type</th></tr></thead>"
+            "<thead><tr><th>Downstream Report</th><th>Report Workspace</th><th>Report Type</th><th>Report-level Measures</th></tr></thead>"
             f"<tbody>{''.join(r_rows)}</tbody></table></div>"
         )
 
@@ -2468,6 +2637,89 @@ def render_model_html(analysis: dict, slug: str, anonymous: bool = False) -> str
             '<div class="table-scroll" style="margin-top:14px"><table class="data-table">'
             "<thead><tr><th>Principal</th><th>Type</th><th>Access Right</th></tr></thead>"
             f"<tbody>{p_rows}</tbody></table></div>"
+        )
+
+    # Dataflows feeding this model (every layer)
+    model_dfs_html = ""
+    if mx["dataflows"]:
+        df_rows = []
+        for gid, info in sorted(mx["dataflows"].items(), key=lambda kv: (kv[1]["layer"], xdfs.get(kv[0], {}).get("name", "").lower())):
+            d = xdfs.get(gid) or {}
+            ups = [xdfs[u]["name"] for u in sorted(d.get("upstream") or ()) if u in xdfs]
+            tbl_chips = "".join(f'<a class="dep-chip" href="#{_table_anchor(t)}">{esc(t)}</a>' for t in sorted(info["tables"]))
+            df_rows.append(
+                "<tr>"
+                f'<td><span class="badge {"badge-accent" if info["layer"] == 1 else ""}">L{info["layer"]}{" - loaded by model" if info["layer"] == 1 else ""}</span></td>'
+                f'<td><a href="../{esc(d.get("href", ""))}"><b>{esc(d.get("name", gid))}</b></a></td>'
+                f"<td>{esc(d.get('workspace', ''))}</td>"
+                f"<td>{esc(', '.join(sorted(info['entities'])) or '-')}</td>"
+                f"<td>{tbl_chips}</td>"
+                f"<td>{esc(', '.join(ups) or '-')}</td>"
+                f"<td>{esc(', '.join(sorted(d.get('connectors') or {})) or '-')}</td>"
+                f"<td>{d.get('sql_queries', 0)}</td>"
+                f"<td>{_status_badge(d.get('status', ''))}</td>"
+                "</tr>"
+            )
+        model_dfs_html = (
+            f'<div class="card" style="margin-bottom:18px" id="sec-dataflows"><h3 style="margin-top:0;font-size:15px">Dataflows Feeding This Model ({len(mx["dataflows"])})</h3>'
+            '<p style="font-size:12.5px;color:var(--fg-muted);margin-top:0">L1 dataflows are loaded directly by the model tables; L2+ dataflows feed those through linked or computed entities. '
+            "Click a dataflow to browse its queries, Power Query steps, native SQL and sources in the end-to-end explorer.</p>"
+            '<div class="table-scroll"><table class="data-table"><thead><tr><th>Layer</th><th>Dataflow</th><th>Workspace</th><th>Entities Loaded</th><th>Feeds Tables</th>'
+            "<th>Upstream Dataflows</th><th>Connectors</th><th>Native SQL Queries</th><th>Status</th></tr></thead>"
+            f'<tbody>{"".join(df_rows)}</tbody></table></div></div>'
+        )
+
+    # Report-level measures added by thin reports on top of this (shared) model
+    rpt_html = ""
+    if mx["reports"]:
+        ds_prefix = f"m:{ds_id}:"
+        blocks = []
+        for rid, r in sorted(mx["reports"].items(), key=lambda kv: (kv[1]["workspace"].lower(), kv[1]["name"].lower())):
+            cards = []
+            for nid in r["measures"]:
+                n = gnodes.get(nid) or {}
+                reads = []
+                for e in gout.get(nid, []):
+                    t = gnodes.get(e["to"]) or {}
+                    if t.get("kind") == "measure" and not t.get("report_id"):
+                        reads.append(f'<a class="dep-chip" href="#{_measure_anchor(t.get("table", ""), t.get("name", ""))}">[{esc(t.get("name", ""))}]</a>')
+                    elif t.get("kind") == "measure":
+                        reads.append(f'<a class="dep-chip" href="#{_measure_anchor("rpt-" + rid[:8] + "-" + t.get("table", ""), t.get("name", ""))}">[{esc(t.get("name", ""))}] <small>(report)</small></a>')
+                    elif t.get("kind") in ("table", "calc_table", "calc_column"):
+                        tname = t.get("table") or t.get("name", "")
+                        reads.append(f'<a class="dep-chip" href="#{_table_anchor(tname)}">{esc(", ".join(e.get("labels") or []) or t.get("name", ""))}</a>')
+                badges = "".join(
+                    b for b in (
+                        '<span class="badge badge-accent">Report-level measure</span>',
+                        f'<span class="badge">Format: {esc(n["format"])}</span>' if n.get("format") else "",
+                        f'<span class="badge">Folder: {esc(n["folder"])}</span>' if n.get("folder") else "",
+                        '<span class="badge badge-warn">Hidden</span>' if n.get("hidden") else "",
+                    )
+                )
+                cards.append(
+                    f'<div class="measure-card" id="{_measure_anchor("rpt-" + rid[:8] + "-" + n.get("table", ""), n.get("name", ""))}" '
+                    f'data-searchable="{esc((n.get("name", "") + " " + r["name"] + " " + n.get("description", "") + " " + n.get("code", "")).lower())}">'
+                    f'<div class="measure-head"><span class="measure-name">{esc(n.get("name", ""))}</span><div class="model-meta">{badges}</div></div>'
+                    + (f'<div class="measure-desc">{esc(n["description"])}</div>' if n.get("description") else "")
+                    + f'<div class="code-block"><button type="button" class="copy-btn" data-copy="1">Copy DAX</button><pre>{_highlight_dax(n.get("code", ""), auto_pretty=True)}</pre></div>'
+                    f'<div class="dep-row"><span>Lineage:</span><a class="dep-chip" href="{e2e_href("../", node=nid)}">Trace end-to-end (report &rarr; model &rarr; dataflows &rarr; SQL)</a></div>'
+                    + (f'<div class="dep-row"><span>Reads:</span>{"".join(reads)}</div>' if reads else "")
+                    + "</div>"
+                )
+            cross = r["workspace"] != analysis["workspace"]
+            blocks.append(
+                f'<details class="dax-table-group" open data-searchable="{esc((r["name"] + " " + r["workspace"]).lower())}">'
+                f'<summary><span>Thin report: {esc(r["name"])} <span style="font-weight:400;color:var(--fg-muted)">({esc(r["workspace"])}{", other workspace" if cross else ""})</span></span>'
+                f'<span style="display:flex;gap:6px"><span class="badge badge-accent">{len(r["measures"])} report measures</span>'
+                f'<a class="badge" href="../{esc(r["href"])}" onclick="event.stopPropagation()">Explore end-to-end &rarr;</a></span></summary>'
+                f'<div class="measure-grid" style="padding:10px">{"".join(cards)}</div></details>'
+            )
+        rpt_html = (
+            f'<div style="margin-top:22px" id="sec-report-measures"><h3 style="font-size:15px;margin:0 0 4px">Report-level Measures in Thin Reports ({len(mx["report_measures"])})</h3>'
+            '<p style="font-size:12.5px;color:var(--fg-muted);margin:0 0 10px">Measures that live only inside reports connected live to this model. '
+            "They are not part of the model definition but depend on its measures, tables and upstream dataflows.</p>"
+            + "".join(blocks)
+            + "</div>"
         )
 
     return f"""<!DOCTYPE html>
@@ -2487,12 +2739,16 @@ def render_model_html(analysis: dict, slug: str, anonymous: bool = False) -> str
       <h2>{esc(analysis['name'])}</h2>
       <div class="sub">Workspace: <b>{esc(analysis['workspace'])}</b></div>
     </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin:0 0 10px">{HEADER_BUTTONS}</div>
     <input type="search" class="doc-search" data-quick-search="1" id="modelQuickFilter" placeholder="Filter measures &amp; tables (Ctrl+K)">
     <ul class="toc-list">
       <li><a href="#sec-overview"><span>1. Overview &amp; Health</span><span class="toc-count">{len(findings)}</span></a></li>
       <li><a href="#sec-schema"><span>2. Data Model &amp; Star Schema</span><span class="toc-count">{stats['relationships']}</span></a></li>
       <li><a href="#sec-tables"><span>3. Sources &amp; Tables</span><span class="toc-count">{stats['tables']}</span></a></li>
       <li><a href="#sec-dax"><span>4. DAX Measure Catalog</span><span class="toc-count">{stats['measures']}</span></a></li>
+      {'<li><a href="#sec-dataflows"><span>&nbsp;&nbsp;&rsaquo; Upstream Dataflows</span><span class="toc-count">' + str(len(mx["dataflows"])) + '</span></a></li>' if mx["dataflows"] else ''}
+      {'<li><a href="#sec-report-measures"><span>&nbsp;&nbsp;&rsaquo; Thin-Report Measures</span><span class="toc-count">' + str(len(mx["report_measures"])) + '</span></a></li>' if mx["report_measures"] else ''}
+      <li><a href="{e2e_href('../', grp='model:' + ds_id, kind='measure')}"><span>End-to-End Lineage &rarr;</span><span class="toc-count">Explorer</span></a></li>
       <li><a href="#sec-lineage"><span>5. Live Lineage Explorer</span><span class="toc-count">Interactive</span></a></li>
       <li><a href="#sec-security"><span>6. Security &amp; Reports</span><span class="toc-count">{len(analysis['reports'])}</span></a></li>
     </ul>
@@ -2522,6 +2778,8 @@ def render_model_html(analysis: dict, slug: str, anonymous: bool = False) -> str
         <div class="kpi-card"><div class="val">{stats['relationships']}</div><div class="lbl">Relationships ({stats['bidirectional_relationships']} Bi-Di)</div></div>
         <div class="kpi-card"><div class="val">{stats['pq_steps']}</div><div class="lbl">Power Query Steps</div></div>
         <div class="kpi-card"><div class="val">{len(analysis['reports'])}</div><div class="lbl">Bound Reports</div></div>
+        <div class="kpi-card"><div class="val">{len(mx['dataflows'])}</div><div class="lbl">Upstream Dataflows ({sum(1 for i in mx['dataflows'].values() if i['layer'] == 1)} loaded directly)</div></div>
+        <div class="kpi-card"><div class="val">{len(mx['report_measures'])}</div><div class="lbl">Thin-Report Measures ({len(mx['reports'])} report(s))</div></div>
       </div>
 
       {findings_html}
@@ -2550,11 +2808,12 @@ def render_model_html(analysis: dict, slug: str, anonymous: bool = False) -> str
       <div class="table-scroll" style="margin-bottom:18px">
         <table class="data-table">
           <thead>
-            <tr><th>Table</th><th>Role</th><th>Mode</th><th>Connector</th><th>Endpoint / Database</th><th>Description</th><th>Cols</th><th>Measures</th><th>PQ Steps</th></tr>
+            <tr><th>Table</th><th>Role</th><th>Mode</th><th>Connector</th><th>Endpoint / Database</th><th>Dataflow Entity</th><th>Description</th><th>Cols</th><th>Measures</th><th>PQ Steps</th></tr>
           </thead>
           <tbody>{''.join(summary_rows)}</tbody>
         </table>
       </div>
+      {model_dfs_html}
       <div id="tablesBlueprintContainer">{''.join(blueprint_cards)}</div>
       {expr_html}
     </section>
@@ -2575,6 +2834,7 @@ def render_model_html(analysis: dict, slug: str, anonymous: bool = False) -> str
         </div>
       </div>
       {dax_section_body}
+      {rpt_html}
     </section>
 
     <section class="section" id="sec-lineage">
@@ -2600,6 +2860,7 @@ def render_model_html(analysis: dict, slug: str, anonymous: bool = False) -> str
 
 <script src="../assets/mermaid.min.js"></script>
 <script src="../assets/portal_common.js"></script>
+<script src="../assets/portal_export.js" data-base="../" data-model="{esc(ds_id)}"></script>
 <script src="../assets/interactive_mermaid.js"></script>
 <script src="../assets/lineage_widget.js"></script>
 <script>
@@ -2629,13 +2890,20 @@ def generate_portal(store: CatalogStore, output_dir: str | Path | None = None, a
     assets_dir.mkdir(parents=True, exist_ok=True)
     models_dir.mkdir(parents=True, exist_ok=True)
 
-    (assets_dir / "portal.css").write_text(PORTAL_CSS, encoding="utf-8")
+    from .portal_export import PORTAL_EXPORT_CSS
+
+    from .e2e_explorer import E2E_CSS
+    from .report_explorer import REPORT_CSS
+
+    (assets_dir / "portal.css").write_text(PORTAL_CSS + PORTAL_EXPORT_CSS + E2E_CSS + REPORT_CSS, encoding="utf-8")
     (assets_dir / "interactive_mermaid.js").write_text(INTERACTIVE_MERMAID_JS, encoding="utf-8")
     (assets_dir / "lineage_widget.js").write_text(LINEAGE_WIDGET_JS, encoding="utf-8")
-    (assets_dir / "portal_common.js").write_text(PORTAL_COMMON_JS, encoding="utf-8")
+    from .trace import BROWSER_TRACE_JS
+
+    (assets_dir / "portal_common.js").write_text(BROWSER_TRACE_JS + PORTAL_COMMON_JS, encoding="utf-8")
     (assets_dir / "mermaid.min.js").write_bytes(_load_mermaid_bytes())
 
-    state = store.load()
+    state = store.load_scoped()
     reports_by_ds: dict[str, list[dict]] = collections.defaultdict(list)
     for rep in state["reports"].values():
         ds_id = rep.get("dataset_id")
@@ -2661,8 +2929,31 @@ def generate_portal(store: CatalogStore, output_dir: str | Path | None = None, a
 
         analysis = analyze_model(m_meta, bundle, reports=reports_by_ds.get(ds_id, []))
         analyses.append((slug, analysis))
-        model_html = render_model_html(analysis, slug=slug, anonymous=anonymous)
+
+    # End-to-End lineage explorer (measures -> tables -> dataset PQ -> dataflow layers -> sources)
+    from .e2e_explorer import write_e2e_explorer
+    from .e2e_lineage import build_e2e_graph
+    from .portal_xref import build_portal_xref, e2e_href
+
+    e2e_graph = build_e2e_graph(store, analyses=[a for _, a in analyses])
+    write_e2e_explorer(out_root, e2e_graph)
+    xref = build_portal_xref(e2e_graph, state)
+    from .report_explorer import PANE_HTML as REPORT_PANE_HTML
+    from .report_explorer import build_report_assets
+
+    report_totals = build_report_assets(out_root, store, state, e2e_graph)
+
+    for slug, analysis in analyses:
+        model_html = render_model_html(analysis, slug=slug, anonymous=anonymous, xref=xref)
         (models_dir / f"{slug}.html").write_text(model_html, encoding="utf-8")
+    # Remove pages of models that are no longer in scope (other workspaces, deleted models)
+    current = {f"{slug}.html" for slug, _ in analyses}
+    for stale in models_dir.glob("*.html"):
+        if stale.name not in current:
+            try:
+                stale.unlink()
+            except OSError:
+                pass
 
     # Summary KPIs
     total_ws = len(state["workspaces"]) or len({a["workspace"] for _, a in analyses})
@@ -2670,9 +2961,11 @@ def generate_portal(store: CatalogStore, output_dir: str | Path | None = None, a
     total_measures = sum(a["stats"]["measures"] for _, a in analyses)
     total_reports = len(state["reports"]) or sum(len(a["reports"]) for _, a in analyses)
     all_sources = sorted({s for _, a in analyses for s in a["source_types"]})
-    total_findings = sum(len(a["findings"]) for _, a in analyses)
+    total_findings = sum(len(a["findings"]) for _, a in analyses)  # + dataflow/report findings, counted below
 
-    portfolio_lineage_json = json.dumps(_build_workspace_lineage_json(analyses), ensure_ascii=False).replace("</", "<\\/")
+    total_dataflows = sum(1 for d in xref["dataflows"].values() if not d["outside"])
+    total_report_measures = sum(len(r["measures"]) for r in xref["reports"].values())
+    portfolio_lineage_json = json.dumps(_build_workspace_lineage_json(analyses, xref), ensure_ascii=False).replace("</", "<\\/")
 
     # Build Workspaces & Reports Map (Tab 2)
     ws_rows = []
@@ -2680,6 +2973,7 @@ def generate_portal(store: CatalogStore, output_dir: str | Path | None = None, a
         ws_models = [m for m in state["models"].values() if m.get("workspace_id") == ws_id]
         ws_reports = [r for r in state["reports"].values() if r.get("workspace_id") == ws_id]
         ws_dfs = [d for d in state["dataflows"].values() if d.get("workspace_id") == ws_id]
+        ws_rm = sum(len(r["measures"]) for r in xref["reports"].values() if r["workspace"] == ws.get("name", ""))
         sku = ws.get("capacity_sku") or ("Dedicated" if ws.get("is_dedicated") else "Shared (Pro)")
         sku_cls = "badge-accent" if ws.get("is_dedicated") else ""
         ws_rows.append(
@@ -2689,7 +2983,9 @@ def generate_portal(store: CatalogStore, output_dir: str | Path | None = None, a
             f"<td><b>{len(ws_models)}</b></td>"
             f"<td><b>{len(ws_reports)}</b></td>"
             f"<td>{len(ws_dfs)}</td>"
+            f"<td>{ws_rm}</td>"
             f"<td>{len(ws.get('users') or []) if not anonymous else 'Redacted'}</td>"
+            f'<td><a href="{e2e_href("", ws=ws.get("name", ""))}">Explore &rarr;</a></td>'
             f"</tr>"
         )
 
@@ -2707,13 +3003,20 @@ def generate_portal(store: CatalogStore, output_dir: str | Path | None = None, a
             if cross
             else '<span class="badge badge-ok">Same-Workspace Model</span>'
         )
+        rep_name = (
+            f'<a href="index.html#rpt:r={esc(rep.get("id", ""))}"><b>{esc(rep.get("name", ""))}</b></a>'
+            if rep.get("page_count")
+            else f"<b>{esc(rep.get('name', ''))}</b>"
+        )
         report_map_rows.append(
             f"<tr>"
-            f"<td><b>{esc(rep.get('name', ''))}</b></td>"
+            f"<td>{rep_name}</td>"
+            f"<td>{rep.get('page_count', '-')} / {rep.get('visual_count', '-')}</td>"
             f"<td>{esc(rep.get('workspace', ''))}</td>"
             f"<td>{ds_link}</td>"
             f"<td>{esc(ds_ws)}</td>"
             f"<td>{arch_badge}</td>"
+            f"<td>{_report_measure_cell(rep, xref, '')}</td>"
             f"</tr>"
         )
 
@@ -2757,10 +3060,18 @@ def generate_portal(store: CatalogStore, output_dir: str | Path | None = None, a
         )
         fmt_short = _short_format_label(a.get("storage_mode", ""))
         src_badges = "".join(f'<span class="badge badge-accent">{esc(s)}</span>' for s in a["source_types"][:4])
+        mxc = xref["models"].get(a.get("dataset_id", "")) or {}
+        if mxc.get("dataflows"):
+            src_badges += f'<span class="badge">{len(mxc["dataflows"])} dataflow(s)</span>'
+        if mxc.get("report_measures"):
+            src_badges += f'<span class="badge">+{len(mxc["report_measures"])} thin-report measures</span>'
         owner_val = "Redacted" if anonymous else (a.get("configured_by") or "Local / Unassigned")
         last_ref = a["refresh"][0] if a.get("refresh") else None
         ref_txt = last_ref.get("status", "Completed") if last_ref else "Snapshot"
-        search_blob = f"{a['name']} {a['workspace']} {fmt_short} {' '.join(a['source_types'])} {' '.join(t['name'] for t in a['table_summaries'])}".lower()
+        search_blob = (
+            f"{a['name']} {a['workspace']} {fmt_short} {' '.join(a['source_types'])} {' '.join(t['name'] for t in a['table_summaries'])} "
+            f"{' '.join(xref['dataflows'].get(g, {}).get('name', '') for g in (mxc.get('dataflows') or {}))} {' '.join(r['name'] for r in (mxc.get('reports') or {}).values())}"
+        ).lower()
 
         data_attrs = (
             f'data-status="{status_cls}" '
@@ -2821,6 +3132,118 @@ def generate_portal(store: CatalogStore, output_dir: str | Path | None = None, a
                 f"</tr>"
             )
 
+    for gid, d in sorted(xref["dataflows"].items(), key=lambda kv: (kv[1]["workspace"].lower(), kv[1]["name"].lower())):
+        if d["status"] == "ok" or d["outside"] or not (d["models"] or d["downstream"]):
+            continue
+        used = ", ".join(sorted({m["name"] for m in d["models"].values()})) or "other dataflows"
+        health_rows.append(
+            "<tr>"
+            f'<td><a href="{esc(d["href"])}"><b>{esc(d["name"])}</b></a> <span class="badge">Dataflow</span></td>'
+            f"<td>{esc(d['workspace'])}</td>"
+            + ("<td><span class='badge badge-bad'>CRITICAL</span></td>" if d["status"].startswith("missing") else "<td><span class='badge badge-warn'>WARN</span></td>")
+            + (
+                "<td><b>Broken reference: dataflow no longer exists</b></td>"
+                f"<td>{esc(used)} still load(s) from dataflow {esc(gid)}, which is not in the workspace's dataflow list (deleted or re-created under a new id). "
+                "Refreshes of those tables will fail - repoint them to the current dataflow.</td>"
+                if d["status"].startswith("missing")
+                else "<td><b>Dataflow definition not readable - lineage stops here</b></td>"
+                f"<td>{esc(d['status'])}. Used by {esc(used)}. Grant the scanning account access to the workspace (Contributor or higher) or scan it, then rescan.</td>"
+            )
+            + "</tr>"
+        )
+    for brid, b in sorted(report_totals.get("broken", {}).items(), key=lambda kv: (kv[1]["workspace"].lower(), kv[1]["name"].lower())):
+        top = ", ".join(f"{k} ({c})" for k, c in b["fields"].most_common(6))
+        health_rows.append(
+            "<tr>"
+            f'<td><a href="index.html#rpt:r={esc(brid)}"><b>{esc(b["name"])}</b></a> <span class="badge">Report</span></td>'
+            f"<td>{esc(b['workspace'])}</td>"
+            "<td><span class='badge badge-warn'>WARN</span></td>"
+            f"<td><b>Visuals use {len(b['fields'])} field(s) that no longer exist in {esc(b['model'])}</b></td>"
+            f"<td>{esc(top)}{' ...' if len(b['fields']) > 6 else ''}. Those visuals or filters are likely broken - remove or repoint them (open the report in the Report Explorer to find them).</td>"
+            "</tr>"
+        )
+    for rep_meta in sorted(state["reports"].values(), key=lambda r: (r.get("workspace", "").lower(), r.get("name", "").lower())):
+        st = rep_meta.get("measures_status") or ""
+        rds = rep_meta.get("dataset_id") or ""
+        if st.startswith("error"):
+            health_rows.append(
+                "<tr>"
+                f"<td><b>{esc(rep_meta.get('name', ''))}</b> <span class='badge'>Report</span></td>"
+                f"<td>{esc(rep_meta.get('workspace', ''))}</td>"
+                "<td><span class='badge badge-warn'>WARN</span></td>"
+                "<td><b>Report definition not readable - report-level measures unknown</b></td>"
+                f"<td>{esc(st[:240])}</td>"
+                "</tr>"
+            )
+        elif rds and xref["reports"].get(rep_meta.get("id", "")) and rds not in slug_by_ds_id:
+            health_rows.append(
+                "<tr>"
+                f"<td><b>{esc(rep_meta.get('name', ''))}</b> <span class='badge'>Report</span></td>"
+                f"<td>{esc(rep_meta.get('workspace', ''))}</td>"
+                "<td><span class='badge badge-warn'>WARN</span></td>"
+                "<td><b>Thin report measures cannot be traced - shared model not in catalog</b></td>"
+                f"<td>Shared model {esc(rds)} could not be read. Grant access to its workspace and rescan with report-level measures enabled.</td>"
+                "</tr>"
+            )
+
+    # Dataflows tab
+    df_rows_html: list[str] = []
+    for gid, d in sorted(xref["dataflows"].items(), key=lambda kv: (kv[1]["workspace"].lower(), kv[1]["name"].lower())):
+        if d["outside"]:
+            continue
+        roles = ", ".join(f"{c} {r}" for r, c in sorted(d["roles"].items(), key=lambda kv: -kv[1]))
+        ups = [xref["dataflows"][u] for u in sorted(d["upstream"]) if u in xref["dataflows"]]
+        downs = [xref["dataflows"][u] for u in sorted(d["downstream"]) if u in xref["dataflows"]]
+        model_links = []
+        for mds, mi in sorted(d["models"].items(), key=lambda kv: kv[1]["name"].lower()):
+            mslug = slug_by_ds_id.get(mds)
+            label = f'{esc(mi["name"])} <small>({esc(mi["workspace"])}; {len(mi["tables"])} table(s){"" if mi["direct"] else ", indirect"})</small>'
+            model_links.append(f'<a class="dep-chip" href="models/{mslug}.html#sec-dataflows">{label}</a>' if mslug else f'<span class="dep-chip">{label}</span>')
+
+        def _df_links(lst: list[dict]) -> str:
+            return "".join(f'<a class="dep-chip" href="{esc(x["href"])}">{esc(x["name"])} <small>({esc(x["workspace"])})</small></a>' for x in lst) or "-"
+
+        consumers = "direct" if any(m["direct"] for m in d["models"].values()) else ("indirect" if d["models"] else ("dataflow" if d["downstream"] else "none"))
+        q_list = "".join(
+            f'<a class="dep-chip" href="{e2e_href("", node=q)}">{esc(xref["nodes"][q]["name"])} <small>{esc(xref["nodes"][q].get("role", ""))}{" &middot; SQL" if xref["nodes"][q].get("sql") else ""}</small></a>'
+            for q in sorted(d["queries"], key=lambda x: xref["nodes"][x]["name"].lower())
+        )
+        conn_badges = "".join(f'<span class="badge badge-accent">{esc(c)}</span>' for c in sorted(d["connectors"])) or "-"
+        blob = f"{d['name']} {d['workspace']} {roles} {' '.join(d['connectors'])} {' '.join(m['name'] for m in d['models'].values())} {' '.join(xref['nodes'][q]['name'] for q in d['queries'])}".lower()
+        df_rows_html.append(
+            f'<tr data-df-row="1" data-ws="{esc(d["workspace"].lower())}" data-status="{"ok" if d["status"] == "ok" else "bad"}" data-use="{consumers}" data-search="{esc(blob)}">'
+            f'<td><a href="{esc(d["href"])}"><b>{esc(d["name"])}</b></a>'
+            + (f'<details style="margin-top:4px"><summary style="cursor:pointer;font-size:12px;color:var(--fg-muted)">{len(d["queries"])} queries</summary><div style="margin-top:4px">{q_list}</div></details>' if d["queries"] else "")
+            + "</td>"
+            f"<td>{esc(d['workspace'])}</td>"
+            f"<td>{_status_badge(d['status'])}</td>"
+            f"<td style='font-size:12px'>{esc(roles or '-')}</td>"
+            f"<td>{conn_badges}</td>"
+            f"<td>{d['sql_queries']}</td>"
+            f"<td>{_df_links(ups)}</td>"
+            f"<td>{_df_links(downs)}</td>"
+            f"<td>{''.join(model_links) or '-'}</td>"
+            f"<td>{esc('Redacted' if anonymous else (d.get('configured_by') or '-'))}</td>"
+            "</tr>"
+        )
+    df_ws_options = "".join(
+        f'<option value="{esc(w.lower())}">{esc(w)}</option>' for w in sorted({d["workspace"] for d in xref["dataflows"].values() if d["workspace"] and not d["outside"]}, key=str.lower)
+    )
+
+    from .portal_export import HEADER_BUTTONS, build_portal_meta, write_portal_meta
+
+    health_items = []
+    for row in health_rows:
+        cells = re.findall(r"<td[^>]*>(.*?)</td>", row, re.S)
+        if len(cells) < 5:
+            continue
+        plain = [_html.unescape(re.sub(r"<[^>]+>", " ", c)).strip() for c in cells]
+        kind = "Dataflow" if 'badge">Dataflow' in cells[0] else ("Report" if 'badge">Report' in cells[0] else "Semantic model")
+        item = re.sub(r"\s+(Dataflow|Report)$", "", re.sub(r"\s+", " ", plain[0]))
+        health_items.append({"item": item, "type": kind, "workspace": plain[1], "severity": "bad" if "badge-bad" in cells[2] else "warn",
+                             "title": plain[3], "detail": re.sub(r"\s+", " ", plain[4])})
+    write_portal_meta(out_root, build_portal_meta(analyses, xref, state, health_items, anonymous=anonymous))
+
     ws_groups_html: list[str] = []
     for ws_name in sorted(cards_by_ws.keys(), key=lambda s: s.lower()):
         ws_items = cards_by_ws[ws_name]
@@ -2867,6 +3290,7 @@ def generate_portal(store: CatalogStore, output_dir: str | Path | None = None, a
         <a href="/">&larr; 1. Scanner &amp; Setup</a>
         <span class="active-seg">2. Documentation Portal</span>
       </div>
+      {HEADER_BUTTONS}
       <button type="button" class="theme-icon-btn" data-toggle-theme="1" title="Toggle Light / Dark theme" aria-label="Toggle Light / Dark theme">
         <svg class="icon-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
         <svg class="icon-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
@@ -2876,8 +3300,11 @@ def generate_portal(store: CatalogStore, output_dir: str | Path | None = None, a
   <nav class="top-tabs">
     <button type="button" class="top-tab active" data-tab="tab-portfolio">1. Semantic Models ({len(analyses)})</button>
     <button type="button" class="top-tab" data-tab="tab-workspaces">2. Workspaces &amp; Reports ({total_reports})</button>
-    <button type="button" class="top-tab" data-tab="tab-lineage">3. Live Lineage Explorer</button>
-    <button type="button" class="top-tab" data-tab="tab-health">4. Governance &amp; Health ({total_findings})</button>
+    <button type="button" class="top-tab" data-tab="tab-reports" title="{report_totals.get('reports', 0)} reports, {report_totals.get('pages', 0)} pages, {report_totals.get('visuals', 0)} visuals">3. Report Explorer</button>
+    <button type="button" class="top-tab" data-tab="tab-dataflows">4. Dataflows ({total_dataflows})</button>
+    <button type="button" class="top-tab" data-tab="tab-lineage">5. Live Lineage</button>
+    <button type="button" class="top-tab" data-tab="tab-health">6. Governance &amp; Health ({len(health_rows)})</button>
+    <button type="button" class="top-tab" data-tab="tab-e2e">7. End-to-End Lineage</button>
   </nav>
 </header>
 
@@ -2889,6 +3316,8 @@ def generate_portal(store: CatalogStore, output_dir: str | Path | None = None, a
     <div class="kpi-card"><div class="val">{total_tables}</div><div class="lbl">Model Tables</div></div>
     <div class="kpi-card"><div class="val">{total_measures}</div><div class="lbl">DAX Measures</div></div>
     <div class="kpi-card"><div class="val">{len(all_sources)}</div><div class="lbl">Source Connectors</div></div>
+    <div class="kpi-card"><div class="val">{total_dataflows}</div><div class="lbl">Dataflows (Gen1)</div></div>
+    <div class="kpi-card"><div class="val">{total_report_measures}</div><div class="lbl">Thin-Report Measures ({len(xref['reports'])} reports)</div></div>
   </div>
 
   <section class="tab-pane active" id="tab-portfolio">
@@ -2958,10 +3387,10 @@ def generate_portal(store: CatalogStore, output_dir: str | Path | None = None, a
     <div class="table-scroll" style="margin-bottom:24px">
       <table class="data-table">
         <thead>
-          <tr><th>Workspace</th><th>Capacity / SKU</th><th>Semantic Models</th><th>Reports</th><th>Dataflows</th><th>Principals</th></tr>
+          <tr><th>Workspace</th><th>Capacity / SKU</th><th>Semantic Models</th><th>Reports</th><th>Dataflows</th><th>Report-level Measures</th><th>Principals</th><th>End-to-End</th></tr>
         </thead>
         <tbody>
-          {''.join(ws_rows) or '<tr><td colspan="6">No workspaces recorded.</td></tr>'}
+          {''.join(ws_rows) or '<tr><td colspan="8">No workspaces recorded.</td></tr>'}
         </tbody>
       </table>
     </div>
@@ -2970,14 +3399,40 @@ def generate_portal(store: CatalogStore, output_dir: str | Path | None = None, a
     <div class="table-scroll">
       <table class="data-table">
         <thead>
-          <tr><th>Power BI Report</th><th>Report Workspace</th><th>Underlying Semantic Model</th><th>Model Workspace</th><th>Binding Architecture</th></tr>
+          <tr><th>Power BI Report</th><th>Pages / Visuals</th><th>Report Workspace</th><th>Underlying Semantic Model</th><th>Model Workspace</th><th>Binding Architecture</th><th>Report-level Measures</th></tr>
         </thead>
         <tbody>
-          {''.join(report_map_rows) or '<tr><td colspan="5">No reports recorded in scanned workspaces.</td></tr>'}
+          {''.join(report_map_rows) or '<tr><td colspan="7">No reports recorded in scanned workspaces.</td></tr>'}
         </tbody>
       </table>
     </div>
     {orphan_html}
+  </section>
+
+{REPORT_PANE_HTML}
+  <section class="tab-pane" id="tab-dataflows">
+    <div class="filter-bar">
+      <select id="dfWs" class="sort-select" aria-label="Filter dataflows by workspace"><option value="">All workspaces</option>{df_ws_options}</select>
+      <input type="search" id="dfSearch" placeholder="Search dataflows, queries, connectors or the models they feed...">
+      <button type="button" class="chip-btn active" data-df-chip="all">All</button>
+      <button type="button" class="chip-btn" data-df-chip="direct">Loaded by a model</button>
+      <button type="button" class="chip-btn" data-df-chip="indirect">Feeds models indirectly</button>
+      <button type="button" class="chip-btn" data-df-chip="dataflow">Feeds dataflows only</button>
+      <button type="button" class="chip-btn" data-df-chip="none">Not used</button>
+      <button type="button" class="chip-btn" data-df-chip="bad">Not readable</button>
+      <a class="lin-btn" id="dfE2eLink" href="index.html#e2e:kind=dataflow_query" style="text-decoration:none">Open in end-to-end explorer &rarr;</a>
+    </div>
+    <div style="margin:-6px 2px 12px 2px;font-size:12.5px;color:var(--fg-muted)" id="dfCount"></div>
+    <div class="table-scroll">
+      <table class="data-table">
+        <thead>
+          <tr><th>Dataflow</th><th>Workspace</th><th>Definition</th><th>Queries by Role</th><th>Connectors</th><th>Native SQL</th><th>Upstream Dataflows</th><th>Feeds Dataflows</th><th>Feeds Semantic Models</th><th>Configured By</th></tr>
+        </thead>
+        <tbody>
+          {''.join(df_rows_html) or '<tr><td colspan="10">No dataflows scanned. Tick "Include dataflows" in the scanner and rescan.</td></tr>'}
+        </tbody>
+      </table>
+    </div>
   </section>
 
   <section class="tab-pane" id="tab-lineage">
@@ -2988,11 +3443,16 @@ def generate_portal(store: CatalogStore, output_dir: str | Path | None = None, a
     <script type="application/json" id="portfolioLineageData">{portfolio_lineage_json}</script>
   </section>
 
+  <section class="tab-pane" id="tab-e2e">
+    <a id="e2eFrameLink" href="e2e_lineage.html" hidden aria-hidden="true"></a>
+    <iframe id="e2eFrame" title="End-to-end measure lineage explorer"></iframe>
+  </section>
+
   <section class="tab-pane" id="tab-health">
     <div class="table-scroll">
       <table class="data-table">
         <thead>
-          <tr><th>Semantic Model</th><th>Workspace</th><th>Severity</th><th>Finding</th><th>Recommended Action</th></tr>
+          <tr><th>Item</th><th>Workspace</th><th>Severity</th><th>Finding</th><th>Recommended Action</th></tr>
         </thead>
         <tbody>
           {''.join(health_rows) or '<tr><td colspan="5">Zero governance or refresh warnings across all documented models.</td></tr>'}
@@ -3008,6 +3468,9 @@ def generate_portal(store: CatalogStore, output_dir: str | Path | None = None, a
 </footer>
 
 <script src="assets/portal_common.js"></script>
+<script src="assets/portal_export.js" data-base=""></script>
+<script src="assets/report_index.js"></script>
+<script src="assets/report_explorer.js"></script>
 <script src="assets/lineage_widget.js"></script>
 <script>
 (function () {{
@@ -3022,14 +3485,15 @@ def generate_portal(store: CatalogStore, output_dir: str | Path | None = None, a
 
   var activeStatus = "all";
   var activeWs = "all";
-  var activeView = localStorage.getItem("pbidoc-v1-catalog-view") || "grid";
+  var activeView = "grid";
+  try {{ activeView = localStorage.getItem("pbidoc-v1-catalog-view") || "grid"; }} catch (e) {{ /* storage blocked */ }}
   var sortDir = 1;
   var totalCount = {len(analyses)};
 
   function setCatalogView(v) {{
     if (["grid", "list", "workspace"].indexOf(v) === -1) v = "grid";
     activeView = v;
-    localStorage.setItem("pbidoc-v1-catalog-view", v);
+    try {{ localStorage.setItem("pbidoc-v1-catalog-view", v); }} catch (e) {{ /* storage blocked */ }}
     document.querySelectorAll("[data-catalog-view]").forEach(function (b) {{
       b.classList.toggle("active", b.getAttribute("data-catalog-view") === v);
     }});
@@ -3125,7 +3589,41 @@ def generate_portal(store: CatalogStore, output_dir: str | Path | None = None, a
     }});
   }}
 
+  // Dataflows tab: workspace -> usage chip -> search
+  var dfWs = document.getElementById("dfWs"), dfSearch = document.getElementById("dfSearch"), dfUse = "all";
+  function applyDf() {{
+    var ws = dfWs ? dfWs.value : "", q = (dfSearch && dfSearch.value || "").toLowerCase().trim(), shown = 0, total = 0;
+    document.querySelectorAll("[data-df-row]").forEach(function (r) {{
+      total++;
+      var ok = (!ws || r.getAttribute("data-ws") === ws) &&
+        (dfUse === "all" || (dfUse === "bad" ? r.getAttribute("data-status") === "bad" : r.getAttribute("data-use") === dfUse)) &&
+        (!q || (r.getAttribute("data-search") || "").indexOf(q) !== -1);
+      r.style.display = ok ? "" : "none";
+      if (ok) shown++;
+    }});
+    var c = document.getElementById("dfCount");
+    if (c) c.innerHTML = "Showing <b>" + shown + "</b> of <b>" + total + "</b> dataflows";
+    var l = document.getElementById("dfE2eLink");
+    if (l && dfWs) {{
+      var opt = dfWs.options[dfWs.selectedIndex];
+      // Base page taken from the static link so the SharePoint .aspx copy keeps pointing at .aspx
+      var base = l.getAttribute("data-base") || l.getAttribute("href").split("#")[0];
+      l.setAttribute("data-base", base);
+      l.href = base + "#e2e:" + (ws ? "ws=" + encodeURIComponent(opt.text) + "&" : "") + "kind=dataflow_query";
+    }}
+  }}
+  if (dfWs) dfWs.addEventListener("change", applyDf);
+  if (dfSearch) dfSearch.addEventListener("input", applyDf);
+  applyDf();
+
   document.addEventListener("click", function (e) {{
+    var dc = e.target.closest("[data-df-chip]");
+    if (dc) {{
+      dfUse = dc.getAttribute("data-df-chip");
+      document.querySelectorAll("[data-df-chip]").forEach(function (b) {{ b.classList.toggle("active", b === dc); }});
+      applyDf();
+      return;
+    }}
     var vb = e.target.closest("[data-catalog-view]");
     if (vb) {{
       setCatalogView(vb.getAttribute("data-catalog-view"));

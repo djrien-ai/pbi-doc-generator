@@ -11,3 +11,50 @@ venv/
 browser_profile/
 demo_catalog/
 .pytest_cache/
+
+# ---------------------------------------------------------------------------
+# Scanned / customer data - never commit (models, reports, dataflows, traces, exports)
+# ---------------------------------------------------------------------------
+# Local test runs (catalog + diagnostics trace)
+_testrun/
+# Catalog folders (default is ~/.pbi-doc-generator/catalog; these cover catalogs created inside the repo)
+pbi_catalog_data/
+catalog/
+**/catalog_state.json
+**/catalog_state.json.tmp
+**/definitions/*.tmdl
+**/report_layouts/
+**/report_measures/
+**/_staged_imports/
+**/_exports/
+# Generated portals, single-file SharePoint exports and site zips
+**/portal/index.html
+**/portal/e2e_lineage.html
+**/portal/models/
+**/portal/assets/
+PBI_Documentation_Portal_*
+*_SharePoint*.html
+# Diagnostics traces (contain full Power BI API responses)
+trace/
+traces/
+**/http_trace.jsonl
+**/browser.jsonl
+**/studio.log
+**/bodies/
+studio_console.log
+# Power BI / Excel model files used for local imports
+*.pbix
+*.pbit
+*.pbip
+*.SemanticModel/
+*.Report/
+*.Dataset/
+*.tmdl
+*.bim
+*.xlsx
+*.xlsm
+*.xls
+# Auth / token caches and local environment
+*.msal*
+token_cache*
+.env.*

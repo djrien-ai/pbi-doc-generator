@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+import time
 from pathlib import Path
 from typing import Callable
 
@@ -20,6 +21,10 @@ class WorkspaceScanner:
     def __init__(self, client: PowerBiReadOnlyClient, store: CatalogStore, log_fn: Callable[[str], None] | None = None):
         self.client = client
         self.store = store
+        self.definition_workers = 4
+        self.report_workers = 8
+        # Read dataflows / shared models referenced from workspaces outside the selection (off = respect the selection)
+        self.follow_outside = False
         self.log = log_fn or (lambda msg: print(msg))
 
     def scan_inventory(self, workspace_filter: str = "", workspace_ids: list[str] | None = None) -> dict:
@@ -61,12 +66,17 @@ class WorkspaceScanner:
         else:
             chosen = list(state["workspaces"].values())
 
+        from .store import set_scan_scope
+
+        set_scan_scope(state, [w["id"] for w in chosen], follow_outside=getattr(self, "follow_outside", False))
         self.log(f"Scanning inventory for {len(chosen)} workspace(s)...")
         for idx, ws in enumerate(chosen, 1):
             ws_id = ws["id"]
             ws_name = ws["name"]
-            # Clear stale reports/dataflows for this workspace before refreshing
+            # Clear stale reports/dataflows for this workspace before refreshing (keep dataflow definition state)
+            prev_reports = {rid: r for rid, r in state["reports"].items() if r.get("workspace_id") == ws_id}
             state["reports"] = {rid: r for rid, r in state["reports"].items() if r.get("workspace_id") != ws_id}
+            prev_dfs = {did: d for did, d in state["dataflows"].items() if d.get("workspace_id") == ws_id}
             state["dataflows"] = {did: d for did, d in state["dataflows"].items() if d.get("workspace_id") != ws_id}
 
             r_count = m_count = df_count = 0
@@ -83,11 +93,16 @@ class WorkspaceScanner:
                         "workspace": ws_name,
                         "web_url": r.get("webUrl", ""),
                     }
+                    prev_r = prev_reports.get(r["id"]) or {}
+                    if prev_r.get("dataset_id") == r.get("datasetId", ""):
+                        for k in ("measures_status", "report_measure_count", "definition_format", "layout_version", "page_count", "visual_count"):
+                            if k in prev_r:
+                                state["reports"][r["id"]][k] = prev_r[k]
             except Exception as exc:
                 state["errors"].append({"step": "reports", "workspace": ws_name, "error": str(exc)})
 
+            ws_ds_ids: set[str] = set()
             try:
-                ws_ds_ids = set()
                 for d in self.client.pbi_get_list(f"groups/{ws_id}/datasets"):
                     m_count += 1
                     ds_id = d["id"]
@@ -124,14 +139,39 @@ class WorkspaceScanner:
                 for df in self.client.pbi_get_list(f"groups/{ws_id}/dataflows"):
                     df_count += 1
                     df_id = df["objectId"]
+                    prev_df = prev_dfs.get(df_id) or {}
+                    modified = df.get("modifiedDateTime", "")
                     state["dataflows"][df_id] = {
                         "id": df_id,
                         "name": df.get("name", ""),
+                        "description": df.get("description", ""),
                         "workspace_id": ws_id,
                         "workspace": ws_name,
                         "configured_by": df.get("configuredBy", ""),
-                        "modified_at": df.get("modifiedDateTime", ""),
+                        "modified_at": modified,
+                        "generation": "Gen1",
+                        "upstream": prev_df.get("upstream", []),
+                        "datasources": prev_df.get("datasources", []),
+                        # Force a re-export when the dataflow changed since the last definition read
+                        "definition_status": prev_df.get("definition_status", "pending")
+                        if prev_df.get("modified_at", "") == modified
+                        else "pending",
+                        "definition_read_at": prev_df.get("definition_read_at", ""),
                     }
+            except Exception as exc:
+                state["errors"].append({"step": "dataflows", "workspace": ws_name, "error": str(exc)})
+
+            try:
+                links = self.client.get_dataset_dataflow_links(ws_id)
+                state.setdefault("dataset_dataflow_links", {})
+                for ds_id in ws_ds_ids:
+                    state["dataset_dataflow_links"].pop(ds_id, None)
+                for ln in links:
+                    ds_id = ln.get("datasetObjectId") or ""
+                    if ds_id:
+                        state["dataset_dataflow_links"].setdefault(ds_id, []).append(
+                            {"dataflow_id": ln.get("dataflowObjectId", ""), "workspace_id": ln.get("workspaceObjectId", "")}
+                        )
             except Exception:
                 pass
 
@@ -171,13 +211,20 @@ class WorkspaceScanner:
         self.log(f"Reading full TMDL definitions for {len(models)} semantic model(s)...")
         ws_users_cache: dict[str, list[dict]] = {}
 
+        # getDefinition is a long-running operation: Power BI answers 202 + Retry-After (about 20 s) even
+        # though the export is usually ready in under a second. Run a few in parallel so those waits overlap.
+        from concurrent.futures import ThreadPoolExecutor
+
+        pool = ThreadPoolExecutor(max_workers=max(1, self.definition_workers))
+        futures = {m["id"]: pool.submit(self.client.get_model_tmdl_files, m["workspace_id"], m["id"]) for m in models}
+
         for idx, m in enumerate(models, 1):
             ws_id = m["workspace_id"]
             ds_id = m["id"]
             self.log(f"  [{idx}/{len(models)}] {m['workspace']} / {m['name']}")
 
             try:
-                files = self.client.get_model_tmdl_files(ws_id, ds_id)
+                files = futures[ds_id].result()
                 self.store.write_tmdl_bundle(m["name"], ds_id, files)
                 m["definition_status"] = "ok"
                 m["definition_read_at"] = utc_now_iso()
@@ -220,6 +267,293 @@ class WorkspaceScanner:
 
             self.store.save(state)
 
+        pool.shutdown(wait=False, cancel_futures=True)
+        return state
+
+    def scan_report_definitions(
+        self,
+        workspace_filter: str = "",
+        workspace_ids: list[str] | None = None,
+        refresh: bool = False,
+        follow_shared_models: bool | None = None,
+    ) -> dict:
+        """Step 2b: Read report-level measures of (thin) reports.
+
+        Report definitions are read with the Fabric `reports/{id}/getDefinition` metadata call; only the
+        report-level measures are kept. Shared models in workspaces outside the selection are only read when
+        `follow_shared_models` (default: the scanner's `follow_outside` setting) is on; otherwise the workspace
+        selection is respected and those measures show the shared model as "outside the selected workspaces".
+        """
+        if follow_shared_models is None:
+            follow_shared_models = getattr(self, "follow_outside", False)
+        from concurrent.futures import ThreadPoolExecutor
+
+        from .reports import LAYOUT_VERSION, parse_report_layout, parse_report_measures
+
+        state = self.store.load()
+        reps = [r for r in state.get("reports", {}).values() if r.get("workspace_id") != "local-workspace"]
+        reps = [r for r in reps if (r.get("report_type") or "PowerBIReport") == "PowerBIReport"]
+        if workspace_ids:
+            ws_set = set(workspace_ids)
+            reps = [r for r in reps if r.get("workspace_id") in ws_set]
+        elif workspace_filter:
+            needle = workspace_filter.lower()
+            reps = [r for r in reps if needle in (r.get("workspace") or "").lower()]
+        # Re-read when not read yet, or read before page / visual layouts were collected
+        todo = [r for r in reps if refresh or r.get("measures_status") != "ok" or r.get("layout_version") != LAYOUT_VERSION]
+
+        self.log(f"Reading report definitions for {len(todo)} report(s): report-level measures, pages and visuals...")
+        pool = ThreadPoolExecutor(max_workers=max(1, self.report_workers))
+        futures = {r["id"]: pool.submit(self.client.get_report_definition_parts, r["workspace_id"], r["id"]) for r in todo}
+        found = 0
+        last_save = time.monotonic()
+        for idx, r in enumerate(todo, 1):
+            try:
+                parts = futures[r["id"]].result()
+                parsed = parse_report_measures(parts)
+                layout = parse_report_layout(parts)
+                layout["report_id"] = r["id"]
+                layout["dataset_id"] = r.get("dataset_id") or parsed.get("dataset_ref", "")
+                self.store.write_report_layout(r["id"], layout)
+                r["layout_version"] = LAYOUT_VERSION
+                r["page_count"] = len(layout["pages"])
+                r["visual_count"] = layout["visual_count"]
+                parsed["report_id"] = r["id"]
+                parsed["dataset_id"] = r.get("dataset_id") or parsed.get("dataset_ref", "")
+                self.store.write_report_measures(r["id"], parsed)
+                r["measures_status"] = "ok"
+                r["report_measure_count"] = len(parsed["measures"])
+                r["definition_format"] = parsed.get("format", "")
+                if parsed["measures"]:
+                    found += len(parsed["measures"])
+                    self.log(f"  [{idx}/{len(todo)}] {r.get('workspace')} / {r.get('name')}: {len(parsed['measures'])} report-level measure(s)")
+            except Exception as exc:
+                err = str(exc)
+                if any(t in err.lower() for t in ("403", "401", "forbidden", "unauthorized")):
+                    err = f"No access to report definition (requires workspace Contributor or higher) - {err}"
+                r["measures_status"] = f"error: {err[:180]}"
+                state["errors"].append({"step": "reportDefinition", "workspace": r.get("workspace", ""), "report": r.get("name", ""), "error": err})
+            if time.monotonic() - last_save > 5:
+                self.store.save(state)
+                last_save = time.monotonic()
+        pool.shutdown(wait=False, cancel_futures=True)
+        self.store.save(state)
+        self.log(f"Report definitions read: {found} report-level measure(s), {sum(r.get('page_count', 0) for r in todo)} page(s), "
+                 f"{sum(r.get('visual_count', 0) for r in todo)} visual(s).")
+
+        if follow_shared_models:
+            self.follow_shared_models(reps)
+        return self.store.load()
+
+    def follow_shared_models(self, reports: list[dict]) -> list[str]:
+        """Register + read shared models used by reports when they live outside the scanned workspaces."""
+        from .store import add_scope_extra, scope_workspace_ids
+
+        state = self.store.load()
+        in_scope = scope_workspace_ids(state)
+        missing: dict[str, str] = {}
+        for r in reports:
+            ds = r.get("dataset_id") or ""
+            if ds and ds not in state["models"]:
+                missing[ds] = r.get("dataset_workspace_id") or r.get("workspace_id") or ""
+            elif ds and in_scope and state["models"][ds].get("workspace_id") not in in_scope:
+                add_scope_extra(state, ds)  # already in the catalog from an earlier scan: just include it
+        for ds in missing:
+            add_scope_extra(state, ds)
+        added = []
+        for ds, ws in missing.items():
+            ws_name = (state["workspaces"].get(ws) or {}).get("name") or f"Workspace {ws[:8]}"
+            try:
+                d = self.client.pbi_get_json(f"groups/{ws}/datasets/{ds}")
+            except Exception as exc:
+                self.log(f"  Shared model {ds[:8]} in '{ws_name}' not readable: {str(exc)[:140]}")
+                continue
+            state["models"][ds] = {
+                "id": ds,
+                "name": d.get("name", f"Model {ds[:8]}"),
+                "workspace_id": ws,
+                "workspace": ws_name,
+                "configured_by": d.get("configuredBy", ""),
+                "created_date": d.get("createdDate", ""),
+                "target_storage_mode": d.get("targetStorageMode", ""),
+                "is_refreshable": bool(d.get("isRefreshable")),
+                "datasources": [],
+                "last_refresh": {},
+                "permissions": [],
+                "workspace_users": [],
+                "definition_status": "pending",
+                "definition_read_at": "",
+                "discovered_via": "thin report",
+            }
+            added.append(ds)
+            self.log(f"  Shared model used by thin report(s): {ws_name} / {state['models'][ds]['name']}")
+        self.store.save(state)
+        if added:
+            self.scan_model_definitions(dataset_ids=added, include_access=False)
+        return added
+
+    def scan_dataflow_definitions(
+        self,
+        workspace_filter: str = "",
+        workspace_ids: list[str] | None = None,
+        refresh: bool = False,
+        follow_upstream: bool = True,
+        max_follow_depth: int = 6,
+        follow_outside: bool | None = None,
+    ) -> dict:
+        """Step 3: Export Gen1 dataflow definitions (model.json + M) and follow dataflow -> dataflow references.
+
+        References are followed inside the selected workspaces. Dataflows in other workspaces are only exported
+        when `follow_outside` (default: the scanner's `follow_outside` setting) is on; otherwise they are recorded
+        as "outside the selected workspaces" so the lineage shows where it leaves the selection.
+        """
+        from .store import add_scope_extra
+
+        if follow_outside is None:
+            follow_outside = getattr(self, "follow_outside", False)
+        state = self.store.load()
+        state.setdefault("dataflows", {})
+        dfs = list(state["dataflows"].values())
+        ws_set: set[str] | None = None
+        if workspace_ids:
+            ws_set = set(workspace_ids)
+        elif workspace_filter:
+            needle = workspace_filter.lower()
+            ws_set = {wid for wid, w in state.get("workspaces", {}).items() if needle in (w.get("name") or "").lower()}
+        if ws_set is not None:
+            dfs = [d for d in dfs if d.get("workspace_id") in ws_set]
+
+        queue: list[tuple[str, str, int]] = [(d.get("workspace_id", ""), d["id"], 0) for d in dfs]
+
+        # Seed with dataflows that scanned semantic models load from (M partitions + REST links)
+        if follow_upstream:
+            from .dataflows import referenced_dataflow_ids
+
+            extra = {x.lower() for x in (state.get("scope") or {}).get("extra_ids") or []}
+            for ds_id, m_meta in state.get("models", {}).items():
+                if ws_set is not None and m_meta.get("workspace_id") not in ws_set and ds_id.lower() not in extra:
+                    continue
+                for ln in (state.get("dataset_dataflow_links") or {}).get(ds_id, []):
+                    if ln.get("dataflow_id"):
+                        queue.append((ln.get("workspace_id", ""), ln["dataflow_id"], 1))
+                bundle = self.store.read_tmdl_bundle(m_meta.get("name", ""), ds_id)
+                if bundle and "dataflowid" in bundle.lower():
+                    for ws_ref, df_ref in referenced_dataflow_ids([bundle]):
+                        queue.append((ws_ref or m_meta.get("workspace_id", ""), df_ref, 1))
+
+        done: set[str] = set()
+        fetched = 0
+        self.log(
+            f"Reading Dataflow Gen1 definitions ({len(dfs)} in the selected workspaces, following upstream references"
+            + (" into other workspaces)..." if follow_outside else " inside the selection)...")
+        )
+        outside = 0
+        missing = 0
+        from .store import scope_workspace_ids
+
+        scope_ws = scope_workspace_ids(state)
+        last_save = time.monotonic()
+        while queue:
+            ws_id, df_id, depth = queue.pop(0)
+            key = df_id.lower()
+            if not df_id or key in done:
+                continue
+            done.add(key)
+            meta = state["dataflows"].get(df_id)
+            if meta is None:
+                # Referenced dataflow outside the scanned workspaces: register a stub and try to read it
+                ws_meta = state["workspaces"].get(ws_id) or {}
+                meta = {
+                    "id": df_id,
+                    "name": f"Dataflow {df_id[:8]}",
+                    "workspace_id": ws_id,
+                    "workspace": ws_meta.get("name") or (f"Workspace {ws_id[:8]}" if ws_id else "Unknown workspace"),
+                    "configured_by": "",
+                    "modified_at": "",
+                    "generation": "Gen1",
+                    "discovered_via": "reference",
+                    "upstream": [],
+                    "datasources": [],
+                    "definition_status": "pending",
+                }
+                state["dataflows"][df_id] = meta
+            ws_id = ws_id or meta.get("workspace_id", "")
+            if not ws_id:
+                meta["definition_status"] = "error: unknown workspace for referenced dataflow"
+                continue
+            if ws_set is not None and ws_id not in ws_set:
+                if not follow_outside:
+                    # Respect the workspace selection: record where the lineage leaves it, do not export
+                    outside += 1
+                    if meta.get("discovered_via") == "reference" and meta.get("definition_status") != "ok":
+                        meta["definition_status"] = "outside selected workspaces"
+                    continue
+                add_scope_extra(state, df_id)
+            listed_ws = ws_set if ws_set is not None else scope_ws
+            if meta.get("discovered_via") == "reference" and listed_ws and ws_id in listed_ws:
+                # The workspace's dataflow list was just read and does not contain this id: it was deleted or
+                # re-created under a new id. Exporting it only returns HTTP 400 "Unexpected dataflow error".
+                users = sorted(
+                    state["models"].get(ds, {}).get("name", ds[:8])
+                    for ds, links in (state.get("dataset_dataflow_links") or {}).items()
+                    if any((ln.get("dataflow_id") or "").lower() == key for ln in links)
+                )
+                meta["definition_status"] = (
+                    f"missing: not in the dataflow list of workspace '{meta.get('workspace', '')}' (deleted or re-created under a new id?)"
+                    + (f" - still referenced by {', '.join(users)}" if users else "")
+                )
+                missing += 1
+                self.log(f"    Dataflow {df_id} referenced by {', '.join(users) or 'another dataflow'} no longer exists in '{meta.get('workspace', '')}' - broken reference, skipped.")
+                continue
+
+            definition = self.store.read_dataflow_definition(df_id)
+            if refresh or meta.get("definition_status") != "ok" or not definition:
+                try:
+                    from .dataflows import strip_data_locations
+
+                    definition = strip_data_locations(self.client.get_dataflow_definition(ws_id, df_id))
+                    self.store.write_dataflow_definition(df_id, definition)
+                    meta["workspace_id"] = ws_id
+                    if definition.get("name") and meta.get("discovered_via") == "reference":
+                        meta["name"] = definition["name"]
+                    meta["definition_status"] = "ok"
+                    meta["definition_read_at"] = utc_now_iso()
+                    fetched += 1
+                    self.log(f"  Dataflow: {meta.get('workspace', '')} / {meta.get('name', df_id)}")
+                except Exception as exc:
+                    err_txt = str(exc)
+                    if any(tok in err_txt.lower() for tok in ("403", "401", "forbidden", "unauthorized")):
+                        err_txt = f"No access to export dataflow (requires workspace Contributor+ or dataflow owner) - {err_txt}"
+                    meta["definition_status"] = f"error: {err_txt[:180]}"
+                    state["errors"].append({"step": "dataflowDefinition", "workspace": meta.get("workspace", ""), "dataflow": meta.get("name", df_id), "error": err_txt})
+                    self.log(f"    Skipped dataflow '{meta.get('name', df_id)}': {err_txt[:140]}")
+                    definition = {}
+                for attr, fn in (("upstream", self.client.get_dataflow_upstream), ("datasources", self.client.get_dataflow_datasources)):
+                    try:
+                        meta[attr] = fn(ws_id, df_id)
+                    except Exception:
+                        pass
+
+            if follow_upstream and definition and depth < max_follow_depth:
+                from .dataflows import definition_dataflow_refs
+
+                for ws_ref, df_ref in definition_dataflow_refs(definition):
+                    queue.append((ws_ref, df_ref, depth + 1))
+                for up in meta.get("upstream") or []:
+                    up_id = up.get("targetDataflowId") or ""
+                    if up_id:
+                        queue.append((up.get("groupId") or "", up_id, depth + 1))
+            # Checkpoint every few seconds (resumable) instead of after every dataflow
+            if time.monotonic() - last_save > 5:
+                self.store.save(state)
+                last_save = time.monotonic()
+
+        self.log(
+            f"Dataflow definitions read: {fetched} exported, {len(done) - outside} dataflow(s) in lineage scope"
+            + (f", {outside} referenced dataflow(s) in unselected workspaces skipped" if outside else "")
+            + (f", {missing} broken reference(s) to deleted dataflows (see Governance & Health)." if missing else ".")
+        )
+        self.store.save(state)
         return state
 
     @staticmethod

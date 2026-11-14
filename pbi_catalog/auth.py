@@ -389,6 +389,14 @@ class TokenProvider:
     def get_token(self, force_refresh: bool = False) -> str:
         if not force_refresh and self._cached_token and time.time() < (self._expires_at - 120):
             return self._cached_token
+        # Scans fetch definitions from several threads: only one may refresh / sign in at a time
+        lock = self.__dict__.setdefault("_token_lock", threading.RLock())
+        with lock:
+            if not force_refresh and self._cached_token and time.time() < (self._expires_at - 120):
+                return self._cached_token
+            return self._get_token_locked(force_refresh)
+
+    def _get_token_locked(self, force_refresh: bool = False) -> str:
 
         if self._refresh_token and not force_refresh:
             try:

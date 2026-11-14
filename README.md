@@ -63,6 +63,48 @@ pbi-doc-generator
 
 ---
 
+## Dataflow Gen1 & End-to-End Measure Lineage
+
+Scans now also export every **Power BI Dataflow (Gen1)** in the selected workspaces, using the same sign-in (all calls are read-only `GET`s):
+
+- **Dataflow definitions:** each dataflow's `model.json` is exported (`GET groups/{ws}/dataflows/{id}`) and its Power Query section document is split into individual queries, classified as *Entity*, *Computed entity*, *Linked entity*, *Staging / helper query*, *Function*, or *Parameter*.
+- **Dataflow -> dataflow chains:** linked entities (`PowerPlatform.Dataflows` / `PowerBI.Dataflows` navigation by `workspaceId` / `dataflowId` / `entity`) and the `upstreamDataflows` API are followed automatically inside the selected workspaces. References into other workspaces appear as *outside selected workspaces*; tick *Follow references outside the selected workspaces* (`scan --follow-outside`) to read just those dataflows too.
+- **Dataset table -> dataflow entity:** every semantic-model table partition (and shared query it references) is resolved to the exact dataflow entity it loads. Parameterised dataflow ids are resolved via model parameters, with the REST `datasets/upstreamDataflows` links as a fallback.
+- **Physical sources:** SQL server / database / schema.table, **native SQL scripts** (with `#(lf)` escapes decoded), Excel workbooks and sheets, SharePoint / file paths, and the other 28+ connectors.
+
+Open **7. End-to-End Lineage** in the portal (or click *Trace end-to-end* on any measure card) to:
+
+1. **Click a measure** and see a layered **reference map**: Sources -> Dataflow layer N ... -> Dataflow layer 1 -> Dataset Power Query -> Model tables / calculated columns -> referenced measures -> the measure. Click any box for its DAX, M or SQL code, dependencies and consumers; switch to *Downstream* to see what uses an object.
+2. **Export measure documentation** (HTML for print/PDF, Word `.doc`, or Markdown with a Mermaid map) that explains the measure bottom-up: *1. Source systems & SQL scripts -> 2. Dataflow transformations (deepest layer first) -> 3. Dataset Power Query -> 4. Tables & columns used -> 5. DAX calculation chain (base measures first)*. *Export model documentation* writes one document for every measure of a model.
+
+```bash
+# Same documentation from the CLI (Markdown)
+pbi-doc-generator measure-doc "Margin %" --model "Sales Model" -o margin.md
+pbi-doc-generator measure-doc --all --model "Sales Model" -o sales_model_measures.md
+
+# Skip dataflows during a scan
+pbi-doc-generator scan --workspace "Finance" --no-dataflows
+```
+
+**Export all data** (portal header, when running in the Studio) produces either a **single `.html` file for SharePoint Online** - upload it to a document library and click it; the whole portal runs inside SharePoint's file viewer - or a `.zip` with the static site for a synced folder, file share or web server (also `pbi-doc-generator export-site [--single-file]`). Every tab also has a context-aware *Export ... documentation* button (models, workspaces & reports, report pages & visuals, dataflows, lineage, governance, measures).
+
+## Report Explorer (pages & visuals, no data)
+
+The report scan step (`reports/{id}/getDefinition`, the same read-only call used for report-level measures) also stores each report's **layout**: pages, every visual's position, size, type and title, the columns / measures bound to each visual role, report / page / visual filters with their selected values, slicer selections and text box text. No query is ever run against the model, so no report data is loaded.
+
+Open **3. Report Explorer**:
+
+1. Filter by **workspace** and **semantic model**, pick a **report**, then a **page** - the page is drawn to scale as a wireframe (neutral placeholder per visual type, slicers with their selected values, text boxes with their text).
+2. Click a **visual** to list its fields by role (rows, columns, values, legend ...), its visual filters and slicer selection.
+3. Click any **field, filter or slicer** to see its DAX / column details, the full **upstream lineage map** (measures -> tables -> Power Query -> dataflow layers -> SQL sources) and every other visual in any report that uses it. *Open in End-to-End explorer* continues there; the End-to-End explorer in turn lists the report visuals that use a measure or table.
+
+Fields that no longer exist in the semantic model are flagged red and listed under *Governance & Health*. Everything is computed during the scan / portal build - no manual steps. AI assistants get the same data through the MCP tool `pbi_report_layout` (reports, pages, visuals with their fields' lineage ids) next to `pbi_trace_measure_end_to_end`.
+
+> [!NOTE]
+> Exporting a Gen1 dataflow definition requires the same access as editing it (workspace **Contributor** or higher, or dataflow owner). Dataflows you cannot export, or that live in workspaces you cannot see, appear as dashed *Not scanned* boxes in the map and the lineage stops there.
+
+---
+
 ## Command-Line Usage (CLI & CI/CD)
 
 ```bash
@@ -83,6 +125,21 @@ pbi-doc-generator file ./Report.pbix
 
 # Start the stdio MCP server for AI assistants
 pbi-doc-generator mcp
+
+# Scan options: skip dataflows / report definitions, follow references into unselected workspaces
+pbi-doc-generator scan --workspace "Finance" --no-dataflows --no-reports
+pbi-doc-generator scan --workspace "Finance" --follow-outside
+
+# Measure documentation (SQL -> Power Query -> DAX) as Markdown
+pbi-doc-generator measure-doc "Margin %" --model "Sales Model" -o margin.md
+
+# Export the portal: single file for SharePoint Online, or a folder .zip (optionally with .aspx copies)
+pbi-doc-generator export-site --single-file
+pbi-doc-generator export-site --aspx
+
+# Record a diagnostics trace while using the Studio, then verify it (metadata-only check, errors, lineage health)
+pbi-doc-generator studio --trace ./trace
+pbi-doc-generator diagnose --trace ./trace
 ```
 
 ---

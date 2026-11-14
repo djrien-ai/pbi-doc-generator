@@ -20,6 +20,7 @@ import urllib.parse
 import webbrowser
 from pathlib import Path
 
+from . import trace
 from .api import PowerBiReadOnlyClient
 from .auth import TokenProvider
 from .portal import generate_portal
@@ -419,6 +420,18 @@ STUDIO_HTML = r"""<!DOCTYPE html>
           <span><b>Include user permissions &amp; refresh history</b> <span style="color:var(--fg-muted)">- also fetches who has Admin/Member/Viewer access on each workspace &amp; dataset plus latest refresh status (takes slightly longer on large tenants).</span></span>
         </label>
         <label style="display:flex;align-items:flex-start;gap:9px;cursor:pointer">
+          <input type="checkbox" id="chkReports" style="margin-top:3px" checked>
+          <span><b>Include report-level measures (thin reports)</b> <span style="color:var(--fg-muted)">- reads measures defined inside reports that live-connect to shared models (only the measures are kept) and traces them through the shared model end to end.</span></span>
+        </label>
+        <label style="display:flex;align-items:flex-start;gap:9px;cursor:pointer">
+          <input type="checkbox" id="chkDataflows" style="margin-top:3px" checked>
+          <span><b>Include Dataflow Gen1 definitions</b> <span style="color:var(--fg-muted)">- exports each dataflow's Power Query (SQL, Excel and other sources), follows dataflow-to-dataflow references, and ties every dataset table to the dataflow entity it loads for End-to-End Measure Lineage.</span></span>
+        </label>
+        <label style="display:flex;align-items:flex-start;gap:9px;cursor:pointer">
+          <input type="checkbox" id="chkFollowOutside" style="margin-top:3px">
+          <span><b>Follow references outside the selected workspaces</b> <span style="color:var(--fg-muted)">- off: only the selected workspaces are read and shown; dataflows or shared models they reference elsewhere appear as "outside the selected workspaces". On: those referenced dataflows and shared models (only them, not their whole workspaces) are read too so lineage continues end to end.</span></span>
+        </label>
+        <label style="display:flex;align-items:flex-start;gap:9px;cursor:pointer">
           <input type="checkbox" id="chkAnon" style="margin-top:3px">
           <span><b>Anonymize personal names &amp; emails</b> <span style="color:var(--fg-muted)">- replaces owner names and user emails with <code>Redacted</code> when sharing the HTML folder externally (e.g. with external consultants or auditors).</span></span>
         </label>
@@ -740,6 +753,9 @@ async function runScanAndBuild() {
     workspace_ids: ids,
     refresh: !document.getElementById("chkIncremental").checked,
     include_access: document.getElementById("chkAccess").checked,
+    include_dataflows: document.getElementById("chkDataflows").checked,
+    include_reports: document.getElementById("chkReports").checked,
+    follow_outside: document.getElementById("chkFollowOutside").checked,
     anonymous: document.getElementById("chkAnon").checked
   });
   if (!res.ok) {
@@ -755,7 +771,10 @@ async function rebuildPortalOnly() {
   if (btn) btn.disabled = true;
   setBanner("scanBanner", "info", "<span style='display:flex;align-items:center;gap:10px'><span class='spin'></span><span>Rebuilding HTML portal from local catalog cache...</span></span>");
   try {
-    var res = await apiPost("/api/portal", { anonymous: document.getElementById("chkAnon").checked });
+    // Rebuild for the workspaces ticked now (falls back to the last scan's selection when none are listed)
+    var ids = Array.from(document.querySelectorAll(".ws-chk:checked")).map(function(c) { return c.value; });
+    var res = await apiPost("/api/portal", { anonymous: document.getElementById("chkAnon").checked, workspace_ids: ids,
+      follow_outside: document.getElementById("chkFollowOutside").checked });
     appendLog(res.ok ? "Portal regenerated: " + res.index : "Error: " + res.error);
     if (res.ok) {
       setBanner("scanBanner", "ok",
@@ -985,10 +1004,13 @@ class StudioState:
         self.auth = TokenProvider(mode="oauth", log_fn=self.log)
         self.busy = False
         self.last_scan_error = ""
+        self.models_cnt = 0
+        self.models_cnt_mtime = -1.0
 
     def log(self, msg: str) -> None:
         stamp = time.strftime("%H:%M:%S")
         self.logs.append(f"[{stamp}] {msg}")
+        trace.record_studio_log(f"{time.strftime('%Y-%m-%d')} [{stamp}] {msg}")
         if len(self.logs) > 200:
             self.logs = self.logs[-200:]
 
@@ -1038,6 +1060,7 @@ def create_studio_server(catalog_dir: str | Path, host: str = "127.0.0.1", port:
             parsed = urllib.parse.urlparse(self.path)
             if parsed.path in ("/", "/index.html"):
                 html = STUDIO_HTML.replace("{{CATALOG_DIR}}", str(state.store.root)).replace("{{MCP_JSON}}", mcp_cfg)
+                html = html.replace("<head>", "<head><script>" + trace.BROWSER_TRACE_JS + "</script>", 1)
                 raw = html.encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -1045,17 +1068,55 @@ def create_studio_server(catalog_dir: str | Path, host: str = "127.0.0.1", port:
                 self.wfile.write(raw)
                 return
 
-            if parsed.path == "/api/status":
+            if parsed.path == "/api/export-site":
+                # "Export all data": zip of the full static portal (+ .aspx twins) for SharePoint
+                qs = urllib.parse.parse_qs(parsed.query)
+                anon = qs.get("anonymous", ["0"])[0] == "1"
+                aspx = qs.get("aspx", ["0"])[0] == "1"
+                single = qs.get("format", ["single"])[0] == "single"
                 try:
-                    models_cnt = len(state.store.load().get("models", {}))
+                    from .site_export import build_site_export
+
+                    exp_dir = state.store.root / "_exports"
+                    exp_dir.mkdir(parents=True, exist_ok=True)
+                    for pattern in ("PBI_Documentation_Portal_*.zip", "PBI_Documentation_Portal_*.html"):
+                        for old in sorted(exp_dir.glob(pattern))[:-2]:
+                            old.unlink(missing_ok=True)
+                    ext = "html" if single else "zip"
+                    name = f"PBI_Documentation_Portal_{'SharePoint_' if single else ''}{time.strftime('%Y%m%d_%H%M%S')}.{ext}"
+                    out = build_site_export(state.store, exp_dir / name, anonymous=anon, include_aspx=aspx, log_fn=state.log, single_file_only=single)
+                    data = out.read_bytes()
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/html; charset=utf-8" if single else "application/zip")
+                    self.send_header("Content-Disposition", f'attachment; filename="{name}"')
+                    self.send_header("Content-Length", str(len(data)))
+                    self.end_headers()
+                    self.wfile.write(data)
+                except (ConnectionAbortedError, BrokenPipeError, ConnectionResetError):
+                    pass
+                except Exception as exc:
+                    state.log(f"Export all data failed: {exc}")
+                    self._json({"ok": False, "error": str(exc)}, code=500)
+                return
+
+            if parsed.path == "/api/status":
+                # Only re-read catalog_state.json when it changed (it can be several MB and is
+                # replaced continuously during a scan; frequent reads collide with writes on Windows)
+                try:
+                    mtime = state.store.state_file.stat().st_mtime if state.store.state_file.exists() else 0
+                    if mtime != state.models_cnt_mtime:
+                        state.models_cnt = len(state.store.load().get("models", {}))
+                        state.models_cnt_mtime = mtime
                 except Exception:
-                    models_cnt = 0
+                    pass
+                models_cnt = state.models_cnt
                 self._json(
                     {
                         "auth": state.auth.status(),
                         "busy": state.busy,
                         "last_scan_error": state.last_scan_error,
                         "models_count": models_cnt,
+                        "trace_dir": str(trace.trace_dir() or ""),
                         "logs": state.logs[-80:],
                     }
                 )
@@ -1084,6 +1145,15 @@ def create_studio_server(catalog_dir: str | Path, host: str = "127.0.0.1", port:
         def do_POST(self) -> None:  # noqa: N802
             parsed = urllib.parse.urlparse(self.path)
             length = int(self.headers.get("Content-Length") or "0")
+
+            if parsed.path == "/api/client-log":
+                try:
+                    payload = json.loads(self.rfile.read(length).decode("utf-8") or "{}") if length else {}
+                    n = trace.record_browser_events(payload.get("events") or [], self.headers.get("User-Agent", ""))
+                    self._json({"ok": True, "recorded": n})
+                except Exception as exc:
+                    self._json({"ok": False, "error": str(exc)})
+                return
 
             if parsed.path == "/api/upload-local-file":
                 raw_bytes = self.rfile.read(length) if length else b""
@@ -1229,6 +1299,7 @@ def create_studio_server(catalog_dir: str | Path, host: str = "127.0.0.1", port:
                     try:
                         client = PowerBiReadOnlyClient(state.auth)
                         scanner = WorkspaceScanner(client, state.store, log_fn=state.log)
+                        scanner.follow_outside = bool(body.get("follow_outside"))
                         ws_ids = body.get("workspace_ids") or None
                         scanner.scan_inventory(workspace_ids=ws_ids)
                         scanner.scan_model_definitions(
@@ -1236,6 +1307,10 @@ def create_studio_server(catalog_dir: str | Path, host: str = "127.0.0.1", port:
                             refresh=bool(body.get("refresh")),
                             include_access=bool(body.get("include_access")),
                         )
+                        if body.get("include_reports", True):
+                            scanner.scan_report_definitions(workspace_ids=ws_ids, refresh=bool(body.get("refresh")))
+                        if body.get("include_dataflows", True):
+                            scanner.scan_dataflow_definitions(workspace_ids=ws_ids, refresh=bool(body.get("refresh")))
                         idx = generate_portal(state.store, anonymous=bool(body.get("anonymous")))
                         state.log(f"Portal ready! Click 'Open Generated Portal' ({idx})")
                     except Exception as exc:
@@ -1250,6 +1325,18 @@ def create_studio_server(catalog_dir: str | Path, host: str = "127.0.0.1", port:
 
             if self.path == "/api/portal":
                 try:
+                    ws_ids = body.get("workspace_ids") or []
+                    if ws_ids and not state.busy:
+                        from .store import _STATE_LOCK, set_scan_scope
+
+                        with _STATE_LOCK:
+                            st = state.store.load()
+                            prev = st.get("scope") or {}
+                            keep_extra = prev.get("extra_ids", []) if body.get("follow_outside") else []
+                            set_scan_scope(st, ws_ids, follow_outside=bool(body.get("follow_outside")))
+                            st["scope"]["extra_ids"] = keep_extra
+                            state.store.save(st)
+                        state.log(f"Rebuilding portal for {len(ws_ids)} selected workspace(s)")
                     idx = generate_portal(state.store, anonymous=bool(body.get("anonymous")))
                     self._json({"ok": True, "index": str(idx)})
                 except Exception as exc:
@@ -1271,7 +1358,23 @@ def create_studio_server(catalog_dir: str | Path, host: str = "127.0.0.1", port:
             self.send_response(404)
             self.end_headers()
 
-    httpd = http.server.ThreadingHTTPServer((host, port), Handler)
+    class _ExclusiveServer(http.server.ThreadingHTTPServer):
+        # On Windows SO_REUSEADDR lets a second process bind a port that is already in use,
+        # so two Studios would silently share 8765. Require exclusive ownership instead.
+        allow_reuse_address = sys.platform != "win32"
+
+    httpd = None
+    last_err: OSError | None = None
+    for candidate in ([port] + [port + i for i in range(1, 11)] if port else [0]):
+        try:
+            httpd = _ExclusiveServer((host, candidate), Handler)
+            break
+        except OSError as exc:
+            last_err = exc
+    if httpd is None:
+        raise last_err or OSError(f"No free port near {port}")
+    if port and httpd.server_address[1] != port:
+        state.log(f"Port {port} is in use by another program; Studio is using port {httpd.server_address[1]} instead.")
     return httpd, state
 
 

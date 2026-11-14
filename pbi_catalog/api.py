@@ -23,6 +23,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
+from . import trace
 from .auth import TokenProvider
 
 PBI_BASE = "https://api.powerbi.com/v1.0/myorg/"
@@ -123,6 +124,7 @@ class PowerBiReadOnlyClient:
         self._assert_readonly(method, url)
         for attempt in range(1, max_retries + 1):
             token = self.token_provider.get_token()
+            started = time.perf_counter()
             try:
                 if self.prefer_curl:
                     resp = self._request_curl(method, url, token)
@@ -136,11 +138,15 @@ class PowerBiReadOnlyClient:
                         if self.log_fn:
                             self.log_fn("Switched HTTP transport to system curl for corporate proxy compatibility.")
                         resp = self._request_curl(method, url, token)
-            except Exception:
+            except Exception as exc:
+                trace.record_http(method, url, None, (time.perf_counter() - started) * 1000, attempt,
+                                  "curl" if self.prefer_curl else "urllib", error=f"{type(exc).__name__}: {exc}")
                 if attempt == max_retries:
                     raise
                 time.sleep(2 * attempt)
                 continue
+            trace.record_http(method, url, resp.status, (time.perf_counter() - started) * 1000, attempt,
+                              "curl" if self.prefer_curl else "urllib", body=resp.body, headers=resp.headers)
 
             if resp.status == 429 and attempt < max_retries:
                 wait_sec = max(5, int(resp.headers.get("retry-after") or 30))
@@ -165,39 +171,87 @@ class PowerBiReadOnlyClient:
             raise RuntimeError(f"HTTP {resp.status} on {relative_path}: {snippet}")
         return resp.json()
 
+    # ------------------------------------------------------------------
+    # Dataflow Gen1 (Power BI dataflows) - all GET calls, same OAuth token
+    # ------------------------------------------------------------------
+    def get_dataflow_definition(self, workspace_id: str, dataflow_id: str) -> dict:
+        """Export a Gen1 dataflow definition (`model.json`, including the full Power Query M section document)."""
+        resp = self.request("GET", f"{PBI_BASE}groups/{workspace_id}/dataflows/{dataflow_id}")
+        if resp.status != 200:
+            snippet = (resp.body or "").replace("\n", " ")[:240]
+            raise RuntimeError(f"HTTP {resp.status} exporting dataflow {dataflow_id}: {snippet}")
+        body = resp.body or ""
+        # model.json is sometimes returned with a UTF-8 BOM
+        return json.loads(body.lstrip("﻿")) if body.strip() else {}
+
+    def get_dataflow_upstream(self, workspace_id: str, dataflow_id: str) -> list[dict]:
+        """List dataflows this dataflow reads from (linked / computed entities)."""
+        return self.pbi_get_list(f"groups/{workspace_id}/dataflows/{dataflow_id}/upstreamDataflows")
+
+    def get_dataflow_datasources(self, workspace_id: str, dataflow_id: str) -> list[dict]:
+        return self.pbi_get_list(f"groups/{workspace_id}/dataflows/{dataflow_id}/datasources")
+
+    def get_dataset_dataflow_links(self, workspace_id: str) -> list[dict]:
+        """Dataset -> dataflow links for one workspace (`datasetObjectId`, `dataflowObjectId`, `workspaceObjectId`)."""
+        return self.pbi_get_list(f"groups/{workspace_id}/datasets/upstreamDataflows")
+
+    def _fabric_get_definition(self, url: str) -> dict:
+        """POST a Fabric `getDefinition` (read-only) and follow the 202 long-running operation to its result."""
+        resp = self.request("POST", url)
+        if resp.status == 200:
+            return resp.json().get("definition") or {}
+        if resp.status != 202:
+            snippet = (resp.body or "").replace("\n", " ")[:260]
+            raise RuntimeError(f"HTTP {resp.status} on getDefinition: {snippet}")
+        location = resp.headers.get("location") or ""
+        if not location:
+            raise RuntimeError("HTTP 202 without Location header on getDefinition.")
+        wait_sec = max(2, int(resp.headers.get("retry-after") or 2))
+        deadline = time.time() + 300
+        while time.time() < deadline:
+            time.sleep(wait_sec)
+            poll = self.request("GET", location)
+            state = poll.json()
+            st = state.get("status")
+            if st == "Succeeded":
+                res = self.request("GET", location.rstrip("/") + "/result")
+                if res.status != 200:
+                    raise RuntimeError(f"HTTP {res.status} fetching LRO result.")
+                return res.json().get("definition") or {}
+            if st == "Failed":
+                raise RuntimeError(f"Fabric getDefinition failed: {json.dumps(state.get('error') or {})}")
+            if poll.headers.get("retry-after"):
+                wait_sec = max(1, int(poll.headers["retry-after"]))
+        raise TimeoutError("Fabric getDefinition timed out after 5 minutes.")
+
+    @staticmethod
+    def _decode_parts(definition: dict, keep=None) -> dict[str, str]:
+        files: dict[str, str] = {}
+        for part in sorted(definition.get("parts") or [], key=lambda p: p.get("path", "")):
+            path = part.get("path") or ""
+            payload = part.get("payload") or ""
+            if path and payload and (keep is None or keep(path)):
+                files[path] = base64.b64decode(payload).decode("utf-8", errors="replace")
+        return files
+
+    def get_report_definition_parts(self, workspace_id: str, report_id: str) -> dict[str, str]:
+        """Report definition (PBIR or legacy report.json): report-level measures and the page / visual layout
+        (positions, visual types, bound fields, filters). Only the JSON definition parts are decoded; static
+        resources (images, custom visual packages, themes) are dropped immediately. A report definition never
+        contains query results."""
+        url = f"{FABRIC_BASE}workspaces/{workspace_id}/reports/{report_id}/getDefinition"
+
+        def keep(p: str) -> bool:
+            low = p.lower()
+            return low.endswith((".json", ".pbir")) and "resources/" not in low
+
+
+        return self._decode_parts(self._fabric_get_definition(url), keep)
+
     def get_model_tmdl_files(self, workspace_id: str, dataset_id: str) -> dict[str, str]:
         """Fetch full semantic model definition in TMDL format via Fabric REST API (handles 200 & 202 LRO)."""
         url = f"{FABRIC_BASE}workspaces/{workspace_id}/semanticModels/{dataset_id}/getDefinition?format=TMDL"
-        resp = self.request("POST", url)
-        if resp.status == 200:
-            definition = resp.json().get("definition") or {}
-        elif resp.status == 202:
-            location = resp.headers.get("location") or ""
-            if not location:
-                raise RuntimeError("HTTP 202 without Location header on getDefinition.")
-            wait_sec = max(2, int(resp.headers.get("retry-after") or 2))
-            deadline = time.time() + 300
-            definition = {}
-            while time.time() < deadline:
-                time.sleep(wait_sec)
-                poll = self.request("GET", location)
-                state = poll.json()
-                st = state.get("status")
-                if st == "Succeeded":
-                    res = self.request("GET", location.rstrip("/") + "/result")
-                    if res.status != 200:
-                        raise RuntimeError(f"HTTP {res.status} fetching LRO result.")
-                    definition = res.json().get("definition") or {}
-                    break
-                if st == "Failed":
-                    raise RuntimeError(f"Fabric getDefinition failed: {json.dumps(state.get('error') or {})}")
-                if poll.headers.get("retry-after"):
-                    wait_sec = max(1, int(poll.headers["retry-after"]))
-            else:
-                raise TimeoutError("Fabric getDefinition timed out after 5 minutes.")
-        else:
-            snippet = (resp.body or "").replace("\n", " ")[:260]
-            raise RuntimeError(f"HTTP {resp.status} on getDefinition: {snippet}")
+        definition = self._fabric_get_definition(url)
 
         files: dict[str, str] = {}
         for part in sorted(definition.get("parts") or [], key=lambda p: p.get("path", "")):

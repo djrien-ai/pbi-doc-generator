@@ -86,6 +86,31 @@ TOOLS_SPEC: list[dict[str, Any]] = [
         },
     },
     {
+        "name": "pbi_trace_measure_end_to_end",
+        "description": "Trace a DAX measure end to end: every referenced measure (with DAX), tables/columns, dataset Power Query, Dataflow Gen1 queries across all dataflow layers, and physical sources (SQL server/database/native SQL, Excel, files). Returns Markdown measure documentation from SQL to Power Query to DAX.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "measure": {"type": "string", "description": "DAX measure name (or any table / dataflow query name)."},
+                "model": {"type": "string", "description": "Optional semantic model name filter."},
+            },
+            "required": ["measure"],
+        },
+    },
+    {
+        "name": "pbi_report_layout",
+        "description": "Power BI report layout without data: list reports (filter by workspace / semantic model), the pages of a report, or the visuals of one page with their type, position, title, bound columns / measures per role, visual filters, slicer selections and text. Every field carries its end-to-end lineage object id (use pbi_trace_measure_end_to_end with that name for the full lineage).",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "report": {"type": "string", "description": "Report name or id. Omit to list reports."},
+                "page": {"type": "string", "description": "Page display name or id. Omit to list the report's pages."},
+                "workspace": {"type": "string", "description": "Optional workspace filter when listing reports."},
+                "model": {"type": "string", "description": "Optional semantic model filter when listing reports."},
+            },
+        },
+    },
+    {
         "name": "pbi_generate_portal",
         "description": "Regenerate the offline HTML Documentation & Live Lineage Portal from the local catalog store.",
         "inputSchema": {
@@ -101,7 +126,7 @@ class CatalogMcpEngine:
         self.store = store
 
     def _load_analyses(self) -> list[dict]:
-        state = self.store.load()
+        state = self.store.load_scoped()
         reports_by_ds: dict[str, list[dict]] = collections.defaultdict(list)
         for r in state["reports"].values():
             if r.get("dataset_id"):
@@ -116,7 +141,7 @@ class CatalogMcpEngine:
         return out
 
     def call_tool(self, name: str, args: dict[str, Any]) -> Any:
-        state = self.store.load()
+        state = self.store.load_scoped()
         if name == "pbi_catalog_summary":
             analyses = self._load_analyses()
             return {
@@ -266,6 +291,61 @@ class CatalogMcpEngine:
                         continue
                     findings.append({"model": a["name"], "workspace": a["workspace"], **f})
             return findings
+
+        if name == "pbi_trace_measure_end_to_end":
+            from .e2e_lineage import build_e2e_graph, find_nodes, render_measure_doc_markdown
+
+            graph = build_e2e_graph(self.store)
+            hits = find_nodes(graph, args.get("measure", ""), kind="measure", model=args.get("model", "")) or find_nodes(
+                graph, args.get("measure", ""), model=args.get("model", "")
+            )
+            if not hits:
+                return {"error": f"No measure or object matching '{args.get('measure', '')}' found."}
+            return {
+                "object_id": hits[0]["id"],
+                "other_matches": [h["id"] for h in hits[1:10]],
+                "documentation_markdown": render_measure_doc_markdown(graph, hits[0]["id"]),
+            }
+
+        if name == "pbi_report_layout":
+            from .e2e_lineage import build_e2e_graph
+            from .report_explorer import _Resolver
+
+            state = self.store.load_scoped()
+            models = state.get("models", {})
+            want = (args.get("report") or "").strip().lower()
+            reps = [r for r in state.get("reports", {}).values() if r.get("page_count")]
+            if not want:
+                ws, mdl = (args.get("workspace") or "").lower(), (args.get("model") or "").lower()
+                return [
+                    {"id": r["id"], "name": r.get("name", ""), "workspace": r.get("workspace", ""),
+                     "model": (models.get(r.get("dataset_id", "")) or {}).get("name", ""), "pages": r.get("page_count", 0), "visuals": r.get("visual_count", 0)}
+                    for r in sorted(reps, key=lambda r: (r.get("workspace", ""), r.get("name", "")))
+                    if (not ws or ws in r.get("workspace", "").lower()) and (not mdl or mdl in (models.get(r.get("dataset_id", "")) or {}).get("name", "").lower())
+                ]
+            rep = next((r for r in reps if r["id"].lower() == want), None) or next((r for r in reps if r.get("name", "").lower() == want), None)                 or next((r for r in reps if want in r.get("name", "").lower()), None)
+            if not rep:
+                return {"error": f"No report with a stored layout matching '{args.get('report')}'. Rescan with report-level measures enabled."}
+            lay = self.store.read_report_layout(rep["id"])
+            pg_want = (args.get("page") or "").strip().lower()
+            base = {"report": rep.get("name", ""), "report_id": rep["id"], "workspace": rep.get("workspace", ""),
+                    "model": (models.get(rep.get("dataset_id", "")) or {}).get("name", ""), "report_filters": lay.get("filters", [])}
+            if not pg_want:
+                base["pages"] = [{"name": p["name"], "display": p["display"], "hidden": p["hidden"], "visuals": len(p["visuals"]),
+                                  "filters": [f.get("condition") or (f.get("field") or {}).get("name") for f in p.get("filters", [])]} for p in lay.get("pages", [])]
+                return base
+            page = next((p for p in lay.get("pages", []) if pg_want in (p["name"].lower(), p["display"].lower())), None)
+            if not page:
+                return {"error": f"Page '{args.get('page')}' not found", "pages": [p["display"] for p in lay.get("pages", [])]}
+            res = _Resolver(build_e2e_graph(self.store)["nodes"])
+            ds = rep.get("dataset_id", "")
+            for v in page["visuals"]:
+                for fields in (v.get("roles") or {}).values():
+                    for f in fields:
+                        f["lineage_object_id"] = res.node(f, ds, rep["id"]) or None
+            base["page"] = {k: page[k] for k in ("name", "display", "width", "height", "hidden", "filters")}
+            base["visuals"] = page["visuals"]
+            return base
 
         if name == "pbi_generate_portal":
             idx = generate_portal(self.store, anonymous=bool(args.get("anonymous")))
