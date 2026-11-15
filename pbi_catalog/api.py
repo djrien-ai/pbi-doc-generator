@@ -12,12 +12,16 @@ Features:
 from __future__ import annotations
 
 import base64
+import http.client
 import json
 import shutil
+import ssl
 import subprocess
 import tempfile
+import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
@@ -47,6 +51,9 @@ class PowerBiReadOnlyClient:
         self.prefer_curl = prefer_curl
         self.log_fn = log_fn
         self._curl_bin = shutil.which("curl.exe") or shutil.which("curl")
+        self._ssl_ctx = ssl.create_default_context()
+        self._proxies = urllib.request.getproxies()
+        self._tls = threading.local()
 
     def _assert_readonly(self, method: str, url: str) -> None:
         m = method.upper()
@@ -56,15 +63,72 @@ class PowerBiReadOnlyClient:
             return
         raise PermissionError(f"Blocked non-read-only HTTP call: {method} {url}")
 
+    def _get_persistent_conn(self, scheme: str, host: str, port: int) -> http.client.HTTPConnection:
+        conns: dict[tuple[str, str, int], http.client.HTTPConnection] = getattr(self._tls, "conns", None)
+        if conns is None:
+            conns = {}
+            self._tls.conns = conns
+        key = (scheme, host, port)
+        conn = conns.get(key)
+        if conn is None:
+            if scheme == "https":
+                conn = http.client.HTTPSConnection(host, port=port, timeout=120, context=self._ssl_ctx)
+            else:
+                conn = http.client.HTTPConnection(host, port=port, timeout=120)
+            conns[key] = conn
+        return conn
+
+    def _drop_persistent_conn(self, scheme: str, host: str, port: int) -> None:
+        conns: dict[tuple[str, str, int], http.client.HTTPConnection] | None = getattr(self._tls, "conns", None)
+        if conns:
+            old = conns.pop((scheme, host, port), None)
+            if old is not None:
+                try:
+                    old.close()
+                except Exception:
+                    pass
+
     def _request_urllib(self, method: str, url: str, token: str) -> HttpResponse:
-        headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
-        data = None
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/json",
+            "Connection": "keep-alive",
+        }
+        body_bytes: bytes | None = None
         if method.upper() == "POST":
             headers["Content-Type"] = "application/json"
-            data = b""
-        req = urllib.request.Request(url, data=data, headers=headers, method=method.upper())
+            headers["Content-Length"] = "0"
+            body_bytes = b""
+
+        if not self._proxies:
+            parsed = urllib.parse.urlsplit(url)
+            scheme = (parsed.scheme or "https").lower()
+            host = parsed.hostname or ""
+            port = parsed.port or (443 if scheme == "https" else 80)
+            target = (parsed.path or "/") + (f"?{parsed.query}" if parsed.query else "")
+            if host and scheme in ("https", "http"):
+                for conn_try in range(2):
+                    conn = self._get_persistent_conn(scheme, host, port)
+                    try:
+                        conn.request(method.upper(), target, body=body_bytes, headers=headers)
+                        resp = conn.getresponse()
+                        raw = resp.read()
+                        hdrs = {k.lower(): v for k, v in resp.getheaders()}
+                        if hdrs.get("connection", "").lower() == "close":
+                            self._drop_persistent_conn(scheme, host, port)
+                        return HttpResponse(
+                            status=resp.status,
+                            headers=hdrs,
+                            body=raw.decode("utf-8", errors="replace"),
+                        )
+                    except (http.client.HTTPException, OSError, EOFError) as exc:
+                        self._drop_persistent_conn(scheme, host, port)
+                        if conn_try == 1:
+                            raise urllib.error.URLError(exc) from exc
+
+        req = urllib.request.Request(url, data=body_bytes, headers=headers, method=method.upper())
         try:
-            with urllib.request.urlopen(req, timeout=120) as resp:
+            with urllib.request.urlopen(req, timeout=120, context=self._ssl_ctx) as resp:
                 hdrs = {k.lower(): v for k, v in resp.headers.items()}
                 body = resp.read().decode("utf-8", errors="replace")
                 return HttpResponse(status=resp.status, headers=hdrs, body=body)
@@ -119,7 +183,7 @@ class PowerBiReadOnlyClient:
         finally:
             hdr_path.unlink(missing_ok=True)
 
-    def request(self, method: str, url: str, max_retries: int = 4) -> HttpResponse:
+    def request(self, method: str, url: str, max_retries: int = 6) -> HttpResponse:
         self._assert_readonly(method, url)
         for attempt in range(1, max_retries + 1):
             token = self.token_provider.get_token()
@@ -141,6 +205,15 @@ class PowerBiReadOnlyClient:
                     raise
                 time.sleep(2 * attempt)
                 continue
+
+            if resp.status == 401 and attempt == 1 and hasattr(self.token_provider, "refresh_on_unauthorized"):
+                try:
+                    if self.log_fn:
+                        self.log_fn("Session token expired during scan; refreshing token automatically...")
+                    self.token_provider.refresh_on_unauthorized()
+                    continue
+                except Exception:
+                    pass
 
             if resp.status == 429 and attempt < max_retries:
                 wait_sec = max(5, int(resp.headers.get("retry-after") or 30))
@@ -165,9 +238,8 @@ class PowerBiReadOnlyClient:
             raise RuntimeError(f"HTTP {resp.status} on {relative_path}: {snippet}")
         return resp.json()
 
-    def get_model_tmdl_files(self, workspace_id: str, dataset_id: str) -> dict[str, str]:
-        """Fetch full semantic model definition in TMDL format via Fabric REST API (handles 200 & 202 LRO)."""
-        url = f"{FABRIC_BASE}workspaces/{workspace_id}/semanticModels/{dataset_id}/getDefinition?format=TMDL"
+    def _fetch_fabric_definition_parts(self, url: str, keep: Callable[[str], bool] | None = None) -> dict[str, str]:
+        """Execute a read-only Fabric `getDefinition` POST (supports immediate 200 and async 202 LRO)."""
         resp = self.request("POST", url)
         if resp.status == 200:
             definition = resp.json().get("definition") or {}
@@ -175,10 +247,20 @@ class PowerBiReadOnlyClient:
             location = resp.headers.get("location") or ""
             if not location:
                 raise RuntimeError("HTTP 202 without Location header on getDefinition.")
-            wait_sec = max(2, int(resp.headers.get("retry-after") or 2))
+            # Fabric returns a static Retry-After: 20 header on 202 Accepted even when definitions
+            # finish in < 1s. Progressive polling (1s -> 2s -> 4s -> 8s -> server hint) cuts LRO latency ~10x
+            # with zero extra API calls on fast definitions while backing off politely on huge models.
+            try:
+                server_hint = max(1.0, float(resp.headers.get("retry-after") or 2.0))
+            except ValueError:
+                server_hint = 5.0
+            poll_schedule = (1.0, 2.0, 4.0, 8.0)
+            poll_idx = 0
             deadline = time.time() + 300
             definition = {}
             while time.time() < deadline:
+                wait_sec = poll_schedule[poll_idx] if poll_idx < len(poll_schedule) else min(server_hint, 12.0)
+                poll_idx += 1
                 time.sleep(wait_sec)
                 poll = self.request("GET", location)
                 state = poll.json()
@@ -191,8 +273,6 @@ class PowerBiReadOnlyClient:
                     break
                 if st == "Failed":
                     raise RuntimeError(f"Fabric getDefinition failed: {json.dumps(state.get('error') or {})}")
-                if poll.headers.get("retry-after"):
-                    wait_sec = max(1, int(poll.headers["retry-after"]))
             else:
                 raise TimeoutError("Fabric getDefinition timed out after 5 minutes.")
         else:
@@ -203,6 +283,57 @@ class PowerBiReadOnlyClient:
         for part in sorted(definition.get("parts") or [], key=lambda p: p.get("path", "")):
             path = part.get("path") or ""
             payload = part.get("payload") or ""
-            if path and payload:
+            if path and payload and (keep is None or keep(path)):
                 files[path] = base64.b64decode(payload).decode("utf-8", errors="replace")
         return files
+
+    def get_model_tmdl_files(self, workspace_id: str, dataset_id: str) -> dict[str, str]:
+        """Fetch full semantic model definition in TMDL format via Fabric REST API (handles 200 & 202 LRO)."""
+        url = f"{FABRIC_BASE}workspaces/{workspace_id}/semanticModels/{dataset_id}/getDefinition?format=TMDL"
+        return self._fetch_fabric_definition_parts(url)
+
+    def get_report_definition_files(self, workspace_id: str, report_id: str) -> dict[str, str]:
+        """Fetch Power BI report layout/PBIR definition via Fabric REST API (drops binary static resources)."""
+        url = f"{FABRIC_BASE}workspaces/{workspace_id}/reports/{report_id}/getDefinition"
+
+        def _keep_json(p: str) -> bool:
+            low = p.lower()
+            return low.endswith((".json", ".pbir")) and "resources/" not in low
+
+        return self._fetch_fabric_definition_parts(url, keep=_keep_json)
+
+    # Alias for callers expecting PR #19 method name
+    get_report_definition_parts = get_report_definition_files
+
+    def get_dataflow_definition(self, workspace_id: str, dataflow_id: str) -> dict:
+        """Export a Power BI Dataflow Gen1 `model.json` definition (including the full M section document)."""
+        resp = self.request("GET", f"{PBI_BASE}groups/{workspace_id}/dataflows/{dataflow_id}")
+        if resp.status != 200:
+            snippet = (resp.body or "").replace("\n", " ")[:240]
+            raise RuntimeError(f"HTTP {resp.status} exporting dataflow {dataflow_id}: {snippet}")
+        body = (resp.body or "").lstrip("\ufeff")
+        return json.loads(body) if body.strip() else {}
+
+    def get_fabric_dataflow_definition(self, workspace_id: str, dataflow_id: str) -> dict:
+        """Export a Microsoft Fabric Dataflow Gen2 definition (`mashup.pq` + `queryMetadata.json`)."""
+        url = f"{FABRIC_BASE}workspaces/{workspace_id}/dataflows/{dataflow_id}/getDefinition"
+        parts = self._fetch_fabric_definition_parts(url)
+        return {"format": "Gen2", "parts": parts} if parts else {}
+
+    def get_dataflow_upstream(self, workspace_id: str, dataflow_id: str) -> list[dict]:
+        """List upstream dataflows this dataflow reads from (linked / computed entities)."""
+        return self.pbi_get_list(f"groups/{workspace_id}/dataflows/{dataflow_id}/upstreamDataflows")
+
+    def get_dataflow_datasources(self, workspace_id: str, dataflow_id: str) -> list[dict]:
+        return self.pbi_get_list(f"groups/{workspace_id}/dataflows/{dataflow_id}/datasources")
+
+    def get_dataset_dataflow_links(self, workspace_id: str) -> list[dict]:
+        """Dataset -> dataflow links for one workspace (`datasetObjectId`, `dataflowObjectId`, `workspaceObjectId`)."""
+        return self.pbi_get_list(f"groups/{workspace_id}/datasets/upstreamDataflows")
+
+    def get_fabric_workspace_items(self, workspace_id: str) -> list[dict]:
+        """Fetch Microsoft Fabric items (Lakehouses, Warehouses, Dataflow Gen2, Notebooks) when workspace is on Fabric."""
+        resp = self.request("GET", f"{FABRIC_BASE}workspaces/{workspace_id}/items")
+        if resp.status == 200:
+            return list(resp.json().get("value") or [])
+        return []

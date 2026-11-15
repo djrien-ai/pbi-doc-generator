@@ -24,7 +24,7 @@ jobs:
       - name: Checkout E2E verification script
         uses: actions/checkout@v4
 
-      - name: Download exact v1.0.0 Portable ZIP artifact from release build
+      - name: Download Portable ZIP artifact from build run
         uses: actions/download-artifact@v4
         with:
           name: PBI_Doc_Generator_Windows_Portable
@@ -63,6 +63,7 @@ jobs:
         run: |
           pyinstaller --noconfirm --clean --onedir --noupx `
             --name PBI_Doc_Generator `
+            --collect-submodules pbi_catalog `
             --collect-all pbixray `
             --collect-all playwright `
             --hidden-import mermaid_js `
@@ -77,9 +78,10 @@ jobs:
       - name: Add START_HERE.txt & smoke-test compiled executable
         shell: pwsh
         run: |
-          & "dist/PBI_Doc_Generator/PBI_Doc_Generator.exe" --version
+          $ver = (& "dist/PBI_Doc_Generator/PBI_Doc_Generator.exe" --version | Out-String).Trim()
+          Write-Host "Built version: $ver"
           @(
-            "PBI Doc Generator v1.0 - Quick Start"
+            "$ver - Quick Start"
             "===================================="
             ""
             "1. Double-click PBI_Doc_Generator.exe in this folder."
@@ -93,9 +95,23 @@ jobs:
         shell: pwsh
         run: |
           Compress-Archive -Path "dist/PBI_Doc_Generator/*" -DestinationPath "dist/PBI_Doc_Generator_Windows_Portable.zip" -Force
-          $hdr = Get-Content -Raw ".github/RELEASE_HEADER.md"
+          $tag = "${{ github.ref_name }}"
+          $hdr = (Get-Content -Raw ".github/RELEASE_HEADER.md").Replace(
+            "git+https://github.com/djrien-ai/pbi-doc-generator.git",
+            "git+https://github.com/djrien-ai/pbi-doc-generator.git@$tag"
+          )
           $chg = Get-Content -Raw "CHANGELOG.md"
-          ($hdr + "`r`n" + $chg) | Set-Content -Path "dist/RELEASE_NOTES.md" -Encoding UTF8
+          $rcBanner = ""
+          if ($tag -match "-") {
+            $rcBanner = @(
+              '> [!TIP]'
+              ('> **Public Release Candidate (`' + $tag + '`)**')
+              '> Looking for the current official stable release (`v1.0.0`)? Go to [**Latest Stable Release**](https://github.com/djrien-ai/pbi-doc-generator/releases/latest).'
+              '> Testing `v1.1`? Share your results or edge cases in [**Early Access & Feedback Hub (#20)**](https://github.com/djrien-ai/pbi-doc-generator/issues/20) to get credited in the official `v1.1.0` Release Notes!'
+              ''
+            ) -join "`r`n"
+          }
+          ($rcBanner + $hdr + "`r`n" + $chg) | Set-Content -Path "dist/RELEASE_NOTES.md" -Encoding UTF8
 
       - name: Run full end-user Windows PC E2E simulation on Portable ZIP
         shell: pwsh
@@ -132,3 +148,5 @@ jobs:
           body_path: dist/RELEASE_NOTES.md
           files: dist/PBI_Doc_Generator_Windows_Portable.zip
           generate_release_notes: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          make_latest: ${{ contains(github.ref_name, '-') && 'false' || 'true' }}

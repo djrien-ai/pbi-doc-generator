@@ -1,5 +1,5 @@
 """
-PBI Doc Generator v1.0 - Zero-Admin Workspace Catalog, TMDL Analyzer & MCP Server.
+PBI Doc Generator v1.1 - Zero-Admin Workspace Catalog, TMDL Analyzer, Report X-Ray & MCP Server.
 """
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"

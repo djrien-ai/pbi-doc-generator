@@ -9,5 +9,9 @@ venv/
 .env
 *.token
 browser_profile/
-demo_catalog/
+/demo_catalog/
+/catalog/
+exports/
+_exports/
+*.pbix
 .pytest_cache/
