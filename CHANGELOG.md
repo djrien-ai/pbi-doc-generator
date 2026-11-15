@@ -6,21 +6,19 @@ This project follows [Semantic Versioning](https://semver.org/).
 ## [1.1.0] - Unreleased (Public Preview on branch `v1.1`)
 
 ### Added
-- **Multi-Layer Dataflow Gen1 & Fabric Dataflow Gen2 Lineage:**
-  - Full **Dataflow Gen1** (`model.json`) extraction with `L1` / `L2+` chained dataflow and `ReferenceEntity` linked-entity resolution across workspaces, query role classification, and automatic privacy scrubbing of internal storage locations (contributed by `@andreasfelder` in PR #19).
-  - Native **Fabric Dataflow Gen2** (`mashup.pq` + `queryMetadata.json`) extraction with OneLake **Lakehouse** and **Warehouse** destination mapping, plus **Direct Lake** semantic model entity binding.
-- **Native SQL Formatter & Clickable Power Query Step Interpreter:** Pretty-prints embedded SQL queries (`Value.NativeQuery`, `Sql.Database`, `Snowflake`, `SapHana`, etc.) and explains M transformation steps in plain English with expandable raw M expressions (contributed by `@andreasfelder` in PR #19).
-- **Cloud Thin-Report Definitions & Slide-Over Report X-Ray Inspector:**
-  - Extracts cloud report definitions (`PBIR` and legacy `report.json`), report-local DAX measures bound to shared semantic models, page/visual filters, slicer selections, and broken visual field bindings (contributed by `@andreasfelder` in PR #19).
-  - New **Slide-Over Report & Dataflow X-Ray Drawer** keeping a calm 4-tab portal architecture (`Semantic Models`, `Workspaces & Reports`, `Live Lineage`, `Governance & Health`) with interactive **16:9 SVG page wireframes**, chart type glyphs, visual-group containers, and a 1-click broken-binding stepper.
-- **End-to-End Measure Lineage (`Visual -> DAX -> Power Query -> Dataflow -> SQL`):**
-  - Deep multi-hop lineage engine (`e2e_lineage.py`) and `pbi-doc-generator measure-doc` CLI export (contributed by `@andreasfelder` in PR #19).
-  - Expanded MCP server from 8 to **10 read-only tools**, adding `pbi_trace_measure_end_to_end` and `pbi_report_layout`.
-- **Unified `Export / Publish` Modal & SharePoint Online Publishing:**
-  - Scope exports to either **This Semantic Model** or the **Entire Catalog**: A4 Print / PDF, self-contained HTML, offline `.zip` archive, Data Dictionary (`Word` / `Markdown` / `CSV`), compressed `srcdoc`-safe single-file SharePoint HTML (`export-site`, contributed by `@andreasfelder`), and **direct 1-click upload to a SharePoint Online Document Library URL**.
-- **Enterprise Scale & Studio UX Overhaul:**
-  - Parallel workspace scanning (4 concurrent models, 8 concurrent reports), `--follow-outside` workspace boundary control, and thread-safe `catalog_state.json` persistence fixing Windows `WinError 5` file-locking collisions (contributed by `@andreasfelder` in PR #19).
-  - Progressive 3-step Web Studio workflow (`1. Connect -> 2. Choose Workspaces -> 3. Scan & Build`), deliberate workspace selection on tenants with `> 5` workspaces, `Sign Out / Switch Account`, and zero-dependency native HTML+SVG Star-Schema Explorer.
+- **Slide-Over Report & Dataflow X-Ray Inspector (#14, #17):**
+  - Calm 4-tab portal architecture (`Semantic Models`, `Workspaces & Reports`, `Live Lineage`, `Governance & Health`) paired with a slide-over X-Ray drawer for cloud thin reports (`PBIR` and legacy `report.json`) and Dataflows.
+  - Interactive **16:9 SVG page wireframes** with chart-type schematics, visual group containers, field/filter/slicer bindings, thin-report local DAX measures (`reportExtensions.json`), and a **1-click Broken Visual Binding Stepper**.
+- **Dataflow Gen1, Fabric Dataflow Gen2 & Direct Lake Lineage (#13, #18):**
+  - Multi-layer **Dataflow Gen1** (`model.json`, `L1` / `L2+` chained dataflows and `ReferenceEntity` linked entities across workspaces) and **Fabric Dataflow Gen2** (`mashup.pq` + OneLake Lakehouse / Warehouse table destinations) connected to Direct Lake and Import semantic models.
+  - Embedded **Native SQL formatter** and clickable **Power Query M step interpreter**.
+- **Zero-Dependency Star-Schema Explorer & End-to-End Measure Lineage (#15):**
+  - Native HTML+SVG Star-Schema Explorer with Focused Star tabs per Fact table, SQLBI-formatted DAX measures with `Used in Reports` / `Unused` filters, `measure-doc` CLI export, and **10 read-only MCP tools** (adding `pbi_trace_measure_end_to_end` and `pbi_report_layout`).
+- **Scoped Export & 1-Click SharePoint Online Publishing:**
+  - Unified `Export / Publish` dialog scoped to either **This Semantic Model** or the **Entire Catalog**: A4 Print / PDF, standalone HTML, `.zip` archive, Data Dictionary (`Word` / `Markdown` / `CSV`), direct **1-click upload to a SharePoint Online Document Library URL**, and compressed `srcdoc`-safe single-file SharePoint HTML (`export-site`).
+- **Guided 3-Step Web Studio & Parallel Enterprise Scanning:**
+  - Progressive `1. Connect -> 2. Choose Workspaces -> 3. Scan & Build` workflow, deliberate workspace selection on tenants with `> 5` workspaces, `Sign Out / Switch Account`, `Update` vs. `Clean Slate` catalog modes, `--follow-outside` workspace scoping, and parallel thread-safe extraction.
+  - Includes PR #19 contributions by `@andreasfelder` toward #13 and #14.
 
 ## [1.0.0] - 2026-11-12
 

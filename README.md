@@ -1,102 +1,105 @@
-# Power BI Documentation & Live Lineage Studio (`pbi-doc-generator` v1.1 Preview)
+# Power BI Documentation, Report X-Ray & Live Lineage Studio (`pbi-doc-generator` v1.1)
 
 [![CI](https://github.com/djrien-ai/pbi-doc-generator/actions/workflows/ci.yml/badge.svg?branch=v1.1)](https://github.com/djrien-ai/pbi-doc-generator/actions/workflows/ci.yml)
-[![Live Demo Portal](https://img.shields.io/badge/Live_Demo-Stable_v1.0_Portal-0b63ce?logo=github)](https://djrien-ai.github.io/pbi-doc-generator/)
-[![Download Windows ZIP](https://img.shields.io/badge/Windows_Download-Stable_v1.0_Portable_.zip-15803d?logo=windows)](https://github.com/djrien-ai/pbi-doc-generator/releases/latest/download/PBI_Doc_Generator_Windows_Portable.zip)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-3776AB.svg)](https://www.python.org/)
 [![100% Local & Read-Only](https://img.shields.io/badge/Privacy-100%25_Local_%26_Read--Only-0f766e.svg)](SECURITY.md)
+[![LinkedIn](https://img.shields.io/badge/LinkedIn-Rien_Scheerlinck-0A66C2?logo=linkedin&logoColor=white)](https://www.linkedin.com/in/rienscheerlinck/)
 [![Support on Ko-fi](https://img.shields.io/badge/Support_on_Ko--fi-Buy_me_a_coffee-FF5E5B?logo=ko-fi&logoColor=white)](https://ko-fi.com/rienscheerlinck)
 
-> [!TIP]
-> **You are viewing the `v1.1` Public Preview branch**
-> - **Stable Release (`v1.0.0`):** Remains the default on [`main`](https://github.com/djrien-ai/pbi-doc-generator/tree/main) and in the [latest Windows Portable `.zip`](https://github.com/djrien-ai/pbi-doc-generator/releases/latest).
-> - **What is new in `v1.1`:** Multi-layer **Dataflow Gen1** & **Fabric Dataflow Gen2** (`OneLake` / `Direct Lake`), **Slide-Over Report X-Ray Inspector** (16:9 SVG page wireframes, thin-report DAX, and broken visual bindings), **End-to-End Visual-to-SQL Lineage**, **Unified Export & 1-Click SharePoint Online Publishing** (entire catalog or per semantic model), **10 MCP tools**, and parallel enterprise scanning.
-> - **Test `v1.1` right now & share feedback in [PR #19](https://github.com/djrien-ai/pbi-doc-generator/pull/19):**
->   - **Via `pip`:** `pip install --upgrade "git+https://github.com/djrien-ai/pbi-doc-generator.git@v1.1"`
->   - **Via Git / Source ZIP on Windows:** `git clone -b v1.1 https://github.com/djrien-ai/pbi-doc-generator.git` and double-click **`Start_Studio.cmd`** *(or open `docs/index.html` directly in your browser to explore the generated `v1.1` demo portal offline)*.
+> [!IMPORTANT]
+> **`v1.1` Public Preview (In Progress)**
+> You are viewing the active **`v1.1` preview branch**, open for early testing and community feedback ahead of the official `v1.1.0` release.
+> - **Try `v1.1` right now:** `pip install --upgrade "git+https://github.com/djrien-ai/pbi-doc-generator.git@v1.1"` -> run `pbi-doc-generator`
+> - **Explore the `v1.1` Demo offline:** Clone or download this `v1.1` branch and open [`docs/index.html`](docs/index.html) directly in your browser (or double-click `Start_Studio.cmd` on Windows).
+> - **Looking for the current stable release (`v1.0.0`)?** Switch to [`main`](https://github.com/djrien-ai/pbi-doc-generator/tree/main) or download the stable Windows `.exe` from [Releases](https://github.com/djrien-ai/pbi-doc-generator/releases/latest).
 
-Turn **Power BI Service / Microsoft Fabric Workspaces** and local **`.pbix` / `.pbip` / `.xlsx`** files into clean, searchable HTML documentation with **interactive Star-Schema diagrams**, **SQLBI-formatted DAX catalogs**, **Dataflow Gen1 & Gen2 + Native SQL pipelines**, **Slide-Over Report X-Ray wireframes**, **end-to-end Visual-to-SQL Live Lineage**, and a **built-in local Model Context Protocol (MCP) server** for AI assistants.
-
-👉 [**Explore the Live Interactive v1.0 Stable Demo Portal**](https://djrien-ai.github.io/pbi-doc-generator/) *(for the `v1.1` preview demo, clone/download branch `v1.1` and open `docs/index.html` locally)*
+Turn **Power BI Service / Microsoft Fabric Workspaces** and local **`.pbix` / `.pbip` / `.xlsx`** files into an interactive, searchable architecture portal. Trace any number on a report page from **Visual -> Report-Level DAX -> Semantic Model -> Power Query & Native SQL -> Dataflow Gen1 / Fabric Gen2 -> OneLake / Source Database**, 100% locally and read-only.
 
 ---
 
-## Quick Start
+## Why BI & Fabric Teams Upgrade to `v1.1`
 
-### Option 1: Test `v1.1` Preview (Python 3.10+ on Windows, macOS & Linux)
+Most Power BI documentation tools stop at a single `.pbix` file, while Power BI's native Workspace Lineage View stops at the container boundary (`Dataflow -> Semantic Model -> Report`) without showing *which* SQL query, Dataflow entity, column, or DAX measure drives *which* visual.
+
+`pbi-doc-generator v1.1` connects the entire estate inside a calm, zero-clutter **4-tab portal**:
+
+1. **Slide-Over Report & Dataflow X-Ray Inspector (No Tab Sprawl)**
+   - Click any Power BI report (`PBIR` or legacy `report.json`) to open a slide-over X-Ray drawer without losing your place in the catalog.
+   - Renders **16:9 SVG page wireframes** with chart-type schematics, visual group containers, bound measures/columns, report/page/visual filters, slicer selections, **thin-report local DAX measures** (`reportExtensions.json`), and a **1-click Broken Visual Binding Stepper** that highlights visuals pointing to renamed or deleted fields.
+2. **Deep Dataflow Gen1, Fabric Dataflow Gen2 & Direct Lake Lineage**
+   - Follows multi-layer **Dataflow Gen1** chains (`L1` / `L2+` linked `ReferenceEntity` tables across workspaces) and **Fabric Dataflow Gen2** (`mashup.pq` + OneLake **Lakehouse** and **Warehouse** table destinations), connected directly to **Direct Lake** and Import semantic models.
+   - Automatically extracts and formats embedded **Native SQL** (`Value.NativeQuery`, `Sql.Database`, `SapHana`, `Snowflake`, `Odbc.Query`) and translates Power Query M into clickable plain-English transformation steps.
+3. **Zero-Dependency Star-Schema Explorer & SQLBI-Formatted DAX Catalog**
+   - Native HTML+SVG **Star-Schema Explorer** with **Focused Star** tabs per Fact table, zoom, pan, fullscreen, and click-to-pin relationship highlighting.
+   - Pretty-prints single-line DAX into clean **SQLBI-style formatting**, grouped by `Table -> Display Folder -> Dependency Tier`, with instant filter pills (`All`, `Used in Reports`, `Unused`) and end-to-end upstream/downstream trace links.
+4. **Scoped Export & 1-Click SharePoint Online Publishing**
+   - Click **Export / Publish** from the catalog or from any individual semantic model page and choose your scope (**This Semantic Model** or **Entire Catalog**):
+     - **Print / Save as PDF** (clean A4 portrait executive layout)
+     - **Standalone HTML** or **Offline Portal `.zip`**
+     - **Data Dictionary** (`Word .doc`, `Markdown`, or `CSV`)
+     - **SharePoint Online:** either upload directly in 1 click to a SharePoint Document Library URL or download a compressed `srcdoc`-safe single-file HTML portal (`export-site`).
+5. **Guided 3-Step Local Web Studio (`http://127.0.0.1:8765`)**
+   - **Zero Azure Admin Setup:** Sign in with your normal Microsoft work account (`Sign in with Microsoft` OAuth PKCE in your default browser, corporate `Power BI Web Window` SSO fallback, Azure CLI, or Service Principal).
+   - **Safe & Fast at Scale:** Progressive `1. Connect -> 2. Choose Workspaces -> 3. Scan & Build` workflow, parallel extraction (4 models / 8 reports concurrently), optional `--follow-outside` cross-workspace resolution, and explicit `Update Catalog` vs. `Clean Slate` scan modes.
+   - **100% Offline Local Mode:** Drag and drop local `.pbix`, `.pbip` / `.SemanticModel`, and Excel PowerPivot `.xlsx` files without signing in.
+6. **10-Tool Local Model Context Protocol (MCP) Server for AI Assistants**
+   - Connect **VS Code GitHub Copilot**, **Claude Desktop**, **Cursor**, or **Antigravity** to your local catalog (`pbi-doc-generator mcp`) for instant visual-to-SQL impact analysis, DAX explanations, report layout inspection, and governance audits with automatic secret masking.
+
+---
+
+## Quick Start (`v1.1` Preview)
+
+### Option 1: Install `v1.1` Preview via `pip` (Python 3.10+ on Windows, macOS & Linux)
 
 ```bash
 pip install --upgrade "git+https://github.com/djrien-ai/pbi-doc-generator.git@v1.1"
 ```
 
-Launch the local Web Studio from anywhere:
+Launch the local Web Studio:
 
 ```bash
 pbi-doc-generator
 ```
 
-*(On Windows with Python installed, you can also download or `git clone -b v1.1` this branch and double-click **`Start_Studio.cmd`** - it installs `requirements.txt` automatically on first launch.)*
+### Option 2: Run from Source on Windows (`Start_Studio.cmd`)
 
-### Option 2: Stable `v1.0.0` Portable Windows Download (No Python Required)
+```bash
+git clone -b v1.1 https://github.com/djrien-ai/pbi-doc-generator.git
+cd pbi-doc-generator
+Start_Studio.cmd
+```
 
-*(Note: Official `v1.1` zero-install Portable `.zip` binaries will be published to Releases once community preview testing concludes. Until then, the link below serves the stable `v1.0.0` executable.)*
+*(Note: Once `v1.1` preview testing wraps up, the zero-install `PBI_Doc_Generator_Windows_Portable.zip` executable on the [Releases page](https://github.com/djrien-ai/pbi-doc-generator/releases/latest) will be updated from `v1.0.0` to `v1.1.0`.)*
 
-1. [**Download `PBI_Doc_Generator_Windows_Portable.zip` (Stable v1.0.0)**](https://github.com/djrien-ai/pbi-doc-generator/releases/latest/download/PBI_Doc_Generator_Windows_Portable.zip) *(or view the [Release page](https://github.com/djrien-ai/pbi-doc-generator/releases/latest))*.
-2. Right-click the downloaded ZIP file and choose **Extract All...**
-3. Open the extracted folder and double-click **`PBI_Doc_Generator.exe`** -> your browser opens **`http://127.0.0.1:8765`** automatically.
-   *(If Windows SmartScreen asks for confirmation on first launch: click **More info** -> **Run anyway**.)*
-
-> [!IMPORTANT]
+> [!NOTE]
 > **Power BI Service Workspace Role Prerequisite (`Contributor` or higher)**
-> To extract full semantic model, dataflow, and PBIR report definitions from Power BI Service workspaces, your Microsoft account must have at least the **Contributor** role (**Contributor**, **Member**, or **Admin**) in each workspace you want to document.
-> - Workspaces where you only have the **Viewer** role will list basic workspace and report inventory, because Microsoft's Fabric `getDefinition` API blocks `Viewer`-only accounts (`HTTP 403`).
-> - Documenting local `.pbix`, `.pbip`, and `.xlsx` files works 100% offline and requires no Power BI Service permissions.
-
----
-
-## What Is Inside v1.1
-
-1. **Power BI Service & Microsoft Fabric Multi-Workspace Scanner (Zero Azure Admin Setup)**
-   - Sign in with your normal Microsoft account (`Sign in with Microsoft` OAuth 2.0 PKCE in your default browser, plus a fallback `Power BI Web Window` mode for locked-down corporate tenants, Azure CLI, and Service Principal support for CI/CD).
-   - Parallel extraction across 1 to 50+ workspaces (`--follow-outside` optionally resolves upstream shared models and chained dataflows in external workspaces).
-2. **Multi-Layer Dataflow Gen1, Fabric Dataflow Gen2 & Direct Lake Lineage**
-   - Extracts **Power BI Dataflow Gen1** (`model.json`, `L1` / `L2+` chained dataflows, `ReferenceEntity` linked entities) and **Fabric Dataflow Gen2** (`mashup.pq` + Lakehouse / Warehouse OneLake destinations) alongside **Direct Lake** OneLake entity bindings.
-   - Pretty-prints embedded **Native SQL** (`Value.NativeQuery` / `[Query=...]`) and interprets Power Query M steps into clickable plain-English transformation ribbons.
-3. **Slide-Over Report X-Ray Inspector & Broken Visual Detection**
-   - Inspects cloud thin reports (`PBIR` and legacy `report.json`) without leaving your place in the catalog: interactive **16:9 SVG page wireframes** with visual type schematics, field & filter bindings, report-local DAX measures traced through shared models, and automatic flagging of **broken visual field references**.
-4. **Effortless Model Documentation & End-to-End Measure Lineage**
-   - **Zero-Dependency Interactive Star-Schema Explorer:** Focused Star tabs per Fact table, zoom, pan, fullscreen, and click-to-pin relationship highlighting.
-   - **SQLBI-Formatted DAX Catalog & End-to-End Trace:** Pretty-printed DAX grouped by `Table -> Display Folder -> Dependency Tier`, plus full trace from report visual -> DAX -> model column -> Power Query M -> Dataflow -> source SQL table (`measure-doc`).
-5. **Unified Export & 1-Click SharePoint Online Publishing**
-   - Export **either the entire catalog or a single semantic model**: A4 PDF / Print, self-contained standalone HTML, offline `.zip` bundle, Data Dictionary (`Markdown` / `CSV` / `Word`), compressed `srcdoc`-safe SharePoint HTML (`export-site`), or **direct 1-click upload to a SharePoint Online Document Library URL**.
-6. **Built-In Local Model Context Protocol (MCP) Server (10 Read-Only Tools)**
-   - Connects **VS Code GitHub Copilot**, **Claude Desktop**, **Cursor**, or **Antigravity** to your local catalog (`pbi_list_models`, `pbi_search_catalog`, `pbi_model_summary`, `pbi_get_dax_measure`, `pbi_trace_lineage`, `pbi_trace_measure_end_to_end`, `pbi_report_layout`, `pbi_governance_health`, `pbi_compare_models`, `pbi_workspace_report_map`) with automatic secret redaction.
+> Extracting semantic model TMDL, Dataflow definitions, and cloud report layouts via Microsoft's read-only `getDefinition` API requires at least **Contributor** (**Contributor**, **Member**, or **Admin**) in the target workspace. `Viewer`-only workspaces still return workspace and report inventory. Local `.pbix`, `.pbip`, and `.xlsx` files require no Power BI Service permissions.
 
 ---
 
 ## Command-Line Usage (CLI & CI/CD)
 
 ```bash
-# Launch the interactive Web Studio (default)
+# Launch the interactive Web Studio on http://127.0.0.1:8765 (default)
 pbi-doc-generator
 
-# Scan specific workspaces (add --follow-outside to resolve cross-workspace upstream dataflows/models)
+# Scan specific workspaces (add --follow-outside to resolve upstream models/dataflows in other workspaces)
 pbi-doc-generator scan --workspace "Supply Chain" --follow-outside
 
-# Generate an anonymized portal safe for external sharing (hides personal/owner names)
+# Generate an anonymized portal safe for external sharing (redacts owner/user names)
 pbi-doc-generator portal --anonymous
 
-# Export a single self-contained HTML file (safe for SharePoint Online / Teams / email)
+# Package the entire portal into a single SharePoint-safe HTML file
 pbi-doc-generator export-site --out ./PBI_Catalog_SharePoint.html
 
-# Generate a deep end-to-end Markdown lineage doc for a specific DAX measure
+# Export a deep end-to-end SQL -> Power Query -> DAX -> Visual lineage spec for one measure
 pbi-doc-generator measure-doc "Global Supply Chain & OTIF Core" "OTIF %" --out ./OTIF_Lineage.md
 
-# Import a local .pbip, .SemanticModel, .pbix, or .xlsx into the multi-model catalog
+# Import a local .pbip, .SemanticModel, .pbix, or .xlsx into the catalog
 pbi-doc-generator import-local ./SalesModel.pbip
 
-# Start the stdio MCP server (10 read-only tools) for AI assistants
+# Start the local stdio MCP server (10 read-only tools) for AI assistants
 pbi-doc-generator mcp
 ```
 
@@ -104,10 +107,10 @@ pbi-doc-generator mcp
 
 ## Security & Privacy by Design
 
-- **100% Local Execution:** Metadata, TMDL definitions, and generated HTML files stay on your machine (`127.0.0.1`). Zero telemetry or external CDN calls.
-- **Enforced Read-Only Power BI API Guard:** `PowerBiReadOnlyClient` blocks `DELETE`, `PATCH`, `PUT`, and mutating `POST` requests in code, allowing only `GET` metadata calls and the read-only Fabric `getDefinition` endpoint.
+- **100% Local Execution:** Metadata, TMDL/PBIR definitions, and generated HTML stay on your machine (`127.0.0.1`). Zero telemetry or external CDN calls.
+- **Hardcoded Read-Only Power BI API Guard:** `PowerBiReadOnlyClient` blocks `DELETE`, `PATCH`, `PUT`, and mutating `POST` calls at the transport layer, allowing only `GET` metadata endpoints and read-only `getDefinition` calls.
 - **In-Memory Tokens Only:** OAuth access tokens live strictly in Python RAM for the active session and are never written to disk.
-- **Automatic Secret Redaction:** Connection passwords, SAS tokens, API keys, bearer tokens, and internal dataflow storage URLs are automatically masked/stripped in HTML pages and MCP responses. See [SECURITY.md](SECURITY.md) for details.
+- **Automatic Secret & Storage Redaction:** Connection passwords, SAS signatures, API keys, bearer tokens, and internal Dataflow storage URLs are automatically masked or stripped. See [SECURITY.md](SECURITY.md) for details.
 
 ---
 
@@ -122,7 +125,7 @@ The core of `pbi-doc-generator` is and remains 100% free and open-source under t
 
 ## Community & Support
 
-Special thanks to community contributors `@andreasfelder` (multi-layer Dataflow Gen1 lineage, cloud PBIR/report layout extraction, Native SQL & M step interpreter, end-to-end measure lineage, parallel scanning, and single-file SharePoint export in PR #19), `@jakubpokusa` (interactive relationship viewer in PR #10), `@okiyuki99` (Xpress9 `pbixray` support in PR #11), and `@nblankes` (TMDL table doc-comment report in Issue #12).
+Created and maintained by [Rien Scheerlinck](https://www.linkedin.com/in/rienscheerlinck/) (`@djrien-ai`), with thanks to community contributors `@andreasfelder` (PR #19 contributions toward #13/#14 Dataflow Gen1, thin-report parsing & single-file SharePoint export), `@jakubpokusa` (PR #10 relationship viewer), `@okiyuki99` (PR #11 Xpress9 `pbixray` support), and `@nblankes` (Issue #12 TMDL table doc-comment report).
 
 If `pbi-doc-generator` saves your BI team hours of manual documentation or impact analysis, consider starring the repository or [**supporting ongoing open-source development on Ko-fi**](https://ko-fi.com/rienscheerlinck).
 
