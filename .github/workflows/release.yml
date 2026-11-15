@@ -27,7 +27,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Download Portable ZIP artifact from build run
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: PBI_Doc_Generator_Windows_Portable
           run-id: ${{ inputs.verify_run_id }}
