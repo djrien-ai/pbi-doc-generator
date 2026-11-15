@@ -117,19 +117,32 @@ def fetch_token_via_oauth_pkce(
     done_event = threading.Event()
 
     class _CallbackHandler(http.server.BaseHTTPRequestHandler):
+        timeout = 3
+
         def log_message(self, format: str, *args) -> None:  # noqa: A002
             return
 
         def do_GET(self) -> None:  # noqa: N802
+            self.close_connection = True
             parsed = urllib.parse.urlparse(self.path)
+            if parsed.path == "/favicon.ico":
+                self.send_response(204)
+                self.send_header("Connection", "close")
+                self.end_headers()
+                return
             params = urllib.parse.parse_qs(parsed.query)
             if params.get("state", [""])[0] != state_nonce:
+                msg = b"Invalid OAuth state."
                 self.send_response(400)
+                self.send_header("Content-Type", "text/plain; charset=utf-8")
+                self.send_header("Content-Length", str(len(msg)))
+                self.send_header("Connection", "close")
                 self.end_headers()
-                self.wfile.write(b"Invalid OAuth state.")
+                self.wfile.write(msg)
                 return
             if "error" in params:
-                result_box["error"] = params.get("error_description", params["error"])[0]
+                if not done_event.is_set():
+                    result_box["error"] = params.get("error_description", params["error"])[0]
                 html = (
                     "<html><body style='font-family:Segoe UI,sans-serif;padding:48px;text-align:center;background:#fef2f2;color:#7f1d1d'>"
                     "<div style='max-width:480px;margin:0 auto;background:#fff;padding:32px;border-radius:14px;border:1px solid #fecaca'>"
@@ -138,29 +151,41 @@ def fetch_token_via_oauth_pkce(
                     "</div></body></html>"
                 )
             else:
-                result_box["code"] = params.get("code", [""])[0]
+                if not done_event.is_set():
+                    result_box["code"] = params.get("code", [""])[0]
                 html = (
                     "<html><body style='font-family:Segoe UI,sans-serif;padding:48px;text-align:center;background:#f8fafc;color:#0f172a'>"
                     "<div style='max-width:440px;margin:0 auto;background:#fff;padding:32px;border-radius:14px;border:1px solid #e2e8f0;box-shadow:0 4px 16px rgba(0,0,0,0.06)'>"
                     "<h2 style='color:#15803d;margin-top:0'>Signed in with Microsoft</h2>"
-                    "<p style='color:#475569'>Your Power BI session is ready. You can close this browser tab and return to PBI Doc Generator Studio.</p>"
-                    "</div><script>setTimeout(function(){window.close();},1200);</script></body></html>"
+                    "<p style='color:#475569'>Your Power BI session is ready. Returning to PBI Doc Generator Studio...</p>"
+                    "</div><script>setTimeout(function(){try{window.close();}catch(e){}},600);</script></body></html>"
                 )
-            self.send_response(200)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
-            self.end_headers()
-            self.wfile.write(html.encode("utf-8"))
+            raw_html = html.encode("utf-8")
+            try:
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(raw_html)))
+                self.send_header("Connection", "close")
+                self.end_headers()
+                self.wfile.write(raw_html)
+                self.wfile.flush()
+            except OSError:
+                pass
             done_event.set()
 
-    httpd = http.server.HTTPServer(("127.0.0.1", 0), _CallbackHandler)
+    class _CallbackServer(http.server.ThreadingHTTPServer):
+        daemon_threads = True
+
+    httpd = _CallbackServer(("127.0.0.1", 0), _CallbackHandler)
     port = httpd.server_port
     redirect_uri = f"http://localhost:{port}"
 
     # Also bind IPv6 loopback [::1] on the same port so Windows browsers resolving localhost -> ::1 connect immediately
     httpd6 = None
     try:
-        class _IPv6Server(http.server.HTTPServer):
+        class _IPv6Server(http.server.ThreadingHTTPServer):
             address_family = socket.AF_INET6
+            daemon_threads = True
 
         httpd6 = _IPv6Server(("::1", port), _CallbackHandler)
         threading.Thread(target=httpd6.serve_forever, daemon=True).start()
@@ -190,27 +215,35 @@ def fetch_token_via_oauth_pkce(
         if log_fn:
             log_fn("Opening Microsoft sign-in page in your default browser...")
         webbrowser.open(auth_url)
+    else:
+        if log_fn:
+            log_fn("Opening Microsoft sign-in window...")
+
+    def _cleanup_servers() -> None:
+        for srv in (httpd, httpd6):
+            if srv is not None:
+                try:
+                    srv.shutdown()
+                    srv.server_close()
+                except Exception:
+                    pass
 
     deadline = time.time() + timeout_sec
     try:
         while time.time() < deadline:
-            if done_event.wait(timeout=0.25):
+            if done_event.wait(timeout=0.15):
                 break
             if cancel_event is not None and cancel_event.is_set():
                 raise RuntimeError("Sign-in cancelled.")
+        if cancel_event is not None and cancel_event.is_set():
+            raise RuntimeError("Sign-in cancelled.")
         if not done_event.is_set():
             raise RuntimeError(
                 "Microsoft sign-in timed out in the browser. If your corporate IT blocks standard OAuth apps, use 'Sign in via Power BI Web Window' right below."
             )
     finally:
-        httpd.shutdown()
-        httpd.server_close()
-        if httpd6 is not None:
-            try:
-                httpd6.shutdown()
-                httpd6.server_close()
-            except Exception:
-                pass
+        # Never block authorization-code exchange on browser keep-alive / preconnect TCP sockets!
+        threading.Thread(target=_cleanup_servers, daemon=True).start()
 
     if "error" in result_box:
         raise RuntimeError(f"Microsoft OAuth sign-in declined or restricted by tenant: {result_box['error']}")
@@ -434,6 +467,36 @@ class TokenProvider:
             self._expires_at = 0.0
             self._claims = None
 
+    def refresh_on_unauthorized(self) -> str:
+        """Silently refresh an expired access token mid-scan (OAuth refresh_token, headless browser cookie, az, or spn)."""
+        with self._token_lock:
+            if self._refresh_token:
+                tok, new_ref = refresh_oauth_token(
+                    self._refresh_token,
+                    tenant=self.tenant_id or "organizations",
+                    client_id=self.client_id or DEFAULT_PUBLIC_CLIENT_ID,
+                )
+                exp, claims = decode_jwt_exp(tok)
+                self._cached_token = tok
+                self._refresh_token = new_ref
+                self._expires_at = exp
+                self._claims = claims
+                self.last_error = ""
+                return self._cached_token
+        mode = (self.mode or "oauth").lower()
+        if mode == "browser":
+            tok = fetch_token_via_browser(browser_channel=self.browser_channel, headless_first=True, log_fn=self.log_fn)
+            exp, claims = decode_jwt_exp(tok)
+            with self._token_lock:
+                self._cached_token = tok
+                self._expires_at = exp
+                self._claims = claims
+                self.last_error = ""
+            return tok
+        if mode in ("az", "spn"):
+            return self.get_token(force_refresh=True, open_browser=False)
+        return self._cached_token
+
     def get_token(self, force_refresh: bool = False, mode_override: str | None = None, open_browser: bool = True) -> str:
         # Hold _token_lock ONLY for fast in-memory cache / silent refresh checks across parallel worker threads.
         # NEVER hold _token_lock across interactive browser sign-in, otherwise Cancel or switching modes deadlocks!
@@ -456,11 +519,18 @@ class TokenProvider:
                         return self._cached_token
                     except Exception:
                         self._refresh_token = ""
+                if self._cached_token and time.time() < (self._expires_at - 10):
+                    return self._cached_token
+            # If a headless background scan hit token expiry in browser mode, silently refresh from persistent profile
+            if (self.mode or "").lower() == "browser" and self._cached_token:
+                try:
+                    return self.refresh_on_unauthorized()
+                except Exception:
+                    pass
 
-        if mode_override:
-            self.mode = mode_override
         mode = (mode_override or self.mode or "oauth").lower()
         tok = ""
+        ref = ""
 
         # Immediately cancel any previous hanging listener without waiting on a lock
         if self._pending_cancel is not None:
@@ -507,8 +577,6 @@ class TokenProvider:
                     on_auth_url=_set_url,
                     open_browser=open_browser,
                 )
-                with self._token_lock:
-                    self._refresh_token = ref
             elif mode in ("browser", "auto"):
                 tok = fetch_token_via_browser(
                     browser_channel=self.browser_channel,
@@ -518,16 +586,27 @@ class TokenProvider:
             else:
                 raise ValueError(f"Unknown authentication mode: {mode}")
 
+            if self._attempt_seq != my_seq or cancel_ev.is_set():
+                raise RuntimeError("Sign-in cancelled.")
+
             exp, claims = decode_jwt_exp(tok)
             with self._token_lock:
+                if self._attempt_seq != my_seq or cancel_ev.is_set():
+                    raise RuntimeError("Sign-in cancelled.")
                 self._cached_token = tok
+                self.mode = mode
+                if mode == "oauth":
+                    self._refresh_token = ref
+                else:
+                    self._refresh_token = ""
                 self._expires_at = exp
                 self._claims = claims
                 self.last_error = ""
             return self._cached_token
         except Exception as exc:
-            if self._attempt_seq == my_seq and not cancel_ev.is_set():
-                self.last_error = str(exc)
+            if self._attempt_seq != my_seq or cancel_ev.is_set():
+                raise RuntimeError("Sign-in cancelled.") from exc
+            self.last_error = str(exc)
             raise
         finally:
             if self._attempt_seq == my_seq:
@@ -546,6 +625,7 @@ class TokenProvider:
             "principal": user,
             "auth_in_progress": self.auth_in_progress,
             "pending_auth_url": self._pending_auth_url,
+            "attempt_seq": self._attempt_seq,
             "last_error": self.last_error,
             "az_available": bool(find_az_cli_executable()),
         }

@@ -142,6 +142,15 @@ class PowerBiReadOnlyClient:
                 time.sleep(2 * attempt)
                 continue
 
+            if resp.status == 401 and attempt == 1 and hasattr(self.token_provider, "refresh_on_unauthorized"):
+                try:
+                    if self.log_fn:
+                        self.log_fn("Session token expired during scan; refreshing token automatically...")
+                    self.token_provider.refresh_on_unauthorized()
+                    continue
+                except Exception:
+                    pass
+
             if resp.status == 429 and attempt < max_retries:
                 wait_sec = max(5, int(resp.headers.get("retry-after") or 30))
                 if self.log_fn:

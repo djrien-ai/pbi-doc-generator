@@ -961,14 +961,93 @@ def test_v11_studio_oauth_signin_cancel_and_error_resilience() -> None:
                 qs = urllib.parse.parse_qs(urllib.parse.urlparse(pending_url).query)
                 redir = qs["redirect_uri"][0]
                 state_nonce = qs["state"][0]
-                with urllib.request.urlopen(f"{redir}/?code=mock_auth_code&state={urllib.parse.quote(state_nonce)}", timeout=5) as cb:
-                    assert cb.status == 200
-                    assert "Signed in with Microsoft" in cb.read().decode("utf-8")
+                cb_port = urllib.parse.urlparse(redir).port
 
-                t_conn2.join(timeout=3.0)
+                # Open 2 raw idle keep-alive/preconnect TCP sockets on cb_port (reproduces Chromium 60s keep-alive deadlock)
+                import socket
+                hung_socks = [socket.create_connection(("127.0.0.1", cb_port), timeout=5) for _ in range(2)]
+                try:
+                    t_cb0 = time.perf_counter()
+                    with urllib.request.urlopen(f"{redir}/?code=mock_auth_code&state={urllib.parse.quote(state_nonce)}", timeout=5) as cb:
+                        assert cb.status == 200
+                        assert cb.headers.get("Connection", "").lower() == "close"
+                        assert "Signed in with Microsoft" in cb.read().decode("utf-8")
+
+                    t_conn2.join(timeout=2.0)
+                    assert not t_conn2.is_alive(), "OAuth PKCE hung on browser keep-alive TCP socket!"
+                    assert (time.perf_counter() - t_cb0) < 2.0
+                finally:
+                    for hs in hung_socks:
+                        hs.close()
+
                 assert connect_res.get("ok") is True
                 assert connect_res["status"]["authenticated"] is True
                 assert connect_res["status"]["principal"] == "architect@contoso.com"
+
+            # 2b. Switch Account with open_browser=False (client popup mode) -> switches cleanly to second user
+            payload2 = base64.urlsafe_b64encode(
+                json.dumps({"upn": "lead@contoso.com", "exp": int(time.time()) + 3600}).encode("utf-8")
+            ).decode("ascii").rstrip("=")
+            fake_jwt2 = f"{header}.{payload2}.sig"
+            opened_urls.clear()
+            connect_res.clear()
+
+            def _call_switch_popup() -> None:
+                req = urllib.request.Request(
+                    f"{base}/api/connect",
+                    data=b'{"mode":"oauth","open_browser":false}',
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with urllib.request.urlopen(req, timeout=10) as r:
+                    connect_res.update(json.loads(r.read().decode("utf-8")))
+
+            with (
+                patch.object(auth_mod.webbrowser, "open", side_effect=lambda u, *a, **kw: (opened_urls.append(u), True)[1]),
+                patch.object(auth_mod, "_post_token_endpoint", return_value={"access_token": fake_jwt2, "refresh_token": "ref456"}),
+            ):
+                t_sw = threading.Thread(target=_call_switch_popup, daemon=True)
+                t_sw.start()
+                deadline = time.time() + 5.0
+                sw_url = ""
+                while time.time() < deadline:
+                    with urllib.request.urlopen(f"{base}/api/status", timeout=2) as r:
+                        st_sw = json.loads(r.read().decode("utf-8"))["auth"]
+                        if st_sw.get("pending_auth_url") and st_sw.get("attempt_seq", 0) >= 3:
+                            sw_url = st_sw["pending_auth_url"]
+                            break
+                    time.sleep(0.03)
+                assert sw_url
+                assert len(opened_urls) == 0, "Backend webbrowser.open should not fire when client opened popup!"
+                qs2 = urllib.parse.parse_qs(urllib.parse.urlparse(sw_url).query)
+                with urllib.request.urlopen(f"{qs2['redirect_uri'][0]}/?code=mock_code_2&state={urllib.parse.quote(qs2['state'][0])}", timeout=5) as cb2:
+                    assert cb2.status == 200
+                t_sw.join(timeout=2.0)
+                assert connect_res.get("ok") is True
+                assert connect_res["status"]["principal"] == "lead@contoso.com"
+
+            # 2c. Mid-scan HTTP 401 Unauthorized -> automatic silent token refresh & retry
+            from pbi_catalog.api import HttpResponse
+            tp_401 = auth_mod.TokenProvider(mode="oauth")
+            tp_401._cached_token = fake_jwt
+            tp_401._expires_at = time.time() + 3600
+            tp_401._refresh_token = "ref123"
+            ro_client = PowerBiReadOnlyClient(tp_401)
+            seen_tokens: list[str] = []
+
+            def _mock_req(method: str, url: str, token: str) -> HttpResponse:
+                seen_tokens.append(token)
+                if len(seen_tokens) == 1:
+                    return HttpResponse(status=401, headers={}, body='{"error":"TokenExpired"}')
+                return HttpResponse(status=200, headers={}, body='{"value":[{"id":"w1","name":"WS"}]}')
+
+            with (
+                patch.object(auth_mod, "_post_token_endpoint", return_value={"access_token": fake_jwt2, "refresh_token": "ref789"}),
+                patch.object(ro_client, "_request_urllib", side_effect=_mock_req),
+            ):
+                ws_res = ro_client.pbi_get_list("groups?$top=10")
+                assert len(ws_res) == 1 and ws_res[0]["id"] == "w1"
+                assert seen_tokens == [fake_jwt, fake_jwt2]
 
             # 3. Verify _post_token_endpoint surfaces human-readable Entra JSON error_description on HTTP 400
             err_payload = json.dumps({"error": "invalid_grant", "error_description": "AADSTS500200: User account is a personal Microsoft account.\r\nTrace ID: 123"}).encode("utf-8")

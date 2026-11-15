@@ -528,6 +528,10 @@ var wsLoadedOnce = false;
 var wasBusy = false;
 var latestAuthenticated = false;
 var latestBusy = false;
+var latestServerAuthSeq = 0;
+var _authReqSeq = 0;
+var _activeAuthPopup = null;
+var _lastAuthWaitUrl = "";
 var _lastLegacyBannerKey = "";
 
 function toggleStudioTheme() {
@@ -620,6 +624,13 @@ function updateWsSelectionUi() {
 }
 
 async function signOutAuth() {
+  _authReqSeq++;
+  uiConnecting = false;
+  _lastAuthWaitUrl = "";
+  if (_activeAuthPopup && !_activeAuthPopup.closed) {
+    try { _activeAuthPopup.close(); } catch (e) {}
+  }
+  _activeAuthPopup = null;
   await apiPost("/api/sign-out", {});
   wsLoadedOnce = false;
   latestAuthenticated = false;
@@ -634,7 +645,13 @@ async function signOutAuth() {
 }
 
 async function cancelAuth() {
+  _authReqSeq++;
   uiConnecting = false;
+  _lastAuthWaitUrl = "";
+  if (_activeAuthPopup && !_activeAuthPopup.closed) {
+    try { _activeAuthPopup.close(); } catch (e) {}
+  }
+  _activeAuthPopup = null;
   setAuthButtonsDisabled(false);
   await apiPost("/api/cancel-auth", {});
   await refreshStatus();
@@ -657,6 +674,9 @@ async function refreshStatus() {
 
     var isConnecting = !!(uiConnecting || (st.auth && st.auth.auth_in_progress));
     var isAuth = !!(st.auth && st.auth.authenticated);
+    if (st.auth && typeof st.auth.attempt_seq === "number") {
+      latestServerAuthSeq = st.auth.attempt_seq;
+    }
     latestAuthenticated = isAuth;
     latestBusy = !!st.busy;
 
@@ -666,14 +686,16 @@ async function refreshStatus() {
       if (disWrap) disWrap.style.display = "";
       if (conWrap) conWrap.style.display = "none";
       if (stepNum1) { stepNum1.className = "step-num"; stepNum1.textContent = "1"; }
-      if (st.auth && st.auth.pending_auth_url) {
+      if (st.auth && st.auth.pending_auth_url && _lastAuthWaitUrl !== st.auth.pending_auth_url) {
+        _lastAuthWaitUrl = st.auth.pending_auth_url;
         setBanner("authBanner", "info",
           "<span style='display:flex;align-items:center;gap:10px'><span class='spin'></span>" +
-          "<span><b>Waiting for Microsoft sign-in in your browser...</b> Complete login in the opened tab, or <a href='" + escHtml(st.auth.pending_auth_url) + "' target='_blank' style='color:inherit;font-weight:700'>click here if no tab appeared</a>.</span></span>" +
+          "<span><b>Waiting for Microsoft sign-in...</b> Pick your account in the opened sign-in window, or <a href='" + escHtml(st.auth.pending_auth_url) + "' target='_blank' style='color:inherit;font-weight:700'>click here to reopen sign-in</a>.</span></span>" +
           "<button type='button' class='btn btn-secondary' style='padding:5px 12px;font-size:12px' onclick='cancelAuth()'>Cancel</button>"
         );
       }
     } else if (isAuth) {
+      _lastAuthWaitUrl = "";
       pill.className = "status-pill connected";
       pill.textContent = "Connected (" + st.auth.minutes_remaining + "m remaining)";
       if (disWrap) disWrap.style.display = "none";
@@ -685,12 +707,14 @@ async function refreshStatus() {
         loadWorkspaces(false);
       }
     } else if (st.auth && st.auth.last_error) {
+      _lastAuthWaitUrl = "";
       pill.className = "status-pill failed";
       pill.textContent = "Sign-in failed";
       if (disWrap) disWrap.style.display = "";
       if (conWrap) conWrap.style.display = "none";
       if (stepNum1) { stepNum1.className = "step-num"; stepNum1.textContent = "1"; }
     } else {
+      _lastAuthWaitUrl = "";
       pill.className = "status-pill";
       pill.textContent = "Not connected";
       if (disWrap) disWrap.style.display = "";
@@ -820,14 +844,66 @@ async function refreshStatus() {
 }
 
 async function connectAuth(mode) {
+  var mySeq = ++_authReqSeq;
+  var prevServerSeq = latestServerAuthSeq;
+  _lastAuthWaitUrl = "";
   uiConnecting = true;
   setAuthButtonsDisabled(true);
+
+  var clientOpened = false;
+  if (mode === "oauth") {
+    if (_activeAuthPopup && !_activeAuthPopup.closed) {
+      try { _activeAuthPopup.close(); } catch (e) {}
+    }
+    try {
+      var w = 560, h = 700;
+      var left = Math.max(40, Math.round((window.screen.width - w) / 2));
+      var top = Math.max(40, Math.round((window.screen.height - h) / 2));
+      _activeAuthPopup = window.open(
+        "about:blank",
+        "pbi_ms_oauth_" + mySeq,
+        "popup=yes,width=" + w + ",height=" + h + ",left=" + left + ",top=" + top
+      );
+      if (_activeAuthPopup) {
+        try {
+          _activeAuthPopup.document.open();
+          _activeAuthPopup.document.write(
+            "<!DOCTYPE html><html><head><meta charset='utf-8'><title>Sign in with Microsoft</title>" +
+            "<style>body{font-family:'Segoe UI',system-ui,sans-serif;background:#f8fafc;color:#0f172a;display:flex;align-items:center;justify-content:center;min-height:90vh;margin:0}" +
+            ".box{background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:32px;max-width:380px;text-align:center;box-shadow:0 6px 20px rgba(15,23,42,0.06)}" +
+            ".sp{width:28px;height:28px;border:3px solid #cbd5e1;border-top-color:#0b63ce;border-radius:50%;animation:s .8s linear infinite;margin:0 auto 14px}@keyframes s{to{transform:rotate(360deg)}}</style></head>" +
+            "<body><div class='box'><div class='sp'></div><div style='font-weight:650;font-size:15px;margin-bottom:6px'>Opening Microsoft Sign-In...</div>" +
+            "<div style='color:#64748b;font-size:13px'>Connecting to your organization's sign-in page.</div></div></body></html>"
+          );
+          _activeAuthPopup.document.close();
+        } catch (e) {}
+        try { _activeAuthPopup.focus(); } catch (e) {}
+        clientOpened = true;
+        (async function() {
+          var deadline = Date.now() + 6000;
+          while (Date.now() < deadline && mySeq === _authReqSeq && _activeAuthPopup && !_activeAuthPopup.closed) {
+            try {
+              var st = await (await fetch("/api/status")).json();
+              if (st && st.auth && st.auth.pending_auth_url && (st.auth.attempt_seq || 0) > prevServerSeq) {
+                _activeAuthPopup.location.replace(st.auth.pending_auth_url);
+                return;
+              }
+            } catch (e) {}
+            await new Promise(function(r) { setTimeout(r, 60); });
+          }
+        })();
+      }
+    } catch (e) {
+      _activeAuthPopup = null;
+    }
+  }
+
   var pill = document.getElementById("authStatusPill");
   pill.className = "status-pill connecting";
   pill.innerHTML = "<span class='spin'></span> Connecting...";
 
   var msg = mode === "oauth"
-    ? "Opening Microsoft sign-in in your default browser... Complete sign-in there."
+    ? "Opening Microsoft sign-in window... Select your Power BI account there."
     : (mode === "browser"
         ? "Checking your Power BI Web session (Edge/Chrome)... This takes ~5-15 seconds."
         : "Requesting Power BI token from Azure CLI (`az account get-access-token`)...");
@@ -839,22 +915,34 @@ async function connectAuth(mode) {
   appendLog("Starting sign-in (" + mode + ")...");
 
   try {
-    var data = await apiPost("/api/connect", { mode: mode });
+    var data = await apiPost("/api/connect", { mode: mode, open_browser: !clientOpened });
+    if (mySeq !== _authReqSeq) return;
     uiConnecting = false;
+    if (data.ok) {
+      wsLoadedOnce = true;
+    }
     await refreshStatus();
     if (data.ok) {
+      if (_activeAuthPopup && !_activeAuthPopup.closed) {
+        try { _activeAuthPopup.close(); } catch (e) {}
+      }
+      _activeAuthPopup = null;
       var who = (data.status && data.status.principal) ? data.status.principal : mode;
       setBanner("authBanner", "info",
         "<span style='display:flex;align-items:center;gap:10px'><span class='spin'></span><span><b>Signed in as " + escHtml(who) + "!</b> Fetching your Power BI workspaces...</span></span>"
       );
-      wsLoadedOnce = true;
       var count = await loadWorkspaces(false);
-      if (count !== null) {
+      if (mySeq === _authReqSeq && count !== null) {
         setBanner("authBanner", "ok",
           "<span><b>Connected!</b> " + count + " workspace(s) loaded in Step 2 below.</span>"
         );
       }
     } else {
+      if (_activeAuthPopup && !_activeAuthPopup.closed) {
+        try { _activeAuthPopup.close(); } catch (e) {}
+      }
+      _activeAuthPopup = null;
+      if (data.cancelled) return;
       var errTxt = data.error || "Unknown sign-in error";
       if (errTxt.toLowerCase().indexOf("cancelled") !== -1) {
         return;
@@ -872,12 +960,15 @@ async function connectAuth(mode) {
       }
     }
   } catch (err) {
+    if (mySeq !== _authReqSeq) return;
     uiConnecting = false;
     await refreshStatus();
     setBanner("authBanner", "err", "<span><b>Connection error:</b> " + escHtml(err) + "</span>");
   } finally {
-    uiConnecting = false;
-    setAuthButtonsDisabled(false);
+    if (mySeq === _authReqSeq) {
+      uiConnecting = false;
+      setAuthButtonsDisabled(false);
+    }
   }
 }
 
@@ -1882,12 +1973,17 @@ def create_studio_server(catalog_dir: str | Path, host: str = "127.0.0.1", port:
             if parsed.path == "/api/connect":
                 try:
                     req_mode = str(body.get("mode", "oauth") or "oauth").lower()
-                    state.auth.get_token(force_refresh=True, mode_override=req_mode)
+                    open_br = bool(body.get("open_browser", True))
+                    state.auth.get_token(force_refresh=True, mode_override=req_mode, open_browser=open_br)
                     state.log(f"Connected successfully ({state.auth.status().get('principal') or state.auth.mode}).")
                     self._json({"ok": True, "status": state.auth.status()})
                 except Exception as exc:
-                    state.log(f"Sign-in failed: {exc}")
-                    self._json({"ok": False, "error": str(exc)})
+                    msg_txt = str(exc)
+                    if "cancelled" in msg_txt.lower():
+                        self._json({"ok": False, "cancelled": True, "error": "Sign-in cancelled."})
+                        return
+                    state.log(f"Sign-in failed: {msg_txt}")
+                    self._json({"ok": False, "error": msg_txt})
                 return
 
             if parsed.path == "/api/workspaces":
