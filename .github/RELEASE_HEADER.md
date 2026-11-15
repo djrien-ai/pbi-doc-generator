@@ -7,6 +7,7 @@
 3. **Launch:** Open the extracted folder and double-click **`PBI_Doc_Generator.exe`**. Your default browser will open automatically at **`http://127.0.0.1:8765`**.
    - *First-run Windows SmartScreen note:* Because this free open-source executable is not signed with a paid EV certificate, Windows may show *"Windows protected your PC"* on first launch. Click **More info** -> **Run anyway**.
    - *Power BI Service workspace note:* Documenting workspaces in the Power BI Service requires at least **Contributor** (or **Member** / **Admin**) access in the target workspace. Documenting local `.pbix`, `.pbip`, and `.xlsx` files works 100% offline.
+   - *Upgrading from v1.0.0?* Version 1.1 automatically detects any existing local `v1.0` scan cache on your PC and gives you a 1-click **Start Clean for v1.1** prompt (automatically backing up `catalog_state.v1_0.bak.json`) so new Report X-Ray layouts, thin-report DAX, and Dataflow Gen1/Gen2 M-lineage are captured from a clean state.
 
 > **Prefer Python / macOS / Linux?** Run `pip install --upgrade "git+https://github.com/djrien-ai/pbi-doc-generator.git"` and start with `pbi-doc-generator`.
 >

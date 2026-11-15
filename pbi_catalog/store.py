@@ -19,6 +19,7 @@ from .security import safe_filename
 
 _STATE_LOCK = threading.RLock()
 LOCAL_WORKSPACE_IDS = {"", "local-workspace"}
+CURRENT_SCHEMA_VERSION = "1.1"
 
 
 def utc_now_iso() -> str:
@@ -110,7 +111,7 @@ class CatalogStore:
 
     def _default_state(self) -> dict:
         return {
-            "schema_version": "1.1",
+            "schema_version": CURRENT_SCHEMA_VERSION,
             "updated_at": "",
             "workspaces": {},
             "reports": {},
@@ -120,6 +121,44 @@ class CatalogStore:
             "dataset_dataflow_links": {},
             "errors": [],
         }
+
+    def legacy_schema_info(self) -> dict:
+        """Detect whether local catalog_state.json was created by an older version (e.g. v1.0) with cached artifacts."""
+        if not self.state_file.exists():
+            return {
+                "is_legacy": False,
+                "schema_version": CURRENT_SCHEMA_VERSION,
+                "models_count": 0,
+                "workspaces_count": 0,
+                "reports_count": 0,
+            }
+        st = self.load()
+        ver = str(st.get("schema_version") or "1.0").strip()
+        m_cnt = len(st.get("models") or {})
+        w_cnt = len(st.get("workspaces") or {})
+        r_cnt = len(st.get("reports") or {})
+        df_cnt = len(st.get("dataflows") or {})
+        has_artifacts = (m_cnt + w_cnt + r_cnt + df_cnt) > 0
+        return {
+            "is_legacy": bool(has_artifacts and ver != CURRENT_SCHEMA_VERSION),
+            "schema_version": ver,
+            "models_count": m_cnt,
+            "workspaces_count": w_cnt,
+            "reports_count": r_cnt,
+        }
+
+    def archive_legacy_and_clear(self) -> Path | None:
+        """Back up a legacy v1.0 catalog_state.json to catalog_state.v1_0.bak.json and wipe stale v1.0 artifacts."""
+        backup_path: Path | None = None
+        with _STATE_LOCK:
+            if self.state_file.is_file():
+                try:
+                    backup_path = self.root / "catalog_state.v1_0.bak.json"
+                    shutil.copy2(self.state_file, backup_path)
+                except OSError:
+                    backup_path = None
+            self.clear()
+        return backup_path
 
     def load(self) -> dict:
         if not self.state_file.exists():
@@ -132,6 +171,10 @@ class CatalogStore:
                     data = json.loads(raw_txt) if raw_txt.strip() else {}
                 if not isinstance(data, dict):
                     raise ValueError("Catalog state root must be a JSON object")
+                raw_ver = str(data.get("schema_version") or "").strip()
+                has_any = any(bool(data.get(k)) for k in ("models", "workspaces", "reports", "dataflows"))
+                if not raw_ver and has_any:
+                    data["schema_version"] = "1.0"
                 for k, default in self._default_state().items():
                     if k not in data or not isinstance(data[k], type(default)):
                         data[k] = default

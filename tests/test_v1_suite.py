@@ -1112,6 +1112,79 @@ def test_v11_crash_resilience_and_fault_isolation() -> None:
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+def test_v11_legacy_v10_cache_detection_and_clean_upgrade() -> None:
+    """Verify v1.0 catalog_state.json is detected, surfaces a clear upgrade notice, blocks stale v1.0 portal rendering, and archives cleanly to catalog_state.v1_0.bak.json."""
+    tmp = Path(tempfile.mkdtemp(prefix="pbi_v10_upgrade_"))
+    try:
+        store = CatalogStore(tmp)
+        store.ensure_dirs()
+        # Simulate a real v1.0.0 catalog_state.json + stale v1.0 portal/index.html on disk
+        v10_state = {
+            "schema_version": "1.0",
+            "updated_at": "2026-11-10T10:00:00Z",
+            "workspaces": {
+                "ws-1": {"id": "ws-1", "name": "Scanned WS"},
+                "ws-ghost-99": {"id": "ws-ghost-99", "name": "Unscanned Tenant WS From v1.0"},
+            },
+            "models": {
+                "ds-old": {"id": "ds-old", "name": "Legacy v1.0 Model", "workspace_id": "ws-1", "workspace": "Scanned WS", "definition_status": "ok"}
+            },
+            "reports": {"rep-old": {"id": "rep-old", "name": "Old Report", "dataset_id": "ds-old", "workspace_id": "ws-1"}},
+            "dataflows": {},
+            "errors": [],
+        }
+        store.state_file.write_text(json.dumps(v10_state), encoding="utf-8")
+        (store.portal_dir / "index.html").write_text("<html>STALE_V10_PORTAL</html>", encoding="utf-8")
+
+        leg = store.legacy_schema_info()
+        assert leg["is_legacy"] is True and leg["schema_version"] == "1.0"
+        assert leg["models_count"] == 1 and leg["workspaces_count"] == 2
+
+        httpd, _ = create_studio_server(tmp, host="127.0.0.1", port=0)
+        port = httpd.server_address[1]
+        threading.Thread(target=httpd.serve_forever, daemon=True).start()
+        base = f"http://127.0.0.1:{port}"
+        try:
+            # 1. /api/status flags legacy_catalog.is_legacy == True and portal_ready == False
+            with urllib.request.urlopen(f"{base}/api/status", timeout=5) as r:
+                st_before = json.loads(r.read().decode("utf-8"))
+                assert st_before["legacy_catalog"]["is_legacy"] is True
+                assert st_before["portal_ready"] is False
+                assert any("Upgrade Notice" in ln for ln in st_before["logs"])
+
+            # 2. Visiting /portal/index.html does NOT serve STALE_V10_PORTAL; serves clean Upgrade Notice page
+            with urllib.request.urlopen(f"{base}/portal/index.html", timeout=5) as r:
+                p_html = r.read().decode("utf-8")
+                assert "STALE_V10_PORTAL" not in p_html
+                assert "Clean v1.1 Scan Required" in p_html
+
+            # 3. Clicking 'Start Clean for v1.1' (/api/reset-catalog) backs up catalog_state.v1_0.bak.json and clears cache
+            req = urllib.request.Request(
+                f"{base}/api/reset-catalog",
+                data=b'{"from_legacy":true}',
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=5) as r:
+                res = json.loads(r.read().decode("utf-8"))
+                assert res["ok"] is True
+
+            bak = tmp / "catalog_state.v1_0.bak.json"
+            assert bak.is_file(), "Expected v1.0 state backup file catalog_state.v1_0.bak.json"
+            assert "Legacy v1.0 Model" in bak.read_text(encoding="utf-8")
+            assert store.legacy_schema_info()["is_legacy"] is False
+
+            with urllib.request.urlopen(f"{base}/api/status", timeout=5) as r:
+                st_after = json.loads(r.read().decode("utf-8"))
+                assert st_after["legacy_catalog"]["is_legacy"] is False
+                assert st_after["models_count"] == 0
+        finally:
+            httpd.shutdown()
+            httpd.server_close()
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 if __name__ == "__main__":
     test_issue_12_tmdl_table_doc_comment()
     test_secret_masking_and_readonly_guard()
@@ -1124,4 +1197,5 @@ if __name__ == "__main__":
     test_v11_clean_slate_single_model_export_and_sharepoint_publisher()
     test_v11_studio_oauth_signin_cancel_and_error_resilience()
     test_v11_crash_resilience_and_fault_isolation()
-    print("ALL 11 V1.1 TEST SUITES PASSED SUCCESSFULLY!")
+    test_v11_legacy_v10_cache_detection_and_clean_upgrade()
+    print("ALL 12 V1.1 TEST SUITES PASSED SUCCESSFULLY!")

@@ -150,8 +150,12 @@ table 'Dim Customer'
         throw "No model HTML page generated in portal/models!"
     }
     $modelPageResp = Invoke-WebRequest -Uri "$baseUrl/portal/models/$($modelHtmlFiles[0].Name)" -UseBasicParsing -TimeoutSec 5
-    if ($modelPageResp.Content -notmatch "Total Revenue" -or $modelPageResp.Content -notmatch "Avg Revenue per Customer" -or $modelPageResp.Content -notmatch "star-shell") {
-        throw "Model HTML page missing expected DAX measures or native Star-Schema diagram!"
+    if ($modelPageResp.Content -notmatch "Total Revenue" -or $modelPageResp.Content -notmatch "Avg Revenue per Customer" -or $modelPageResp.Content -notmatch "star-shell" -or $modelPageResp.Content -notmatch "print-only-doc-banner") {
+        throw "Model HTML page missing expected DAX measures, native Star-Schema diagram, or print blueprint banner!"
+    }
+    $starJsResp = Invoke-WebRequest -Uri "$baseUrl/portal/assets/star_schema_widget.js" -UseBasicParsing -TimeoutSec 5
+    if ($starJsResp.Content -notmatch "print-only-star-stack") {
+        throw "star_schema_widget.js missing stacked vector PDF Star-Schema renderer!"
     }
     foreach ($asset in @("portal.css", "star_schema_widget.js", "xray_drawer.js", "e2e_graph.js")) {
         $aResp = Invoke-WebRequest -Uri "$baseUrl/portal/assets/$asset" -UseBasicParsing -TimeoutSec 5
@@ -205,6 +209,32 @@ table 'Dim Customer'
         throw "MCP stdio v1.1 tools check failed: $mcpOut"
     }
     Write-Host "[PASS] Built-in MCP stdio server (all 10 v1.1 tools + E2E SQL trace) verified from frozen EXE"
+
+    # 10. Verify v1.0 legacy catalog detection & clean backup inside frozen EXE
+    $v10Dir = Join-Path $workRoot "legacy_v10_catalog"
+    New-Item -ItemType Directory -Path (Join-Path $v10Dir "portal") -Force | Out-Null
+    Set-Content -Path (Join-Path $v10Dir "catalog_state.json") -Value '{"schema_version":"1.0","models":{"ds1":{"id":"ds1","name":"OldV10Model","workspace_id":"ws1"}},"workspaces":{"ws1":{"id":"ws1","name":"WS1"}}}' -Encoding UTF8
+    Set-Content -Path (Join-Path $v10Dir "portal\index.html") -Value '<html>OLD_V10_HTML</html>' -Encoding UTF8
+    $port2 = $port + 1
+    $proc2 = Start-Process -FilePath $exePath -ArgumentList @("studio", "--catalog", $v10Dir, "--port", "$port2", "--no-browser") -PassThru -WindowStyle Hidden
+    try {
+        $base2 = "http://127.0.0.1:$port2"
+        $st2 = $null
+        for ($j = 0; $j -lt 25; $j++) {
+            Start-Sleep -Milliseconds 400
+            try { $st2 = Invoke-RestMethod -Uri "$base2/api/status" -TimeoutSec 2; if ($null -ne $st2.legacy_catalog) { break } } catch {}
+        }
+        if (-not $st2 -or -not $st2.legacy_catalog.is_legacy -or $st2.portal_ready) {
+            throw "Frozen EXE failed to flag v1.0 legacy catalog!"
+        }
+        $rst2 = Invoke-RestMethod -Method Post -Uri "$base2/api/reset-catalog" -Body '{"from_legacy":true}' -ContentType "application/json" -TimeoutSec 5
+        if (-not $rst2.ok -or -not (Test-Path (Join-Path $v10Dir "catalog_state.v1_0.bak.json"))) {
+            throw "Frozen EXE failed to archive catalog_state.v1_0.bak.json on clean reset!"
+        }
+        Write-Host "[PASS] Legacy v1.0 cache detection + clean v1.1 reset verified inside frozen EXE"
+    } finally {
+        if ($proc2 -and -not $proc2.HasExited) { Stop-Process -Id $proc2.Id -Force -ErrorAction SilentlyContinue }
+    }
 
     Write-Host "=== ALL PORTABLE EXE E2E CHECKS PASSED 100% ==="
 }

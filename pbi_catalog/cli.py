@@ -152,6 +152,13 @@ def _run_cli(argv: list[str] | None = None) -> int:
 
     if cmd == "scan":
         store = CatalogStore(ns.catalog)
+        if store.legacy_schema_info()["is_legacy"]:
+            bak = store.archive_legacy_and_clear()
+            print(
+                f"[v1.1 Upgrade Notice] Detected legacy v1.0 catalog cache. "
+                f"Backed up to {bak.name if bak else 'backup'} and starting from a clean v1.1 state.",
+                file=sys.stderr,
+            )
         auth = TokenProvider(mode=ns.auth)
         client = PowerBiReadOnlyClient(auth)
         scanner = WorkspaceScanner(client, store)
@@ -182,6 +189,12 @@ def _run_cli(argv: list[str] | None = None) -> int:
 
     if cmd == "portal":
         store = CatalogStore(ns.catalog)
+        if store.legacy_schema_info()["is_legacy"]:
+            print(
+                "[v1.1 Upgrade Notice] Warning: local catalog was created by v1.0 and lacks Report X-Ray layouts, "
+                "thin-report DAX, and Dataflow M-lineage. Run 'pbi-doc-generator scan' to start clean in v1.1.",
+                file=sys.stderr,
+            )
         out = ns.output or None
         idx = generate_portal(store, output_dir=out, anonymous=ns.anonymous)
         print(f"Portal generated: {idx}")
@@ -189,6 +202,11 @@ def _run_cli(argv: list[str] | None = None) -> int:
 
     if cmd == "export-site":
         store = CatalogStore(ns.catalog)
+        if store.legacy_schema_info()["is_legacy"]:
+            print(
+                "[v1.1 Upgrade Notice] Warning: exporting from a legacy v1.0 cache. Run a clean v1.1 scan for complete lineage.",
+                file=sys.stderr,
+            )
         is_single = ns.format == "single"
         default_name = "PBI_Documentation_Portal_SharePoint.html" if is_single else "PBI_Documentation_Portal_Bundle.zip"
         out_path = Path(ns.output) if ns.output else (Path.cwd() / default_name)
@@ -226,6 +244,13 @@ def _run_cli(argv: list[str] | None = None) -> int:
 
     if cmd == "import-local":
         store = CatalogStore(ns.catalog)
+        if store.legacy_schema_info()["is_legacy"]:
+            bak = store.archive_legacy_and_clear()
+            print(
+                f"[v1.1 Upgrade Notice] Detected legacy v1.0 catalog cache. "
+                f"Backed up to {bak.name if bak else 'backup'} and starting from a clean v1.1 state.",
+                file=sys.stderr,
+            )
         WorkspaceScanner.register_local_any(store, ns.path, workspace_name=ns.workspace_name)
         idx = generate_portal(store)
         print(f"Imported local project and updated portal: {idx}")
@@ -246,6 +271,12 @@ def _run_cli(argv: list[str] | None = None) -> int:
         return 0
 
     if cmd == "mcp":
+        store = CatalogStore(ns.catalog)
+        if store.legacy_schema_info()["is_legacy"]:
+            print(
+                "[v1.1 Upgrade Notice] Local catalog was created by v1.0. Run a fresh v1.1 scan to populate report layouts and dataflow M-lineage.",
+                file=sys.stderr,
+            )
         run_mcp_stdio(ns.catalog)
         return 0
 

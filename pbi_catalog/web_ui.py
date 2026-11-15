@@ -235,6 +235,8 @@ STUDIO_HTML = r"""<!DOCTYPE html>
     }
     .inline-banner.info { background: var(--accent-soft); border-color: #bfdbfe; color: #1e40af; }
     .inline-banner.ok { background: var(--ok-bg); border-color: #bbf7d0; color: var(--ok); }
+    .inline-banner.warn { background: #fffbeb; border-color: #fcd34d; color: #92400e; }
+    [data-theme="dark"] .inline-banner.warn { background: rgba(245,158,11,0.14); border-color: rgba(245,158,11,0.4); color: #fcd34d; }
     .inline-banner.err { background: #fef2f2; border-color: #fecaca; color: #b91c1c; }
 
     .ws-list {
@@ -343,6 +345,8 @@ STUDIO_HTML = r"""<!DOCTYPE html>
 </header>
 
 <main class="wrap">
+  <div id="legacyUpgradeBanner" class="inline-banner warn" style="display:none;margin-bottom:16px"></div>
+
   <!-- MODE 1: POWER BI SERVICE -->
   <section class="pane active" id="pane-service">
     <div class="step-card" id="stepCard1">
@@ -693,15 +697,37 @@ async function refreshStatus() {
       if (stepNum1) { stepNum1.className = "step-num"; stepNum1.textContent = "1"; }
     }
 
-    var hasModels = typeof st.models_count === "number" && st.models_count > 0;
-    var portalReady = !!st.portal_ready;
+    var leg = st.legacy_catalog || {};
+    var isLegacy = !!leg.is_legacy;
+    var hasModels = !isLegacy && typeof st.models_count === "number" && st.models_count > 0;
+    var portalReady = !isLegacy && !!st.portal_ready;
+
+    var legBanner = document.getElementById("legacyUpgradeBanner");
+    if (legBanner) {
+      if (isLegacy) {
+        window._legacyClearedFlash = false;
+        var legCnt = leg.models_count || leg.workspaces_count || 1;
+        legBanner.className = "inline-banner warn";
+        legBanner.style.display = "flex";
+        legBanner.innerHTML =
+          "<span style='flex:1;min-width:260px;line-height:1.45'><b>Version 1.0 local scan cache detected (" + legCnt + " cached item(s)):</b> " +
+          "Version 1.1 adds Report X-Ray wireframes, thin-report DAX measures, Unused Measure detection, and Dataflow Gen1/Gen2 M-lineage, which are not in your v1.0 cache. " +
+          "Start from a clean state before running your first v1.1 scan (your v1.0 state file is automatically backed up).</span>" +
+          "<button type='button' class='btn btn-primary' style='padding:7px 14px;font-size:12.5px;white-space:nowrap' onclick='startCleanFromLegacy()'>Start Clean for v1.1 &rarr;</button>";
+        var cleanRad = document.getElementById("radScanClean");
+        if (cleanRad) cleanRad.checked = true;
+      } else if (!window._legacyClearedFlash) {
+        legBanner.style.display = "none";
+        legBanner.innerHTML = "";
+      }
+    }
 
     if (step2) step2.classList.toggle("is-locked", !isAuth || !!st.busy);
-    if (step3) step3.classList.toggle("is-locked", (!isAuth && !hasModels && !portalReady));
+    if (step3) step3.classList.toggle("is-locked", (!isAuth && !hasModels && !portalReady && !isLegacy));
     document.querySelectorAll(".mode-tab").forEach(function(b) { b.disabled = !!st.busy; });
 
     var existingModeWrap = document.getElementById("existingCatalogModeWrap");
-    if (existingModeWrap) existingModeWrap.style.display = hasModels ? "" : "none";
+    if (existingModeWrap) existingModeWrap.style.display = (hasModels || isLegacy) ? "" : "none";
 
     if (st.logs && st.logs.length) {
       document.getElementById("logBox").textContent = st.logs.join("\n");
@@ -726,10 +752,12 @@ async function refreshStatus() {
     }
     var catPill = document.getElementById("activeCatalogPill");
     if (catPill && typeof st.models_count === "number") {
-      catPill.textContent = hasModels
-        ? ("Catalog: " + st.models_count + " model" + (st.models_count === 1 ? "" : "s") + " ready")
-        : "Catalog: Empty";
-      catPill.className = hasModels ? "status-pill connected" : "status-pill";
+      catPill.textContent = isLegacy
+        ? "Catalog: Legacy v1.0 cache (reset recommended)"
+        : (hasModels
+            ? ("Catalog: " + st.models_count + " model" + (st.models_count === 1 ? "" : "s") + " ready")
+            : "Catalog: Empty");
+      catPill.className = isLegacy ? "status-pill connecting" : (hasModels ? "status-pill connected" : "status-pill");
     }
     var rebuildBtn = document.getElementById("btnRebuildOnly");
     if (rebuildBtn) {
@@ -744,7 +772,7 @@ async function refreshStatus() {
     if (exportHint) exportHint.style.display = portalReady ? "" : "none";
     var resetCatBtn = document.getElementById("btnResetCatalog");
     if (resetCatBtn) {
-      resetCatBtn.style.display = (hasModels || portalReady) ? "" : "none";
+      resetCatBtn.style.display = (hasModels || portalReady || isLegacy) ? "" : "none";
       resetCatBtn.disabled = !!st.busy;
     }
 
@@ -921,6 +949,23 @@ async function runScanAndBuild() {
   } else {
     wasBusy = true;
     await refreshStatus();
+  }
+}
+
+async function startCleanFromLegacy() {
+  var res = await apiPost("/api/reset-catalog", { from_legacy: true });
+  if (res.ok) {
+    window._legacyClearedFlash = true;
+    var incRad = document.getElementById("radScanIncremental");
+    if (incRad) incRad.checked = true;
+    appendLog("Legacy v1.0 cache archived to catalog_state.v1_0.bak.json and cleared. Ready for clean v1.1 scan.");
+    await refreshStatus();
+    var legBanner = document.getElementById("legacyUpgradeBanner");
+    if (legBanner) {
+      legBanner.className = "inline-banner ok";
+      legBanner.style.display = "flex";
+      legBanner.innerHTML = "<span><b>Clean v1.1 state ready!</b> Previous v1.0 state was backed up to <code>catalog_state.v1_0.bak.json</code> and stale cache was cleared.</span>";
+    }
   }
 }
 
@@ -1183,7 +1228,7 @@ class _ExclusiveServer(http.server.ThreadingHTTPServer):
     allow_reuse_address = sys.platform != "win32"
 
 
-def _render_portal_state_html(busy: bool, logs: list[str], models_count: int, requested_path: str) -> bytes:
+def _render_portal_state_html(busy: bool, logs: list[str], models_count: int, requested_path: str, is_legacy: bool = False) -> bytes:
     """Render a clean, themed HTML waiting/empty-state page instead of a naked plain-text 404."""
     import html as _html
 
@@ -1198,6 +1243,17 @@ def _render_portal_state_html(busy: bool, logs: list[str], models_count: int, re
             f'<div class="log-tail" id="liveTail">{last_log}</div>'
             '<div class="actions">'
             '<a class="btn sec" href="/">&larr; View Full Progress in 1. Scanner &amp; Setup</a>'
+            "</div>"
+        )
+    elif is_legacy:
+        title = "Clean v1.1 Scan Required (v1.0 Cache Detected)"
+        badge = '<span class="pill">Upgrade Notice: v1.0 -> v1.1</span>'
+        body = (
+            "<p>A local scan cache from <b>Version 1.0</b> was found on this PC. Version 1.1 adds Slide-Over Report X-Ray wireframes, "
+            "thin-report DAX measures, Unused Measure detection, and Dataflow Gen1/Gen2 M-lineage, which are not present in v1.0 snapshots.</p>"
+            "<p>Open <b>1. Scanner &amp; Setup</b> and click <b>Start Clean for v1.1</b> (or run a fresh scan) to generate your complete v1.1 portal.</p>"
+            '<div class="actions">'
+            '<a class="btn pri" href="/">&larr; Go to 1. Scanner &amp; Setup (Start Clean)</a>'
             "</div>"
         )
     elif models_count > 0:
@@ -1338,12 +1394,27 @@ class StudioState:
 
 def create_studio_server(catalog_dir: str | Path, host: str = "127.0.0.1", port: int = 8765) -> tuple[http.server.ThreadingHTTPServer, StudioState]:
     state = StudioState(catalog_dir)
-    # Ensure initial portal exists ONLY if store already has non-zero models
-    if state.store.state_file.exists() and state.get_models_count() > 0:
+    init_leg = state.store.legacy_schema_info()
+    if init_leg["is_legacy"]:
+        state.log(
+            f"[v1.1 Upgrade Notice] Detected legacy v{init_leg['schema_version']} catalog cache "
+            f"({init_leg['models_count']} model(s)). Start from a clean state before running your first v1.1 scan."
+        )
+    elif state.store.state_file.exists() and state.get_models_count() > 0:
         try:
             generate_portal(state.store)
         except Exception:
             pass
+
+    def _ensure_clean_if_legacy() -> None:
+        leg_now = state.store.legacy_schema_info()
+        if leg_now["is_legacy"]:
+            bak = state.store.archive_legacy_and_clear()
+            state.invalidate_cache()
+            state.log(
+                f"Archived legacy v{leg_now['schema_version']} state to "
+                f"{bak.name if bak else 'backup'} and initialized a clean v1.1 catalog."
+            )
 
     mcp_args = (
         ["mcp", "--catalog", str(state.store.root)]
@@ -1459,8 +1530,9 @@ def create_studio_server(catalog_dir: str | Path, host: str = "127.0.0.1", port:
                 return
 
             if parsed.path == "/api/status":
+                leg_info = state.store.legacy_schema_info()
                 m_cnt = state.get_models_count()
-                portal_ready = bool(m_cnt > 0 and (state.store.portal_dir / "index.html").is_file())
+                portal_ready = bool(not leg_info["is_legacy"] and m_cnt > 0 and (state.store.portal_dir / "index.html").is_file())
                 self._json(
                     {
                         "auth": state.auth.status(),
@@ -1468,6 +1540,7 @@ def create_studio_server(catalog_dir: str | Path, host: str = "127.0.0.1", port:
                         "last_scan_error": state.last_scan_error,
                         "models_count": m_cnt,
                         "portal_ready": portal_ready,
+                        "legacy_catalog": leg_info,
                         "logs": state.logs[-80:],
                     }
                 )
@@ -1533,9 +1606,10 @@ def create_studio_server(catalog_dir: str | Path, host: str = "127.0.0.1", port:
 
             if parsed.path == "/portal" or parsed.path.startswith("/portal/"):
                 rel = parsed.path[len("/portal"):].lstrip("/") or "index.html"
+                leg_portal = state.store.legacy_schema_info()
                 portal_root = (state.store.root / "portal").resolve()
                 target = (portal_root / rel).resolve()
-                if target.is_relative_to(portal_root) and target.is_file():
+                if not leg_portal["is_legacy"] and target.is_relative_to(portal_root) and target.is_file():
                     ctype = mimetypes.guess_type(str(target))[0] or "application/octet-stream"
                     data = target.read_bytes()
                     self.send_response(200)
@@ -1551,6 +1625,7 @@ def create_studio_server(catalog_dir: str | Path, host: str = "127.0.0.1", port:
                         logs=state.logs,
                         models_count=state.get_models_count(),
                         requested_path=parsed.path,
+                        is_legacy=bool(leg_portal["is_legacy"]),
                     )
                     self.send_response(200)
                     self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -1603,6 +1678,7 @@ def create_studio_server(catalog_dir: str | Path, host: str = "127.0.0.1", port:
                         )
                         return
                     try:
+                        _ensure_clean_if_legacy()
                         meta = WorkspaceScanner.register_local_any(state.store, str(real_pbip))
                         state.invalidate_cache()
                         idx = generate_portal(state.store)
@@ -1617,6 +1693,7 @@ def create_studio_server(catalog_dir: str | Path, host: str = "127.0.0.1", port:
                 staging_root.mkdir(parents=True, exist_ok=True)
                 staged_file = staging_root / safe_name
                 try:
+                    _ensure_clean_if_legacy()
                     staged_file.write_bytes(raw_bytes)
                     meta = WorkspaceScanner.register_local_any(state.store, str(staged_file))
                     state.invalidate_cache()
@@ -1643,6 +1720,7 @@ def create_studio_server(catalog_dir: str | Path, host: str = "127.0.0.1", port:
                 return
 
             if parsed.path == "/api/upload-local-folder":
+                _ensure_clean_if_legacy()
                 files_list = body.get("files") or []
                 staging_root = (state.store.root / "_staged_imports").resolve()
                 if staging_root.exists():
@@ -1690,10 +1768,14 @@ def create_studio_server(catalog_dir: str | Path, host: str = "127.0.0.1", port:
                     if state.busy:
                         self._json({"ok": False, "error": "Cannot reset catalog while a scan is running."})
                         return
-                    state.store.clear()
+                    if state.store.legacy_schema_info()["is_legacy"]:
+                        bak = state.store.archive_legacy_and_clear()
+                        state.log(f"Archived legacy v1.0 catalog to {bak.name if bak else 'backup'} and cleared cache.")
+                    else:
+                        state.store.clear()
+                        state.log("Catalog cleared (clean slate: 0 models).")
                     state.invalidate_cache()
                     state.last_scan_error = ""
-                    state.log("Catalog cleared (clean slate: 0 models).")
                 self._json({"ok": True, "models_count": 0})
                 return
 
@@ -1807,7 +1889,9 @@ def create_studio_server(catalog_dir: str | Path, host: str = "127.0.0.1", port:
 
                 def _worker() -> None:
                     try:
-                        if body.get("clean_catalog"):
+                        if state.store.legacy_schema_info()["is_legacy"]:
+                            _ensure_clean_if_legacy()
+                        elif body.get("clean_catalog"):
                             state.store.clear()
                             state.invalidate_cache()
                             state.log("Cleared previous catalog cache (clean slate enabled).")
@@ -1859,6 +1943,7 @@ def create_studio_server(catalog_dir: str | Path, host: str = "127.0.0.1", port:
             if parsed.path == "/api/import-local":
                 p = Path(body.get("path", "")).expanduser()
                 try:
+                    _ensure_clean_if_legacy()
                     meta = WorkspaceScanner.register_local_any(state.store, str(p))
                     state.invalidate_cache()
                     idx = generate_portal(state.store)
