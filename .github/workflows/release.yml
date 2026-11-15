@@ -157,7 +157,7 @@ jobs:
 
       - name: Publish GitHub Release with single clear Portable ZIP asset
         if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           name: "PBI Doc Generator ${{ github.ref_name }}"
           body_path: dist/RELEASE_NOTES.md
