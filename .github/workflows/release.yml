@@ -24,7 +24,7 @@ jobs:
       actions: read
     steps:
       - name: Checkout E2E verification script
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Download Portable ZIP artifact from build run
         uses: actions/download-artifact@v4
@@ -47,7 +47,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Python 3.12
         uses: actions/setup-python@v5
