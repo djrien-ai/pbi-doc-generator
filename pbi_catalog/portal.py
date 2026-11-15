@@ -761,6 +761,32 @@ code, pre {
   color: var(--accent);
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
 }
+.usage-scope-note {
+  display: none;
+  align-items: flex-start;
+  gap: 9px;
+  margin: -4px 0 14px 0;
+  padding: 9px 13px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--warn);
+  background: var(--surface-alt);
+  color: var(--fg-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.usage-scope-note.is-visible {
+  display: flex;
+}
+.usage-scope-note svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--warn);
+}
+.usage-scope-note b {
+  color: var(--fg);
+  font-weight: 650;
+}
 .sort-select {
   padding: 6px 10px;
   border-radius: 8px;
@@ -2412,7 +2438,8 @@ PORTAL_COMMON_JS = r"""
                 cols.forEach(function (c) {
                     var cname = typeof c === "string" ? c : (c.name || "");
                     var ctype = (typeof c === "object" && c.type) ? " (`" + c.type + "`)" : "";
-                    md.push("- `" + cname + "`" + ctype);
+                    var cusage = (typeof c === "object" && c.usage && c.usage !== "-") ? " - Usage: " + c.usage : "";
+                    md.push("- `" + cname + "`" + ctype + cusage);
                 });
             }
             if (t.code) md.push("", "```" + (t.lang || "powerquery"), t.code, "```");
@@ -2425,19 +2452,21 @@ PORTAL_COMMON_JS = r"""
             md.push("", "```dax", (m.code || ""), "```", "");
         });
 
-        var csvRows = ["ObjectType,Table,Name,DataTypeOrFolder,Format,StorageOrSource,Expression"];
+        var csvRows = ["ObjectType,Table,Name,DataTypeOrFolder,Format,Usage,StorageOrSource,Expression"];
         tables.forEach(function (t) {
             (t.columns || []).forEach(function (c) {
                 var cname = typeof c === "string" ? c : (c.name || "");
                 var ctype = typeof c === "object" ? (c.type || "") : "";
                 var cfmt = typeof c === "object" ? (c.format || "") : "";
+                var cusage = typeof c === "object" ? (c.usage || "-") : "-";
                 var csrc = typeof c === "object" ? (c.source || "") : (t.storage_mode || "");
                 var cexpr = typeof c === "object" ? (c.expr || "") : "";
-                csvRows.push(["Column", t.name, cname, ctype, cfmt, csrc, cexpr].map(csvEscape).join(","));
+                csvRows.push(["Column", t.name, cname, ctype, cfmt, cusage, csrc, cexpr].map(csvEscape).join(","));
             });
         });
         measures.forEach(function (m) {
-            csvRows.push(["Measure", m.table || "", m.name || "", m.folder || "General", m.format || "", "DAX", m.code || ""].map(csvEscape).join(","));
+            var mRepCnt = (m.used_in_reports && m.used_in_reports.length) ? ("Reports (" + m.used_in_reports.length + ")") : "-";
+            csvRows.push(["Measure", m.table || "", m.name || "", m.folder || "General", m.format || "", mRepCnt, "DAX", m.code || ""].map(csvEscape).join(","));
         });
         // Also harvest DOM columns if graph columns are compact strings
         if (tables.length === 0 && document.querySelectorAll("details.table-blueprint").length) {
@@ -2445,8 +2474,8 @@ PORTAL_COMMON_JS = r"""
                 var tTitle = (det.querySelector("summary span") && det.querySelector("summary span").textContent || "Table").split(":")[0].trim();
                 det.querySelectorAll("tbody tr").forEach(function (tr) {
                     var tds = tr.querySelectorAll("td");
-                    if (tds.length >= 4) {
-                        csvRows.push(["Column", tTitle, tds[0].textContent, tds[1].textContent, tds[3].textContent, tds[2].textContent, tds[4] ? tds[4].textContent : ""].map(csvEscape).join(","));
+                    if (tds.length >= 5) {
+                        csvRows.push(["Column", tTitle, tds[0].textContent, tds[1].textContent, tds[4].textContent, tds[2].textContent, tds[3].textContent, tds[5] ? tds[5].textContent : ""].map(csvEscape).join(","));
                     }
                 });
             });
@@ -2524,6 +2553,20 @@ PORTAL_COMMON_JS = r"""
         var prevTheme = document.documentElement.getAttribute("data-theme");
         document.documentElement.setAttribute("data-theme", "light");
         var openedDetails = [];
+        var unhiddenEls = [];
+        var hiddenScopeNotes = [];
+        if (preset === "full") {
+            document.querySelectorAll("tr[data-column-usage], [data-measure-usage], details.table-blueprint, details.dax-folder-details, details.dax-table-group").forEach(function (el) {
+                if (el.style.display === "none") {
+                    el.style.display = "";
+                    unhiddenEls.push(el);
+                }
+            });
+            document.querySelectorAll(".usage-scope-note.is-visible").forEach(function (n) {
+                n.classList.remove("is-visible");
+                hiddenScopeNotes.push(n);
+            });
+        }
         var alwaysOpenSel = "details.dax-folder-details, details.dax-table-group, details.principals-details, #tab-workspaces.active details.section-accordion";
         var fullOpenSel = "details.table-blueprint, details.dax-folder-details, details.dax-table-group, details.section-accordion, details.principals-details";
         document.querySelectorAll(preset === "full" ? fullOpenSel : alwaysOpenSel).forEach(function (d) {
@@ -2539,6 +2582,8 @@ PORTAL_COMMON_JS = r"""
             if (prevTheme) document.documentElement.setAttribute("data-theme", prevTheme);
             else document.documentElement.removeAttribute("data-theme");
             openedDetails.forEach(function (d) { d.open = false; });
+            unhiddenEls.forEach(function (el) { el.style.display = "none"; });
+            hiddenScopeNotes.forEach(function (n) { n.classList.add("is-visible"); });
             document.querySelectorAll(".section[data-print-hide]").forEach(function (s) { s.removeAttribute("data-print-hide"); });
             window.removeEventListener("afterprint", restoreAfterPrint);
         }
@@ -3020,10 +3065,35 @@ PORTAL_COMMON_JS = r"""
             }
             return;
         }
+        var colUsageBtn = e.target.closest("[data-col-usage]");
+        if (colUsageBtn) {
+            var cMode = colUsageBtn.getAttribute("data-col-usage");
+            document.querySelectorAll("[data-col-usage]").forEach(function (b) { b.classList.toggle("active", b === colUsageBtn); });
+            var colNote = document.getElementById("colUnusedScopeNote");
+            if (colNote) colNote.classList.toggle("is-visible", cMode === "unused");
+            document.querySelectorAll("tr[data-column-usage]").forEach(function (row) {
+                var cu = row.getAttribute("data-column-usage");
+                var showRow = (cMode === "all") || (cu === cMode);
+                row.style.display = showRow ? "" : "none";
+            });
+            document.querySelectorAll("details.table-blueprint").forEach(function (det) {
+                var colRows = Array.from(det.querySelectorAll("tr[data-column-usage]"));
+                if (!colRows.length) {
+                    det.style.display = (cMode === "all") ? "" : "none";
+                    return;
+                }
+                var anyColVis = colRows.some(function (r) { return r.style.display !== "none"; });
+                det.style.display = (cMode === "all" || anyColVis) ? "" : "none";
+                if (cMode !== "all" && anyColVis) det.open = true;
+            });
+            return;
+        }
         var daxUsageBtn = e.target.closest("[data-dax-usage]");
         if (daxUsageBtn) {
             var mode = daxUsageBtn.getAttribute("data-dax-usage");
             document.querySelectorAll("[data-dax-usage]").forEach(function (b) { b.classList.toggle("active", b === daxUsageBtn); });
+            var daxNote = document.getElementById("daxUnusedScopeNote");
+            if (daxNote) daxNote.classList.toggle("is-visible", mode === "unused");
             document.querySelectorAll("[data-measure-usage]").forEach(function (el) {
                 var u = el.getAttribute("data-measure-usage");
                 var show = (mode === "all") || (u === mode);
@@ -3031,8 +3101,13 @@ PORTAL_COMMON_JS = r"""
             });
             document.querySelectorAll("details.dax-folder-details").forEach(function (f) {
                 var anyVis = Array.from(f.querySelectorAll(".measure-card[data-measure-usage]")).some(function (c) { return c.style.display !== "none"; });
-                f.style.display = anyVis ? "" : "none";
+                f.style.display = (mode === "all" || anyVis) ? "" : "none";
                 if (mode !== "all" && anyVis) f.open = true;
+            });
+            document.querySelectorAll("details.dax-table-group").forEach(function (grp) {
+                var anyFolderVis = Array.from(grp.querySelectorAll("details.dax-folder-details")).some(function (f) { return f.style.display !== "none"; });
+                grp.style.display = (mode === "all" || anyFolderVis) ? "" : "none";
+                if (mode !== "all" && anyFolderVis) grp.open = true;
             });
             return;
         }
@@ -3822,31 +3897,72 @@ def render_model_html(
             f"</tr>"
         )
 
+    has_layouts = bool(analysis.get("has_parsed_layouts"))
+    bound_reps = analysis.get("reports") or []
+    bound_rep_cnt = len(bound_reps)
+    scanned_rep_cnt = sum(
+        1 for r in bound_reps if isinstance(r.get("layout"), dict) and r["layout"].get("pages")
+    )
+    if scanned_rep_cnt == bound_rep_cnt:
+        rep_scope_html = f"<b>{scanned_rep_cnt} scanned bound report{'s' if scanned_rep_cnt != 1 else ''}</b>"
+    else:
+        unscanned_rep_cnt = bound_rep_cnt - scanned_rep_cnt
+        rep_scope_html = (
+            f"<b>{scanned_rep_cnt} of {bound_rep_cnt} bound reports</b> "
+            f"({unscanned_rep_cnt} bound report{'s' if unscanned_rep_cnt != 1 else ''} without readable visual layout)"
+        )
+    scope_icon_svg = (
+        '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+        'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+        '<circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>'
+    )
     raw_tables_by_name = {t["name"]: t for t in parsed["tables"] if not re.match(r"^'?(LocalDateTable|DateTableTemplate)_", t["name"])}
     blueprint_cards = []
     consistent_tbl_open = " open" if len(analysis["table_summaries"]) <= 3 else ""
+    badge_tone_cls = {
+        "accent": "badge badge-accent",
+        "ok": "badge badge-ok",
+        "warn": "badge badge-warn",
+        "dim": "badge badge-dim",
+    }
     for ts in analysis["table_summaries"]:
         raw_t = raw_tables_by_name.get(ts["name"])
         if not raw_t:
             continue
         key_set = rel_key_cols.get(ts["name"], set())
-        key_badge_html = ' <span class="badge badge-accent">Key</span>'
         hid_col_badge_html = ' <span class="badge">Hidden</span>'
-        col_rows = "".join(
-            f"<tr>"
-            f"<td><b>{esc(c['name'])}</b>"
-            f"{key_badge_html if c['name'] in key_set else ''}"
-            f"{hid_col_badge_html if c['hidden'] else ''}</td>"
-            f"<td><code>{esc(c['type'] or '-')}</code></td>"
-            f"<td>{esc(c['source'] or ('Calculated DAX' if c['expr'] else '-'))}</td>"
-            f"<td>{esc(c['format'] or '-')}</td>"
-            f"<td>{esc(c['description'] or '-')}</td>"
-            f"</tr>"
-            for c in raw_t["columns"]
-        )
+        col_row_items = []
+        for c in raw_t["columns"]:
+            c_usage = c.get("usage") or {}
+            c_status = c_usage.get("status", "used")
+            c_badges = c_usage.get("badges") or []
+            if not c_badges and c["name"] in key_set:
+                c_badges = [{"label": "Key", "tone": "accent"}]
+            if c_badges:
+                usage_cell_html = '<div style="display:flex;gap:4px;flex-wrap:wrap">' + "".join(
+                    f'<span class="{badge_tone_cls.get(b.get("tone", "dim"), "badge")}">{esc(b["label"])}</span>'
+                    for b in c_badges
+                ) + "</div>"
+            elif has_layouts and c_status == "unused":
+                usage_cell_html = '<span class="badge badge-warn" title="Unreferenced across model relationships, DAX, SortBy, hierarchies, field parameters, RLS, refresh policies, and scanned reports">Unused</span>'
+            else:
+                usage_cell_html = '<span style="color:var(--fg-muted)">-</span>'
+            sort_note = f' <span class="badge badge-dim" title="Sorted by column {esc(c["sort_by"])}">Sort: {esc(c["sort_by"])}</span>' if c.get("sort_by") else ""
+            row_usage_attr = "unused" if (has_layouts and c_status == "unused") else "used"
+            col_row_items.append(
+                f'<tr data-column-usage="{row_usage_attr}">'
+                f"<td><b>{esc(c['name'])}</b>{hid_col_badge_html if c['hidden'] else ''}{sort_note}</td>"
+                f"<td><code>{esc(c['type'] or '-')}</code></td>"
+                f"<td>{usage_cell_html}</td>"
+                f"<td>{esc(c['source'] or ('Calculated DAX' if c['expr'] else '-'))}</td>"
+                f"<td>{esc(c['format'] or '-')}</td>"
+                f"<td>{esc(c['description'] or '-')}</td>"
+                f"</tr>"
+            )
+        col_rows = "".join(col_row_items)
         cols_html = (
             '<div class="table-scroll"><table class="data-table">'
-            "<thead><tr><th>Column</th><th>Data Type</th><th>Origin / Source Column</th><th>Format</th><th>Description</th></tr></thead>"
+            "<thead><tr><th>Column</th><th>Data Type</th><th>Usage</th><th>Origin / Source Column</th><th>Format</th><th>Description</th></tr></thead>"
             f"<tbody>{col_rows}</tbody></table></div>"
             if col_rows
             else '<p style="margin:0;color:var(--fg-muted)">Measure-only container table (0 physical columns).</p>'
@@ -3896,12 +4012,40 @@ def render_model_html(
 
         role_txt = "Fact" if ts["name"] in facts else ("Dimension" if ts["name"] in dims else "Table")
         desc_suffix = f' <span style="font-weight:400;color:var(--fg-muted)">: {esc(ts["description"])}</span>' if ts["description"] else ""
+        tbl_unused_cnt = int(ts.get("unused_columns_count") or 0)
+        tbl_unused_badge = (
+            f'<span class="badge badge-warn" title="Columns unreferenced across model relationships, DAX, SortBy, hierarchies, RLS, and scanned reports">{tbl_unused_cnt} unused</span>'
+            if (has_layouts and tbl_unused_cnt > 0)
+            else ""
+        )
+        unused_tbl_tokens = " unused unreferenced unused columns unreferenced columns" if (has_layouts and tbl_unused_cnt > 0) else ""
+        tbl_search_blob = (ts["name"] + " " + ts["description"] + " " + " ".join(c["name"] for c in raw_t["columns"]) + unused_tbl_tokens).lower()
         blueprint_cards.append(
-            f'<details class="table-blueprint" id="{_table_anchor(ts["name"])}"{consistent_tbl_open} data-searchable="{esc((ts["name"] + " " + ts["description"]).lower())}">'
+            f'<details class="table-blueprint" id="{_table_anchor(ts["name"])}"{consistent_tbl_open} data-searchable="{esc(tbl_search_blob)}">'
             f"<summary><span>{esc(ts['name'])}{desc_suffix}</span>"
-            f'<div class="model-meta"><span class="badge badge-accent">{role_txt}</span><span class="badge">{ts["columns_count"]} cols</span><span class="badge">{ts["pq_steps"]} PQ steps</span></div></summary>'
+            f'<div class="model-meta"><span class="badge badge-accent">{role_txt}</span><span class="badge">{ts["columns_count"]} cols</span>{tbl_unused_badge}<span class="badge">{ts["pq_steps"]} PQ steps</span></div></summary>'
             f'<div class="blueprint-body">{cols_html}{hier_html}{calc_col_blocks}{"".join(part_blocks)}</div>'
             f"</details>"
+        )
+
+    col_usage_pills_html = ""
+    col_unused_scope_html = ""
+    if has_layouts and stats["columns"] > 0:
+        used_cols_stat = stats.get("used_columns", stats["columns"])
+        unused_cols_stat = stats.get("unused_columns", 0)
+        col_usage_pills_html = (
+            f'<div class="view-toggle" role="group" aria-label="Filter columns by model and report usage">'
+            f'<button type="button" class="view-btn active" data-col-usage="all">All Columns ({stats["columns"]})</button>'
+            f'<button type="button" class="view-btn" data-col-usage="used">Used ({used_cols_stat})</button>'
+            f'<button type="button" class="view-btn" data-col-usage="unused" title="Columns with zero references in model internals or scanned reports">Unused ({unused_cols_stat})</button>'
+            f"</div>"
+        )
+        col_unused_scope_html = (
+            f'<div class="usage-scope-note" id="colUnusedScopeNote" role="status">'
+            f"{scope_icon_svg}"
+            f"<div><b>Static scan scope:</b> Unreferenced across model relationships, DAX, SortBy, hierarchies, field parameters, RLS, refresh policies, and {rep_scope_html}. "
+            f"Before deleting, verify no unscanned workspaces, Personal Workspaces, Analyze in Excel, Paginated Reports, or composite models use these columns.</div>"
+            f"</div>"
         )
 
     expr_html = ""
@@ -3918,7 +4062,6 @@ def render_model_html(
     # 4. Structured DAX Library (100% SQLBI-Style Formatted + Consistent Display Folders!)
     lin_measures = analysis["lineage"] or {}
     depths = _compute_measure_depths(lin_measures)
-    has_layouts = bool(analysis.get("has_parsed_layouts"))
     consistent_folder_open = " open" if stats["measures"] <= 30 else ""
     dax_groups_html: list[str] = []
 
@@ -3950,7 +4093,8 @@ def render_model_html(
                 hid_badge = '<span class="badge badge-warn">Hidden</span>' if m.get("hidden") else ""
                 is_used_any = bool(li.get("is_used_any", True))
                 usage_attr = "used" if is_used_any else "unused"
-                unused_badge = '<span class="badge">Unused in scanned reports</span>' if (has_layouts and not is_used_any) else ""
+                unused_badge = '<span class="badge badge-warn" title="Unreferenced across model expressions, scanned reports, and downstream used measures">Unused</span>' if (has_layouts and not is_used_any) else ""
+                m_unused_tokens = " unused unreferenced unused measures unreferenced measures" if (has_layouts and not is_used_any) else ""
                 desc_html = f'<div class="measure-desc">{esc(m["description"])}</div>' if m.get("description") else ""
 
                 up_chips = []
@@ -3996,7 +4140,7 @@ def render_model_html(
                     )
 
                 return (
-                    f'<div class="measure-card" id="{anchor}" data-measure-usage="{usage_attr}" data-searchable="{esc((m_name + " " + m.get("description", "") + " " + m.get("expr", "")).lower())}">'
+                    f'<div class="measure-card" id="{anchor}" data-measure-usage="{usage_attr}" data-searchable="{esc((m_name + " " + m.get("description", "") + " " + m.get("expr", "") + m_unused_tokens).lower())}">'
                     f'<div class="measure-head"><span class="measure-name">{esc(m_name)}</span><div class="model-meta">{tier_badge}{fmt_badge}{hid_badge}{unused_badge}</div></div>'
                     f"{desc_html}"
                     f'<div class="code-block"><button type="button" class="copy-btn" data-copy="1">Copy DAX</button><pre>{_highlight_dax(m.get("expr", ""), auto_pretty=True)}</pre></div>'
@@ -4036,29 +4180,43 @@ def render_model_html(
             used_cnt = len(li.get("downstream_measures", [])) + len(li.get("used_in_reports") or [])
             is_used_any = bool(li.get("is_used_any", True))
             usage_attr = "used" if is_used_any else "unused"
+            m_unused_tokens = " unused unreferenced unused measures unreferenced measures" if (has_layouts and not is_used_any) else ""
+            used_by_cell = (
+                '<span class="badge badge-warn" title="Unreferenced across model expressions, scanned reports, and downstream used measures">Unused</span>'
+                if (has_layouts and not is_used_any)
+                else str(used_cnt)
+            )
             one_line = re.sub(r"\s+", " ", m.get("expr", "")).strip()
             preview = (one_line[:110] + "...") if len(one_line) > 110 else one_line
             anchor = _measure_anchor(tbl["name"], m["name"])
             dax_list_rows.append(
-                f'<tr data-measure-usage="{usage_attr}" data-searchable="{esc((m["name"] + " " + tbl["name"] + " " + (m.get("folder") or "") + " " + one_line).lower())}">'
+                f'<tr data-measure-usage="{usage_attr}" data-searchable="{esc((m["name"] + " " + tbl["name"] + " " + (m.get("folder") or "") + " " + one_line + m_unused_tokens).lower())}">'
                 f'<td><a href="#{anchor}"><b>{esc(m["name"])}</b></a></td>'
                 f"<td>{esc(tbl['name'])}</td>"
                 f"<td>{esc(m.get('folder') or 'General')}</td>"
                 f"<td><span class='badge {'badge-dim' if d_val == 0 else 'badge-accent'}'>{tier_txt}</span></td>"
                 f"<td><code>{esc(m.get('format') or '-')}</code></td>"
                 f"<td>{reads_cnt}</td>"
-                f"<td>{used_cnt}</td>"
+                f"<td>{used_by_cell}</td>"
                 f"<td><code style='font-size:11.5px'>{esc(preview)}</code></td>"
                 f"</tr>"
             )
 
     dax_usage_pills_html = ""
+    dax_unused_scope_html = ""
     if has_layouts and stats["measures"] > 0:
         dax_usage_pills_html = (
-            f'<div class="view-toggle" role="group" aria-label="Filter measures by report usage">'
-            f'<button type="button" class="view-btn active" data-dax-usage="all">All ({stats["measures"]})</button>'
-            f'<button type="button" class="view-btn" data-dax-usage="used">Used in Reports ({stats["used_measures"]})</button>'
-            f'<button type="button" class="view-btn" data-dax-usage="unused">Unused ({stats["unused_measures"]})</button>'
+            f'<div class="view-toggle" role="group" aria-label="Filter measures by model and report usage">'
+            f'<button type="button" class="view-btn active" data-dax-usage="all">All Measures ({stats["measures"]})</button>'
+            f'<button type="button" class="view-btn" data-dax-usage="used">Used ({stats["used_measures"]})</button>'
+            f'<button type="button" class="view-btn" data-dax-usage="unused" title="Measures unreferenced across model expressions, scanned reports, and downstream used measures">Unused ({stats["unused_measures"]})</button>'
+            f"</div>"
+        )
+        dax_unused_scope_html = (
+            f'<div class="usage-scope-note" id="daxUnusedScopeNote" role="status">'
+            f"{scope_icon_svg}"
+            f"<div><b>Static scan scope:</b> Unreferenced across model expressions, visual projections, filters, report-level DAX, and upstream measure chains in {rep_scope_html}. "
+            f"Before deleting, verify no unscanned workspaces, Personal Workspaces, Analyze in Excel, or Paginated Reports reference these measures.</div>"
             f"</div>"
         )
 
@@ -4218,8 +4376,9 @@ def render_model_html(
           <h2>3. Data Sources &amp; Tables Blueprint</h2>
           <div class="hint">Storage modes, source endpoints, upstream Dataflows, visual Power Query pipelines, and column definitions</div>
         </div>
-        {('<div style="display:flex;gap:6px;flex-wrap:wrap"><button type="button" class="lin-btn" data-details-toggle="tablesBlueprintContainer" data-open="1">Expand All</button><button type="button" class="lin-btn" data-details-toggle="tablesBlueprintContainer" data-open="0">Collapse All</button></div>') if blueprint_cards else ''}
+        {('<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">' + col_usage_pills_html + '<button type="button" class="lin-btn" data-details-toggle="tablesBlueprintContainer" data-open="1">Expand All</button><button type="button" class="lin-btn" data-details-toggle="tablesBlueprintContainer" data-open="0">Collapse All</button></div>') if blueprint_cards else ''}
       </div>
+      {col_unused_scope_html}
       {upstream_df_html}
       <div class="{tbl_scroll_cls}" style="margin-bottom:18px">
         <table class="data-table">
@@ -4241,6 +4400,7 @@ def render_model_html(
         </div>
         {('<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">' + dax_usage_pills_html + '<div class="view-toggle"><button type="button" class="view-btn active" data-dax-view="list">Compact Table</button><button type="button" class="view-btn" data-dax-view="cards">Formatted Cards</button></div><button type="button" class="lin-btn" data-details-toggle="daxCardsContainer" data-open="1">Expand All</button><button type="button" class="lin-btn" data-details-toggle="daxCardsContainer" data-open="0">Collapse All</button></div>') if stats['measures'] > 0 else ''}
       </div>
+      {dax_unused_scope_html}
       {dax_section_body}
     </section>
 
@@ -4290,6 +4450,10 @@ def render_model_html(
         }});
       }} else {{
         document.querySelectorAll("details.dax-folder-details").forEach(function (f) {{ f.style.display = ""; }});
+        var activeDaxBtn = document.querySelector("[data-dax-usage].active");
+        if (activeDaxBtn && activeDaxBtn.getAttribute("data-dax-usage") !== "all") activeDaxBtn.click();
+        var activeColBtn = document.querySelector("[data-col-usage].active");
+        if (activeColBtn && activeColBtn.getAttribute("data-col-usage") !== "all") activeColBtn.click();
       }}
     }});
   }}

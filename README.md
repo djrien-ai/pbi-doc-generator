@@ -37,9 +37,9 @@ Most Power BI documentation tools stop at a single `.pbix` file, while Power BI'
 2. **Deep Dataflow Gen1, Fabric Dataflow Gen2 & Direct Lake Lineage**
    - Follows multi-layer **Dataflow Gen1** chains (`L1` / `L2+` linked `ReferenceEntity` tables across workspaces) and **Fabric Dataflow Gen2** (`mashup.pq` + OneLake **Lakehouse** and **Warehouse** table destinations), connected directly to **Direct Lake** and Import semantic models.
    - Automatically extracts and formats embedded **Native SQL** (`Value.NativeQuery`, `Sql.Database`, `SapHana`, `Snowflake`, `Odbc.Query`) and translates Power Query M into clickable plain-English transformation steps.
-3. **Zero-Dependency Star-Schema Explorer & SQLBI-Formatted DAX Catalog**
+3. **Zero-Dependency Star-Schema Explorer, Unused Column & DAX Measure Auditing**
    - Native HTML+SVG **Star-Schema Explorer** with **Focused Star** tabs per Fact table, zoom, pan, fullscreen, and click-to-pin relationship highlighting.
-   - Pretty-prints single-line DAX into clean **SQLBI-style formatting**, grouped by `Table -> Display Folder -> Dependency Tier`, with instant filter pills (`All`, `Used in Reports`, `Unused`) and end-to-end upstream/downstream trace links.
+   - Full static dependency auditing across model internals (`Key`, `SortByColumn`, Field Parameters, Hierarchies, `RLS`/OLS, Incremental Refresh, DAX) and scanned reports (visuals, slicers, `fx` conditional formatting, filters, report-level DAX), with instant **`All | Used | Unused`** filter pills on both **Columns** and **SQLBI-formatted DAX Measures**.
 4. **Scoped Export & 1-Click SharePoint Online Publishing**
    - Click **Export / Publish** from the catalog or from any individual semantic model page and choose your scope (**This Semantic Model** or **Entire Catalog**):
      - **Print / Save as PDF** (clean A4 portrait executive layout with stacked full-width vector **Star-Schema** diagrams)

@@ -654,6 +654,17 @@
                     '</div>';
             } else {
                 brokenBadge = '<span class="badge badge-bad">' + item.broken_count + ' broken field(s)</span>';
+                if (item.broken_refs && item.broken_refs.length) {
+                    brokenStripHtml =
+                        '<div style="padding:8px 14px;border-radius:9px;background:var(--bad-bg);border:1px solid rgba(185,28,28,0.28);display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px">' +
+                        '<b style="color:var(--bad)">Broken Filter / DAX Bindings (' + item.broken_refs.length + '):</b>' +
+                        item.broken_refs.slice(0, 12).map(function (br) {
+                            return '<span class="dep-chip" style="border-color:var(--bad);color:var(--bad);background:var(--surface)">' +
+                                escHtml((br.page || "Report") + " > " + (br.visual || "Filter") + ": " + (br.ref || "")) +
+                                '</span>';
+                        }).join("") +
+                        '</div>';
+                }
             }
         }
         var shadowBadge = item.report_measures_count ? '<span class="badge badge-warn">' + item.report_measures_count + ' report-level DAX</span>' : '';

@@ -1403,6 +1403,397 @@ def test_v11_parallel_scanner_lro_and_progress_telemetry() -> None:
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+def test_v11_column_usage_and_broken_reference_recovery() -> None:
+    """Exhaustively verify intra-model + report-layer column usage tracking, safety guard without layouts, and post-deletion broken-reference recovery."""
+    tmp = Path(tempfile.mkdtemp(prefix="pbi_v11_col_usage_"))
+    try:
+        tmdl_files = {
+            "definition/model.tmdl": "model Model\n\tculture: en-US\n",
+            "definition/relationships.tmdl": (
+                "relationship r_active\n"
+                "\tfromColumn: 'Fact Sales'.OrderDate\n"
+                "\ttoColumn: 'Dim Calendar'.Date\n"
+                "relationship r_inactive\n"
+                "\tisActive: false\n"
+                "\tfromColumn: 'Fact Sales'.ShipDate\n"
+                "\ttoColumn: 'Dim Calendar'.Date\n"
+                "relationship r_cust\n"
+                "\tfromColumn: 'Fact Sales'.CustomerKey\n"
+                "\ttoColumn: 'Dim Customer'.CustomerKey\n"
+            ),
+            "definition/roles/Security.tmdl": (
+                "role 'Regional Security'\n"
+                "\tmodelPermission: read\n"
+                "\ttablePermission 'Dim Customer' = [RegionCode] == \"EMEA\" && 'Dim Customer'[ManagerUpn] == USERPRINCIPALNAME()\n"
+                "\ttablePermission 'Fact Sales'\n"
+                "\t\tcolumnPermission SecretCost = none\n"
+            ),
+            "definition/tables/DimCalendar.tmdl": (
+                "table 'Dim Calendar'\n"
+                "\tcolumn Date\n\t\tdataType: dateTime\n\t\tisKey\n\t\tsourceColumn: Date\n"
+                "\tcolumn MonthName\n\t\tdataType: string\n\t\tsortByColumn: MonthSort\n\t\tsourceColumn: MonthName\n"
+                "\tcolumn MonthSort\n\t\tdataType: int64\n\t\tisHidden\n\t\tsourceColumn: MonthSort\n"
+                "\tcolumn FiscalYear\n\t\tdataType: string\n\t\tsourceColumn: FiscalYear\n"
+                "\thierarchy 'Calendar Hierarchy'\n"
+                "\t\tlevel 'Fiscal Year'\n\t\t\tcolumn: FiscalYear\n"
+            ),
+            "definition/tables/DimCustomer.tmdl": (
+                "table 'Dim Customer'\n"
+                "\tcolumn CustomerKey\n\t\tdataType: int64\n\t\tsourceColumn: CustomerKey\n"
+                "\tcolumn 'Country Name'\n\t\tdataType: string\n\t\tsourceColumn: CountryName\n"
+                "\tcolumn Tier\n\t\tdataType: string\n\t\tsourceColumn: Tier\n"
+                "\tcolumn RegionCode\n\t\tdataType: string\n\t\tsourceColumn: RegionCode\n"
+                "\tcolumn ManagerUpn\n\t\tdataType: string\n\t\tisHidden\n\t\tsourceColumn: ManagerUpn\n"
+                "\tcolumn SortRank\n\t\tdataType: int64\n\t\tsourceColumn: SortRank\n"
+                "\tcolumn BookmarkSeg\n\t\tdataType: string\n\t\tsourceColumn: BookmarkSeg\n"
+                "\tcolumn DrillRegion\n\t\tdataType: string\n\t\tsourceColumn: DrillRegion\n"
+                "\tcolumn UnusedCustomerFax\n\t\tdataType: string\n\t\tsourceColumn: Fax\n"
+                "\thierarchy Geo\n"
+                "\t\tlevel Country\n\t\t\tcolumn: 'Country Name'\n"
+            ),
+            "definition/tables/CurrencyFormat.tmdl": (
+                "table Currency\n"
+                "\tcolumn FormatMask\n\t\tdataType: string\n\t\tsourceColumn: FormatMask\n"
+            ),
+            "definition/tables/StagingFeed.tmdl": (
+                "table StagingFeed\n"
+                "\tcolumn StagingId\n\t\tdataType: int64\n\t\tsourceColumn: StagingId\n"
+                "\tcolumn UnusedStagingCol\n\t\tdataType: string\n\t\tsourceColumn: UnusedStagingCol\n"
+                "\tpartition StagingFeed = m\n\t\tmode: import\n\t\tsource =\n"
+                "\t\t\tlet Source = Sql.Database(\"dw-prod\", \"RAW\") in Source\n"
+            ),
+            "definition/tables/DerivedLookup.tmdl": (
+                "table DerivedLookup\n"
+                "\tcolumn StagingId\n\t\tdataType: int64\n\t\tsourceColumn: StagingId\n"
+                "\tpartition DerivedLookup = m\n\t\tmode: import\n\t\tsource =\n"
+                "\t\t\tlet Src = StagingFeed, Filtered = Table.SelectRows(Src, each [StagingId] > 0) in Filtered\n"
+            ),
+            "definition/tables/FieldParam.tmdl": (
+                "table 'Metric Selector'\n"
+                "\tcolumn 'Metric Selector'\n\t\tdataType: string\n\t\tsortByColumn: 'Metric Selector Order'\n"
+                "\t\trelatedColumnDetails\n\t\t\tgroupByColumn: 'Metric Selector Fields'\n"
+                "\tcolumn 'Metric Selector Fields'\n\t\tdataType: string\n\t\tisHidden\n"
+                "\tcolumn 'Metric Selector Order'\n\t\tdataType: int64\n\t\tisHidden\n"
+                "\tpartition 'Metric Selector' = calculated\n\t\tmode: import\n\t\tsource =\n"
+                "\t\t\t{\n"
+                "\t\t\t    (\"Tier\", NAMEOF('Dim Customer'[Tier]), 0)\n"
+                "\t\t\t}\n"
+            ),
+            "definition/tables/TimeCalcGroup.tmdl": (
+                "table 'Time Intelligence'\n"
+                "\tcalculationGroup\n"
+                "\t\tcalculationItem CY = CALCULATE(SELECTEDMEASURE(), 'Dim Calendar'[FiscalYear] = \"FY26\")\n"
+                "\tcolumn 'Time Calc'\n\t\tdataType: string\n\t\tsourceColumn: Name\n"
+            ),
+            "definition/tables/SnapA.tmdl": (
+                "table 'Snap A'\n\tcolumn SnapVal\n\t\tdataType: int64\n\t\tsourceColumn: SnapVal\n"
+            ),
+            "definition/tables/SnapB.tmdl": (
+                "table 'Snap B'\n\tcolumn SnapVal\n\t\tdataType: int64\n\t\tsourceColumn: SnapVal\n"
+            ),
+            "definition/tables/SnapUnion.tmdl": (
+                "table 'Snap Union'\n\tcolumn SnapVal\n\t\tdataType: int64\n"
+                "\tpartition 'Snap Union' = calculated\n\t\tmode: import\n\t\tsource = UNION('Snap A', 'Snap B')\n"
+            ),
+            "definition/tables/FactSales.tmdl": (
+                "table 'Fact Sales'\n"
+                "\trefreshPolicy\n"
+                "\t\tsourceExpression =\n"
+                "\t\t\tlet\n"
+                "\t\t\t\tSource = Sql.Database(\"sql-erp.contoso.net\", \"ERP_PROD\"),\n"
+                "\t\t\t\tFiltered = Table.SelectRows(Source, each [ModifiedTimestamp] >= RangeStart and [ModifiedTimestamp] < RangeEnd)\n"
+                "\t\t\tin\n"
+                "\t\t\t\tFiltered\n"
+                "\tmeasure 'Base Sales' = SUM('Fact Sales'[GrossAmt])\n"
+                "\t\tformatStringDefinition = SELECTEDVALUE(Currency[FormatMask], \"$#,##0\")\n"
+                "\tmeasure 'Net Sales' = VAR x = 1 RETURN [Base Sales]\n"
+                "\tcolumn OrderDate\n\t\tdataType: dateTime\n\t\tsourceColumn: OrderDate\n"
+                "\tcolumn ShipDate\n\t\tdataType: dateTime\n\t\tsourceColumn: ShipDate\n"
+                "\tcolumn CustomerKey\n\t\tdataType: int64\n\t\tsourceColumn: CustomerKey\n"
+                "\tcolumn GrossAmt\n\t\tdataType: decimal\n\t\tsourceColumn: GrossAmt\n"
+                "\tcolumn UnitCost\n\t\tdataType: decimal\n\t\tsourceColumn: UnitCost\n"
+                "\tcolumn Qty\n\t\tdataType: int64\n\t\tsourceColumn: Qty\n"
+                "\tcolumn LineCost = [UnitCost] * [Qty]\n\t\tdataType: decimal\n"
+                "\tcolumn DiscountAmt\n\t\tdataType: decimal\n\t\tsourceColumn: DiscountAmt\n"
+                "\tcolumn CondColorHex\n\t\tdataType: string\n\t\tsourceColumn: CondColorHex\n"
+                "\tcolumn PageFilterChannel\n\t\tdataType: string\n\t\tsourceColumn: PageFilterChannel\n"
+                "\tcolumn ModifiedTimestamp\n\t\tdataType: dateTime\n\t\tsourceColumn: ModifiedTimestamp\n"
+                "\tcolumn SecretCost\n\t\tdataType: decimal\n\t\tsourceColumn: SecretCost\n"
+                "\tcolumn LegacyAuditGuid\n\t\tdataType: string\n\t\tsourceColumn: LegacyAuditGuid\n"
+                "\tpartition 'Fact Sales' = m\n\t\tmode: import\n\t\tsource =\n"
+                "\t\t\tlet Source = Sql.Database(\"sql-erp.contoso.net\", \"ERP_PROD\") in Source\n"
+            ),
+        }
+
+        store = CatalogStore(tmp)
+        st = store.load()
+        st["workspaces"]["ws-1"] = {"id": "ws-1", "name": "Commercial BI", "type": "Workspace", "is_dedicated": True}
+        st["models"]["ds-col"] = {
+            "id": "ds-col",
+            "name": "Column Usage Hub",
+            "workspace_id": "ws-1",
+            "workspace": "Commercial BI",
+            "definition_status": "ok",
+        }
+        st["reports"]["rep-thin"] = {
+            "id": "rep-thin",
+            "name": "Executive Thin Scorecard",
+            "workspace_id": "ws-1",
+            "workspace": "Commercial BI",
+            "dataset_id": "ds-col",
+            "report_type": "PowerBIReport",
+            "definition_status": "ok",
+        }
+        store.save(st)
+        store.write_tmdl_bundle("Column Usage Hub", "ds-col", tmdl_files)
+        bundle_str = store.read_tmdl_bundle("Column Usage Hub", "ds-col")
+
+        # 1. SAFETY GUARD: When NO report layouts are scanned (has_parsed_layouts == False),
+        # intra-model usage badges MUST appear, while unused_columns MUST be 0 (never falsely mark Unreferenced!).
+        no_rep_analysis = analyze_model(
+            st["models"]["ds-col"],
+            bundle_str,
+            reports=[{"id": "rep-no-layout", "name": "Unscanned Report", "workspace": "WS"}],
+        )
+        assert no_rep_analysis["has_parsed_layouts"] is False
+        assert no_rep_analysis["stats"]["unused_columns"] == 0
+
+        pbir_files = {
+            "definition/report.json": json.dumps(
+                {
+                    "filterConfig": {
+                        "filters": [
+                            {
+                                "field": {
+                                    "Column": {
+                                        "Expression": {"SourceRef": {"Entity": "Dim Calendar"}},
+                                        "Property": "MonthName",
+                                    }
+                                }
+                            }
+                        ]
+                    }
+                }
+            ),
+            "definition/pages/pages.json": json.dumps({"pageOrder": ["P1"]}),
+            "definition/pages/P1/page.json": json.dumps(
+                {
+                    "name": "P1",
+                    "displayName": "Commercial Overview",
+                    "pageBinding": {
+                        "type": "Drillthrough",
+                        "parameters": [
+                            {
+                                "field": {
+                                    "Column": {
+                                        "Expression": {"SourceRef": {"Entity": "Dim Customer"}},
+                                        "Property": "DrillRegion",
+                                    }
+                                }
+                            }
+                        ],
+                    },
+                    "filterConfig": {
+                        "filters": [
+                            {
+                                "field": {
+                                    "Column": {
+                                        "Expression": {"SourceRef": {"Entity": "Fact Sales"}},
+                                        "Property": "PageFilterChannel",
+                                    }
+                                }
+                            },
+                            {
+                                "field": {
+                                    "Column": {
+                                        "Expression": {"SourceRef": {"Entity": "Fact Sales"}},
+                                        "Property": "DeletedFilterFlag",
+                                    }
+                                }
+                            },
+                        ]
+                    },
+                }
+            ),
+            "definition/pages/P1/visuals/v1/visual.json": json.dumps(
+                {
+                    "name": "v1",
+                    "visual": {
+                        "visualType": "tableEx",
+                        "query": {
+                            "queryState": {
+                                "Values": {
+                                    "projections": [
+                                        {"field": {"Measure": {"Expression": {"SourceRef": {"Entity": "Fact Sales"}}, "Property": "Net Sales"}}},
+                                        {"field": {"Measure": {"Expression": {"SourceRef": {"Entity": "Fact Sales"}}, "Property": "Adjusted Margin"}}},
+                                        {"field": {"Column": {"Expression": {"SourceRef": {"Entity": "Metric Selector"}}, "Property": "Metric Selector"}}},
+                                        {"field": {"Column": {"Expression": {"SourceRef": {"Entity": "Fact Sales"}}, "Property": "DeletedPromoCode"}}},
+                                        {"field": {"Column": {"Expression": {"SourceRef": {"Entity": "Dim Calendar"}}, "Property": "Year"}}},
+                                    ]
+                                }
+                            },
+                            "sortDefinition": {
+                                "sort": [
+                                    {
+                                        "field": {
+                                            "Column": {
+                                                "Expression": {"SourceRef": {"Entity": "Dim Customer"}},
+                                                "Property": "SortRank",
+                                            }
+                                        },
+                                        "direction": "Ascending",
+                                    }
+                                ]
+                            },
+                        },
+                        "objects": {
+                            "values": [
+                                {
+                                    "properties": {
+                                        "backColor": {
+                                            "solid": {
+                                                "color": {
+                                                    "expr": {
+                                                        "FillRule": {
+                                                            "Input": {
+                                                                "Column": {
+                                                                    "Expression": {"SourceRef": {"Entity": "Fact Sales"}},
+                                                                    "Property": "CondColorHex",
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        },
+                    },
+                }
+            ),
+            "definition/bookmarks/b1.bookmark.json": json.dumps(
+                {
+                    "name": "b1",
+                    "explorationState": {
+                        "filters": {
+                            "byExpr": [
+                                {
+                                    "Column": {
+                                        "Expression": {"SourceRef": {"Entity": "Dim Customer"}},
+                                        "Property": "BookmarkSeg",
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                }
+            ),
+            "definition/reportExtensions.json": json.dumps(
+                {
+                    "entities": [
+                        {
+                            "name": "Fact Sales",
+                            "measures": [
+                                {
+                                    "name": "Adjusted Margin",
+                                    "expression": "[Net Sales] - SUM('Fact Sales'[DiscountAmt]) - SUM('Fact Sales'[DeletedMarginAdj])",
+                                }
+                            ],
+                        }
+                    ]
+                }
+            ),
+        }
+
+        parsed_layout = parse_report_definition_files(pbir_files)
+        store.write_report_layout("rep-thin", parsed_layout)
+        rep_with_layout = dict(st["reports"]["rep-thin"], layout=parsed_layout)
+        full_analysis = analyze_model(
+            st["models"]["ds-col"],
+            bundle_str,
+            reports=[rep_with_layout],
+        )
+
+        # Helper to look up column usage dict
+        col_map: dict[str, dict] = {}
+        for rt in full_analysis["parsed"]["tables"]:
+            for rc in rt["columns"]:
+                col_map[f"{rt['name']}[{rc['name']}]"] = rc["usage"]
+
+        # Verify every single intra-model & report-layer protection category!
+        assert col_map["Fact Sales[OrderDate]"]["key"] is True
+        assert col_map["Fact Sales[ShipDate]"]["key"] is True, "Inactive relationship column must be protected!"
+        assert col_map["Dim Calendar[Date]"]["key"] is True
+        assert col_map["Dim Calendar[MonthSort]"]["sort_by"] is True, "sortByColumn target must be protected!"
+        assert col_map["Dim Calendar[MonthName]"]["filter_count"] >= 1
+        assert col_map["Dim Calendar[FiscalYear]"]["hierarchy"] is True
+        assert col_map["Dim Calendar[FiscalYear]"]["dax_count"] >= 1, "Calc group item ref must be protected!"
+        assert col_map["Dim Customer[Country Name]"]["hierarchy"] is True, "Quoted hierarchy column must be protected!"
+        assert col_map["Dim Customer[RegionCode]"]["rls"] is True, "Bare row-context RLS column must be protected!"
+        assert col_map["Dim Customer[ManagerUpn]"]["rls"] is True, "Qualified RLS column must be protected!"
+        assert col_map["Fact Sales[SecretCost]"]["rls"] is True, "OLS columnPermission must be protected!"
+        assert col_map["Metric Selector[Metric Selector Fields]"]["field_param"] is True, "groupByColumn must be protected!"
+        assert col_map["Metric Selector[Metric Selector Order]"]["sort_by"] is True
+        assert col_map["Dim Customer[Tier]"]["dax_count"] >= 1, "NAMEOF() Field Parameter target must be protected!"
+        assert col_map["Time Intelligence[Time Calc]"]["key"] is True, "Calc group structural column must be protected!"
+        assert col_map["Snap A[SnapVal]"]["dax_count"] >= 1 and col_map["Snap B[SnapVal]"]["dax_count"] >= 1, "UNION set-op columns must be protected!"
+        assert col_map["Fact Sales[ModifiedTimestamp]"]["refresh"] is True, "Incremental Refresh column must be protected!"
+        assert col_map["StagingFeed[StagingId]"]["refresh"] is True, "Downstream Derived M column must be protected!"
+        assert col_map["Currency[FormatMask]"]["dax_count"] >= 1, "Dynamic formatStringDefinition column must be protected!"
+        assert col_map["Fact Sales[GrossAmt]"]["dax_count"] >= 1
+        assert col_map["Fact Sales[UnitCost]"]["dax_count"] >= 1 and col_map["Fact Sales[Qty]"]["dax_count"] >= 1, "Calc column row-context bare refs must be protected!"
+        assert col_map["Fact Sales[DiscountAmt]"]["dax_count"] >= 1, "Thin-report local DAX measure column ref must be protected!"
+        assert col_map["Dim Customer[SortRank]"]["visual_count"] >= 1, "Visual sortDefinition column must be protected!"
+        assert col_map["Fact Sales[CondColorHex]"]["visual_count"] >= 1, "Conditional formatting fx column must be protected!"
+        assert col_map["Fact Sales[PageFilterChannel]"]["filter_count"] >= 1
+        assert col_map["Dim Customer[DrillRegion]"]["filter_count"] >= 1, "Drillthrough pageBinding column must be protected!"
+        assert col_map["Dim Customer[BookmarkSeg]"]["filter_count"] >= 1, "Bookmark filter column must be protected!"
+
+        # Verify genuinely unreferenced columns ARE accurately caught!
+        assert col_map["Fact Sales[LegacyAuditGuid]"]["is_referenced"] is False
+        assert col_map["Dim Customer[UnusedCustomerFax]"]["is_referenced"] is False
+        assert col_map["StagingFeed[UnusedStagingCol]"]["is_referenced"] is False
+
+        # Verify Rien's Post-Deletion Broken-Reference Recovery Scenario!
+        rep_out = full_analysis["reports"][0]
+        broken_refs_strs = [b["ref"] for b in rep_out["broken_refs"]]
+        assert "Fact Sales[DeletedPromoCode]" in broken_refs_strs, f"Missing visual broken ref in {broken_refs_strs}"
+        assert "Dim Calendar[Year]" in broken_refs_strs, f"Deleted physical 'Year' column must NOT be hidden by auto-date skip: {broken_refs_strs}"
+        assert "Fact Sales[DeletedFilterFlag]" in broken_refs_strs, f"Missing page filter broken ref in {broken_refs_strs}"
+        assert "[Adjusted Margin] -> Fact Sales[DeletedMarginAdj]" in broken_refs_strs, f"Missing thin-report local DAX broken ref in {broken_refs_strs}"
+
+        # Verify Portal HTML generation, Unused filter pills, progressive-disclosure scope note, Report X-Ray broken badge, and MCP tool output
+        idx_path = generate_portal(store)
+        assert idx_path.is_file()
+        m_page = next((tmp / "portal" / "models").glob("*.html")).read_text(encoding="utf-8")
+        assert 'data-col-usage="unused"' in m_page
+        assert 'data-column-usage="unused"' in m_page
+        assert "unused</span>" in m_page
+        assert 'id="colUnusedScopeNote"' in m_page
+        assert 'id="daxUnusedScopeNote"' in m_page
+        assert "1 scanned bound report" in m_page
+        assert "DeletedMarginAdj" in m_page
+        assert "sql-erp.contoso.net" in m_page  # Upstream source endpoint right on Fact Sales to restore deleted column!
+        assert "\u2014" not in m_page and "\u2013" not in m_page
+
+        mcp_eng = CatalogMcpEngine(store)
+        insp_resp = handle_jsonrpc_message(
+            mcp_eng,
+            {"jsonrpc": "2.0", "id": 77, "method": "tools/call", "params": {"name": "pbi_inspect_model", "arguments": {"model": "ds-col"}}},
+        )
+        assert insp_resp is not None and not insp_resp["result"]["isError"]
+        insp_json = json.loads(insp_resp["result"]["content"][0]["text"])
+        unref_refs = [u["ref"] for u in insp_json.get("unreferenced_columns", [])]
+        assert "Fact Sales[LegacyAuditGuid]" in unref_refs
+        assert "Dim Customer[UnusedCustomerFax]" in unref_refs
+        assert "Dim Customer[ManagerUpn]" not in unref_refs
+        assert "Dim Calendar[MonthSort]" not in unref_refs
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 if __name__ == "__main__":
     test_issue_12_tmdl_table_doc_comment()
     test_secret_masking_and_readonly_guard()
@@ -1417,4 +1808,5 @@ if __name__ == "__main__":
     test_v11_crash_resilience_and_fault_isolation()
     test_v11_legacy_v10_cache_detection_and_clean_upgrade()
     test_v11_parallel_scanner_lro_and_progress_telemetry()
-    print("ALL 13 V1.1 TEST SUITES PASSED SUCCESSFULLY!")
+    test_v11_column_usage_and_broken_reference_recovery()
+    print("ALL 14 V1.1 TEST SUITES PASSED SUCCESSFULLY!")

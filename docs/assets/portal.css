@@ -493,6 +493,32 @@ code, pre {
   color: var(--accent);
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
 }
+.usage-scope-note {
+  display: none;
+  align-items: flex-start;
+  gap: 9px;
+  margin: -4px 0 14px 0;
+  padding: 9px 13px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--warn);
+  background: var(--surface-alt);
+  color: var(--fg-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.usage-scope-note.is-visible {
+  display: flex;
+}
+.usage-scope-note svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--warn);
+}
+.usage-scope-note b {
+  color: var(--fg);
+  font-weight: 650;
+}
 .sort-select {
   padding: 6px 10px;
   border-radius: 8px;

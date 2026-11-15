@@ -188,6 +188,7 @@ def parse_tmdl_bundle(tmdl: str | dict[str, str]) -> dict:
                 "description": head[0][2],
                 "hidden": bool(t_props.get("isHidden")),
                 "auto_date": bool(AUTO_DATE_RE.fullmatch(tname)),
+                "refresh_policy_code": "",
                 "columns": [],
                 "measures": [],
                 "partitions": [],
@@ -195,12 +196,25 @@ def parse_tmdl_bundle(tmdl: str | dict[str, str]) -> dict:
                 "calculation_items": [],
             }
             for hdr, body, desc in _objects(head[0][1], 1):
+                if hdr == "refreshPolicy" or hdr.startswith("refreshPolicy "):
+                    tbl["refresh_policy_code"] = mask_secrets(_dedent(body))
+                    continue
                 if hdr == "calculationGroup":
                     for chdr, cbody, cdesc in _objects(body, 2):
                         cm = re.match(r"^calculationItem\s+('(?:[^']|'')+'|[^=]+?)\s*=\s*(.*)$", chdr)
                         if cm:
+                            ci_fmt_expr = ""
+                            for fhdr, fbody, _ in _objects(cbody, 3):
+                                fm = re.match(r"^formatStringDefinition\s*=\s*(.*)$", fhdr)
+                                if fm:
+                                    ci_fmt_expr = mask_secrets(_expression(fm.group(1), fbody, 3))
                             tbl["calculation_items"].append(
-                                {"name": _unquote(cm.group(1)), "expr": _expression(cm.group(2), cbody, 2), "description": cdesc}
+                                {
+                                    "name": _unquote(cm.group(1)),
+                                    "expr": mask_secrets(_expression(cm.group(2), cbody, 2)),
+                                    "format_expr": ci_fmt_expr,
+                                    "description": cdesc,
+                                }
                             )
                     continue
                 kind, _, rest = hdr.partition(" ")
@@ -209,24 +223,38 @@ def parse_tmdl_bundle(tmdl: str | dict[str, str]) -> dict:
                 eq, expr = eq or "", expr or ""
                 pr = _props(body, 1)
                 if kind == "column":
+                    group_by_cols = [
+                        _unquote(m_gb.group(1))
+                        for ln in body
+                        if (m_gb := re.match(r"^\s*groupByColumn\s*:\s*(.+)$", ln))
+                    ]
                     tbl["columns"].append(
                         {
                             "name": _unquote(nm),
                             "type": pr.get("dataType", ""),
-                            "source": pr.get("sourceColumn", ""),
+                            "source": _unquote(pr.get("sourceColumn", "")),
                             "format": pr.get("formatString", ""),
                             "folder": pr.get("displayFolder", ""),
+                            "sort_by": _unquote(pr.get("sortByColumn", "")),
+                            "is_key": bool(pr.get("isKey")),
+                            "group_by_columns": group_by_cols,
                             "hidden": bool(pr.get("isHidden")),
                             "description": desc,
                             "expr": mask_secrets(_expression(expr, body, 1)) if eq else "",
                         }
                     )
                 elif kind == "measure":
+                    m_fmt_expr = ""
+                    for fhdr, fbody, _ in _objects(body, 2):
+                        fm = re.match(r"^formatStringDefinition\s*=\s*(.*)$", fhdr)
+                        if fm:
+                            m_fmt_expr = mask_secrets(_expression(fm.group(1), fbody, 2))
                     tbl["measures"].append(
                         {
                             "name": _unquote(nm),
                             "expr": mask_secrets(_expression(expr, body, 1)),
                             "format": pr.get("formatString", ""),
+                            "format_expr": m_fmt_expr,
                             "folder": pr.get("displayFolder", ""),
                             "hidden": bool(pr.get("isHidden")),
                             "description": desc,
@@ -269,12 +297,16 @@ def parse_tmdl_bundle(tmdl: str | dict[str, str]) -> dict:
                         }
                     )
                 elif kind == "hierarchy":
-                    levels = [
-                        _props(lb, 2).get("column", _unquote(lh.partition(" ")[2]))
-                        for lh, lb, _ in _objects(body, 2)
-                        if lh.startswith("level ")
-                    ]
-                    tbl["hierarchies"].append({"name": _unquote(rest), "levels": levels})
+                    levels: list[str] = []
+                    level_aliases: list[str] = []
+                    for lh, lb, _ in _objects(body, 2):
+                        if lh.startswith("level "):
+                            lvl_nm = _unquote(lh.partition(" ")[2])
+                            col_nm = _unquote(_props(lb, 2).get("column") or lvl_nm)
+                            levels.append(col_nm)
+                            if lvl_nm and lvl_nm.lower() != col_nm.lower():
+                                level_aliases.append(lvl_nm)
+                    tbl["hierarchies"].append({"name": _unquote(rest), "levels": levels, "level_aliases": level_aliases})
             tables.append(tbl)
 
         elif path.startswith("definition/expressions.tmdl"):
@@ -349,15 +381,23 @@ def parse_tmdl_bundle(tmdl: str | dict[str, str]) -> dict:
                 continue
             pr = _props(head[0][1], 0)
             filters = []
+            ols_columns = []
             for hdr, body, _ in _objects(head[0][1], 1):
-                m = re.match(r"^tablePermission\s+('(?:[^']|'')+'|[^=]+?)\s*=\s*(.*)$", hdr)
+                m = re.match(r"^tablePermission\s+('(?:[^']|'')+'|[^=]+?)(?:\s*=\s*(.*))?$", hdr)
                 if m:
-                    filters.append({"table": _unquote(m.group(1)), "filter_dax": mask_secrets(_expression(m.group(2), body, 1))})
+                    tp_tbl = _unquote(m.group(1))
+                    if m.group(2) is not None:
+                        filters.append({"table": tp_tbl, "filter_dax": mask_secrets(_expression(m.group(2), body, 1))})
+                    for chdr, _, _ in _objects(body, 2):
+                        cm = re.match(r"^columnPermission\s+('(?:[^']|'')+'|[^=]+?)\s*=\s*(.*)$", chdr)
+                        if cm:
+                            ols_columns.append({"table": tp_tbl, "column": _unquote(cm.group(1)), "permission": cm.group(2).strip()})
             roles.append(
                 {
                     "name": _unquote(re.sub(r"^role\s+", "", head[0][0])),
                     "permission": pr.get("modelPermission", "read"),
                     "filters": filters,
+                    "ols_columns": ols_columns,
                 }
             )
 
@@ -565,12 +605,14 @@ def build_dax_lineage(parsed_model: dict) -> dict[str, dict]:
     """Build upstream and downstream DAX measure & column dependency map (table-qualified aware)."""
     measure_by_bare: dict[str, str] = {}
     measure_by_qual: dict[tuple[str, str], str] = {}
+    known_tables_low: dict[str, str] = {}
     items: dict[str, dict] = {}
 
     for tbl in parsed_model.get("tables", []):
         if tbl["auto_date"]:
             continue
         tname = tbl["name"]
+        known_tables_low[tname.lower()] = tname
         for m in tbl["measures"]:
             key = f"{tname}[{m['name']}]"
             measure_by_bare[m["name"].lower()] = key
@@ -581,32 +623,49 @@ def build_dax_lineage(parsed_model: dict) -> dict[str, dict]:
                 "table": tname,
                 "name": m["name"],
                 "expr": m["expr"],
+                "format_expr": m.get("format_expr", ""),
                 "upstream_measures": [],
                 "upstream_columns": [],
                 "downstream_measures": [],
             }
 
-    table_col_re = re.compile(r"('(?:[^']|'')+'|[A-Za-z_][A-Za-z0-9_ ]*)\[([^\]]+)\]")
-    bare_ref_re = re.compile(r"(?<![A-Za-z0-9_'])\[([^\]]+)\]")
+    table_col_re = re.compile(r"('(?:[^']|'')+'|[^\W\d]\w*)\s*\[((?:[^\]]|\]\])+)\]")
+    bare_ref_re = re.compile(r"(?<![\w'\]])\[((?:[^\]]|\]\])+)\]")
 
     for key, info in items.items():
-        expr = _strip_dax_comments_and_strings(info["expr"] or "")
+        combined_expr = (info["expr"] or "") + ("\n" + info["format_expr"] if info.get("format_expr") else "")
+        expr = _strip_dax_comments_and_strings(combined_expr)
         host_low = info["table"].lower()
         up_m = set()
         up_c = set()
+        spans_to_blank: list[tuple[int, int]] = []
 
         for tm in table_col_re.finditer(expr):
-            rt = _unquote(tm.group(1))
-            rc = tm.group(2).strip()
-            cand = measure_by_qual.get((rt.lower(), rc.lower()))
+            raw_t = tm.group(1)
+            rt = _unquote(raw_t)
+            rt_low = rt.lower()
+            if not raw_t.startswith("'") and rt_low not in known_tables_low:
+                continue
+            spans_to_blank.append(tm.span())
+            rc = tm.group(2).replace("]]", "]").strip()
+            cand = measure_by_qual.get((rt_low, rc.lower()))
             if cand and cand != key:
                 up_m.add(cand)
             else:
-                up_c.add(f"{rt}[{rc}]")
+                canon_t = known_tables_low.get(rt_low, rt)
+                up_c.add(f"{canon_t}[{rc}]")
 
-        stripped_expr = table_col_re.sub(" ", expr)
+        if spans_to_blank:
+            chars = list(expr)
+            for s_idx, e_idx in spans_to_blank:
+                for i in range(s_idx, e_idx):
+                    chars[i] = " "
+            stripped_expr = "".join(chars)
+        else:
+            stripped_expr = expr
+
         for bm in bare_ref_re.finditer(stripped_expr):
-            ref_name = bm.group(1).strip()
+            ref_name = bm.group(1).replace("]]", "]").strip()
             cand = measure_by_qual.get((host_low, ref_name.lower())) or measure_by_bare.get(ref_name.lower())
             if cand and cand != key:
                 up_m.add(cand)
@@ -910,28 +969,257 @@ def analyze_full_model(
     calc_cols_total = sum(sum(1 for c in t["columns"] if c["expr"]) for t in data_tables)
     columns_total = sum(len(t["columns"]) for t in data_tables)
 
-    # Build lookup sets for Report Visual Binding & Broken Reference Audit
+    # Build lookup sets for Column Usage Tracking, Report Visual Binding & Broken Reference Audit
     valid_cols: set[tuple[str, str]] = set()
     valid_col_names: set[str] = set()
+    table_name_by_low: dict[str, str] = {}
+    col_canon_by_low: dict[tuple[str, str], tuple[str, str]] = {}
     measure_key_by_low: dict[str, str] = {}
+    measure_by_qual_low: dict[tuple[str, str], str] = {}
+    hierarchy_levels_by_low: dict[tuple[str, str], list[str]] = {}
+    level_alias_to_col_low: dict[tuple[str, str], str] = {}
+
     for tbl in parsed["tables"]:
         tl = tbl["name"].lower()
+        if not tbl["auto_date"]:
+            table_name_by_low[tl] = tbl["name"]
         for c in tbl["columns"]:
             cl = c["name"].lower()
             valid_cols.add((tl, cl))
             valid_col_names.add(cl)
+            if not tbl["auto_date"]:
+                col_canon_by_low[(tl, cl)] = (tbl["name"], c["name"])
         for h in tbl["hierarchies"]:
-            valid_cols.add((tl, h["name"].lower()))
+            hl = h["name"].lower()
+            valid_cols.add((tl, hl))
+            lvl_cols_low: list[str] = []
             for lv in h["levels"]:
-                valid_cols.add((tl, lv.lower()))
+                lvl_l = lv.lower()
+                valid_cols.add((tl, lvl_l))
+                lvl_cols_low.append(lvl_l)
+            for al in h.get("level_aliases", []):
+                al_l = al.lower()
+                valid_cols.add((tl, al_l))
+                if lvl_cols_low:
+                    level_alias_to_col_low[(tl, al_l)] = lvl_cols_low[0]
+            if not tbl["auto_date"]:
+                hierarchy_levels_by_low[(tl, hl)] = lvl_cols_low
         for m in tbl["measures"]:
             ml = m["name"].lower()
             m_key = f"{tbl['name']}[{m['name']}]"
             measure_key_by_low[ml] = m_key
+            measure_by_qual_low[(tl, ml)] = m_key
             valid_cols.add((tl, ml))
+
+    dax_tbl_col_re = re.compile(r"('(?:[^']|'')+'|[^\W\d]\w*)\s*\[((?:[^\]]|\]\])+)\]")
+    dax_bare_re = re.compile(r"(?<![\w'\]])\[((?:[^\]]|\]\])+)\]")
+    dax_set_fn_re = re.compile(
+        r"\b(?:UNION|EXCEPT|INTERSECT|NATURALINNERJOIN|NATURALLEFTOUTERJOIN)\s*\(([^()]*)\)",
+        re.I,
+    )
+
+    def _scan_dax_usage(
+        dax_code: str,
+        row_context_table_low: str = "",
+        local_measure_names: set[str] | None = None,
+        collect_broken: bool = False,
+    ) -> tuple[set[tuple[str, str]], set[str], set[str], list[str]]:
+        """Extract `(col_pairs_low, measure_keys, set_locked_tables_low, broken_refs)` from a DAX expression."""
+        cleaned = _strip_dax_comments_and_strings(dax_code or "")
+        cols_found: set[tuple[str, str]] = set()
+        meas_found: set[str] = set()
+        set_tbls: set[str] = set()
+        broken_found: list[str] = []
+        seen_broken: set[str] = set()
+        spans_blank: list[tuple[int, int]] = []
+        local_m = local_measure_names or set()
+
+        for sm in dax_set_fn_re.finditer(cleaned):
+            args_txt = sm.group(1)
+            for qm in re.finditer(r"'((?:[^']|'')+)'", args_txt):
+                cand_tl = qm.group(1).replace("''", "'").lower()
+                if cand_tl in table_name_by_low:
+                    set_tbls.add(cand_tl)
+            for um in re.finditer(r"\b([^\W\d]\w*)\b", args_txt):
+                cand_tl = um.group(1).lower()
+                if cand_tl in table_name_by_low:
+                    set_tbls.add(cand_tl)
+
+        for tm in dax_tbl_col_re.finditer(cleaned):
+            raw_t = tm.group(1)
+            rt = _unquote(raw_t)
+            rt_low = rt.lower()
+            is_quoted = raw_t.startswith("'")
+            if not is_quoted and rt_low not in table_name_by_low:
+                continue
+            spans_blank.append(tm.span())
+            rc = tm.group(2).replace("]]", "]").strip()
+            rc_low = rc.lower()
+            m_cand = measure_by_qual_low.get((rt_low, rc_low))
+            if m_cand:
+                meas_found.add(m_cand)
+            elif (rt_low, rc_low) in col_canon_by_low:
+                cols_found.add((rt_low, rc_low))
+            elif rc_low in local_m:
+                continue
+            elif collect_broken and not rt_low.startswith(("localdatetable_", "datetabletemplate_")):
+                b_str = f"{table_name_by_low.get(rt_low, rt)}[{rc}]"
+                if b_str not in seen_broken:
+                    seen_broken.add(b_str)
+                    broken_found.append(b_str)
+
+        if spans_blank:
+            ch_arr = list(cleaned)
+            for s_i, e_i in spans_blank:
+                for idx_c in range(s_i, e_i):
+                    ch_arr[idx_c] = " "
+            rem = "".join(ch_arr)
+        else:
+            rem = cleaned
+
+        for bm in dax_bare_re.finditer(rem):
+            r_nm = bm.group(1).replace("]]", "]").strip()
+            r_low = r_nm.lower()
+            if row_context_table_low and (row_context_table_low, r_low) in col_canon_by_low:
+                cols_found.add((row_context_table_low, r_low))
+                continue
+            m_cand = (
+                (measure_by_qual_low.get((row_context_table_low, r_low)) if row_context_table_low else None)
+                or measure_key_by_low.get(r_low)
+            )
+            if m_cand:
+                meas_found.add(m_cand)
+            elif r_low in local_m:
+                continue
+            elif collect_broken and not row_context_table_low:
+                b_str = f"[{r_nm}]"
+                if b_str not in seen_broken:
+                    seen_broken.add(b_str)
+                    broken_found.append(b_str)
+
+        return cols_found, meas_found, set_tbls, broken_found
+
+    # Intra-model column usage sets (case-insensitive `(table_low, col_low)`)
+    key_cols_low: set[tuple[str, str]] = set()
+    sort_by_cols_low: set[tuple[str, str]] = set()
+    field_param_cols_low: set[tuple[str, str]] = set()
+    hierarchy_cols_low: set[tuple[str, str]] = set()
+    rls_cols_low: set[tuple[str, str]] = set()
+    refresh_cols_low: set[tuple[str, str]] = set()
+    dax_ref_counts: dict[tuple[str, str], int] = collections.Counter()
+
+    for rel in parsed["relationships"]:
+        ftl, fcl = rel["from_table"].lower(), rel["from_column"].lower()
+        ttl, tcl = rel["to_table"].lower(), rel["to_column"].lower()
+        if (ftl, fcl) in col_canon_by_low:
+            key_cols_low.add((ftl, fcl))
+        if (ttl, tcl) in col_canon_by_low:
+            key_cols_low.add((ttl, tcl))
+
+    intra_model_used_measures: set[str] = set()
+    for tbl in data_tables:
+        tl = tbl["name"].lower()
+        is_calc_grp = bool(tbl.get("calculation_items"))
+        rp_code = tbl.get("refresh_policy_code") or ""
+        downstream_m_codes = [code_by_table.get(ch_name, "") for ch_name in by_parent.get(tbl["name"], [])]
+
+        for h in tbl["hierarchies"]:
+            for lv in h["levels"]:
+                if (tl, lv.lower()) in col_canon_by_low:
+                    hierarchy_cols_low.add((tl, lv.lower()))
+
+        for c in tbl["columns"]:
+            cl = c["name"].lower()
+            if c.get("is_key") or is_calc_grp:
+                key_cols_low.add((tl, cl))
+            sb = (c.get("sort_by") or "").strip()
+            if sb:
+                if "." in sb:
+                    sb_t, _, sb_c = sb.partition(".")
+                    sb_pair = (_unquote(sb_t).lower(), _unquote(sb_c).lower())
+                else:
+                    sb_pair = (tl, _unquote(sb).lower())
+                if sb_pair in col_canon_by_low:
+                    sort_by_cols_low.add(sb_pair)
+            for gb in c.get("group_by_columns") or []:
+                if "." in gb:
+                    gb_t, _, gb_c = gb.partition(".")
+                    gb_pair = (_unquote(gb_t).lower(), _unquote(gb_c).lower())
+                else:
+                    gb_pair = (tl, _unquote(gb).lower())
+                if gb_pair in col_canon_by_low:
+                    field_param_cols_low.add(gb_pair)
+            if rp_code and re.search(r'(?:\[\s*' + re.escape(c["name"]) + r'\s*\]|"' + re.escape(c["name"]) + r'")', rp_code, re.I):
+                refresh_cols_low.add((tl, cl))
+            for dm_code in downstream_m_codes:
+                if dm_code and re.search(r'(?:\[\s*' + re.escape(c["name"]) + r'\s*\]|"' + re.escape(c["name"]) + r'")', dm_code, re.I):
+                    refresh_cols_low.add((tl, cl))
+            if c.get("expr"):
+                c_cols, c_meas, c_sets, _ = _scan_dax_usage(c["expr"], row_context_table_low=tl)
+                intra_model_used_measures.update(c_meas)
+                for cp in c_cols:
+                    if cp != (tl, cl):
+                        dax_ref_counts[cp] += 1
+                for st_l in c_sets:
+                    for col_pair in col_canon_by_low:
+                        if col_pair[0] == st_l:
+                            dax_ref_counts[col_pair] += 1
+
+        for part in tbl["partitions"]:
+            if part["kind"] == "calculated" and part.get("code"):
+                p_cols, p_meas, p_sets, _ = _scan_dax_usage(part["code"])
+                intra_model_used_measures.update(p_meas)
+                for cp in p_cols:
+                    dax_ref_counts[cp] += 1
+                for st_l in p_sets:
+                    for col_pair in col_canon_by_low:
+                        if col_pair[0] == st_l:
+                            dax_ref_counts[col_pair] += 1
+
+        for ci in tbl.get("calculation_items") or []:
+            ci_code = (ci.get("expr") or "") + ("\n" + ci["format_expr"] if ci.get("format_expr") else "")
+            if ci_code.strip():
+                ci_cols, ci_meas, ci_sets, _ = _scan_dax_usage(ci_code)
+                intra_model_used_measures.update(ci_meas)
+                for cp in ci_cols:
+                    dax_ref_counts[cp] += 1
+                for st_l in ci_sets:
+                    for col_pair in col_canon_by_low:
+                        if col_pair[0] == st_l:
+                            dax_ref_counts[col_pair] += 1
+
+    # Model DAX measures -> column counts (plus UNION/EXCEPT set-locked tables)
+    for m_key, m_info in lineage.items():
+        for uc in m_info.get("upstream_columns", []):
+            if "[" in uc and uc.endswith("]"):
+                ut, ucol = uc.split("[", 1)
+                upair = (ut.lower(), ucol[:-1].lower())
+                if upair in col_canon_by_low:
+                    dax_ref_counts[upair] += 1
+        m_full_code = (m_info.get("expr") or "") + ("\n" + m_info["format_expr"] if m_info.get("format_expr") else "")
+        _, _, m_sets, _ = _scan_dax_usage(m_full_code)
+        for st_l in m_sets:
+            for col_pair in col_canon_by_low:
+                if col_pair[0] == st_l:
+                    dax_ref_counts[col_pair] += 1
+
+    # RLS tablePermission DAX + OLS columnPermission
+    for role in parsed["roles"]:
+        for tp in role.get("filters") or []:
+            tp_tl = (tp.get("table") or "").lower()
+            r_cols, r_meas, _, _ = _scan_dax_usage(tp.get("filter_dax") or "", row_context_table_low=tp_tl)
+            rls_cols_low.update(r_cols)
+            intra_model_used_measures.update(r_meas)
+        for ols in role.get("ols_columns") or []:
+            opair = ((ols.get("table") or "").lower(), (ols.get("column") or "").lower())
+            if opair in col_canon_by_low:
+                rls_cols_low.add(opair)
 
     auto_date_levels = {"year", "quarter", "month", "day", "date"}
     measure_report_usage: dict[str, list[dict]] = collections.defaultdict(list)
+    visual_ref_counts: dict[tuple[str, str], int] = collections.Counter()
+    filter_ref_counts: dict[tuple[str, str], int] = collections.Counter()
+    col_report_names: dict[tuple[str, str], set[str]] = collections.defaultdict(set)
     enriched_reports: list[dict] = []
     has_parsed_layouts = False
     total_broken_refs = 0
@@ -939,8 +1227,43 @@ def analyze_full_model(
     total_report_measures = 0
     shadow_report_names: list[str] = []
 
+    filter_str_re = re.compile(r"('(?:[^']|'')+'|[A-Za-z_][A-Za-z0-9_ .&-]*?)\[([^\]]+)\]")
+
+    def _extract_filter_candidates(
+        structured_fields: list[dict] | None,
+        raw_strings: list[str] | None,
+    ) -> list[dict[str, str]]:
+        out_f: list[dict[str, str]] = []
+        seen_f: set[tuple[str, str, str]] = set()
+        for sf in structured_fields or []:
+            if not isinstance(sf, dict) or not sf.get("property"):
+                continue
+            sig = ((sf.get("kind") or "column").lower(), (sf.get("entity") or "").lower(), sf["property"].lower())
+            if sig not in seen_f:
+                seen_f.add(sig)
+                out_f.append(sf)
+        for rs in raw_strings or []:
+            for fm in filter_str_re.finditer(str(rs or "")):
+                raw_ent = fm.group(1).strip()
+                # Strip leading logical keywords like 'and ', 'or ', 'not ' if unquoted
+                if not raw_ent.startswith("'"):
+                    raw_ent = re.sub(r"^(?:and|or|not)\s+", "", raw_ent, flags=re.I).strip()
+                ent_nm = _unquote(raw_ent)
+                prop_nm = fm.group(2).strip()
+                if not ent_nm or not prop_nm:
+                    continue
+                ent_l = ent_nm.lower()
+                prop_l = prop_nm.lower()
+                kind_guess = "measure" if (ent_l, prop_l) in measure_by_qual_low else "column"
+                sig = (kind_guess, ent_l, prop_l)
+                if sig not in seen_f:
+                    seen_f.add(sig)
+                    out_f.append({"entity": ent_nm, "property": prop_nm, "kind": kind_guess, "ref": f"{ent_nm}[{prop_nm}]"})
+        return out_f
+
     for rep in reports or []:
         rep_copy = dict(rep)
+        rep_label = rep_copy.get("name", "Report")
         layout = rep_copy.get("layout")
         if isinstance(layout, dict) and layout.get("pages"):
             has_parsed_layouts = True
@@ -948,67 +1271,216 @@ def analyze_full_model(
             rep_meas_names = {m.get("name", "").lower() for m in rep_meas if m.get("name")}
             if rep_meas:
                 total_report_measures += len(rep_meas)
-                shadow_report_names.append(rep_copy.get("name", "Report"))
+                shadow_report_names.append(rep_label)
 
             rep_broken: list[dict] = []
             rep_used_m_pages: dict[str, set[str]] = collections.defaultdict(set)
             rep_used_m_vis_cnt: dict[str, int] = collections.defaultdict(int)
+            broken_rep_meas_map: dict[str, list[str]] = {}
+            projected_rep_meas: set[str] = set()
 
-            # Report-level measures can also reference model measures
+            # Report-level measures can reference both model measures and model columns
             for rm in rep_meas:
-                rm_expr = rm.get("expr") or ""
-                for b_match in re.finditer(r"\[([^\]]+)\]", rm_expr):
-                    cand_m = measure_key_by_low.get(b_match.group(1).strip().lower())
-                    if cand_m:
-                        rep_used_m_pages[cand_m].add("Report Measure")
-                        rep_used_m_vis_cnt[cand_m] += 1
+                rm_name = rm.get("name") or "Measure"
+                rm_cols, rm_meas, rm_sets, rm_broken = _scan_dax_usage(
+                    rm.get("expr") or "",
+                    local_measure_names=rep_meas_names,
+                    collect_broken=True,
+                )
+                rm["broken_refs"] = rm_broken
+                if rm_broken:
+                    broken_rep_meas_map[rm_name.lower()] = rm_broken
+                for cand_m in rm_meas:
+                    rep_used_m_pages[cand_m].add("Report Measure")
+                    rep_used_m_vis_cnt[cand_m] += 1
+                for cp in rm_cols:
+                    dax_ref_counts[cp] += 1
+                    col_report_names[cp].add(rep_label)
+                for st_l in rm_sets:
+                    for col_pair in col_canon_by_low:
+                        if col_pair[0] == st_l:
+                            dax_ref_counts[col_pair] += 1
+                            col_report_names[col_pair].add(rep_label)
+
+            def _validate_and_record_filter(
+                fcand: dict[str, str],
+                scope_page: str,
+                scope_vis_label: str,
+                vis_broken_out: list[str] | None = None,
+            ) -> None:
+                ent = (fcand.get("entity") or "").strip()
+                prop = (fcand.get("property") or "").strip()
+                kind = (fcand.get("kind") or "column").lower()
+                if not prop:
+                    return
+                ent_l = ent.lower()
+                prop_l = prop.lower()
+                if kind == "measure" or (not ent_l and prop_l in measure_key_by_low):
+                    m_key = measure_by_qual_low.get((ent_l, prop_l)) or measure_key_by_low.get(prop_l)
+                    if m_key:
+                        rep_used_m_pages[m_key].add(scope_page)
+                        rep_used_m_vis_cnt[m_key] += 1
+                        return
+                    if prop_l in rep_meas_names:
+                        return
+                    b_ref = fcand.get("ref") or f"{ent}[{prop}]"
+                    if vis_broken_out is not None:
+                        if b_ref not in vis_broken_out:
+                            vis_broken_out.append(b_ref)
+                    else:
+                        rep_broken.append({"page": scope_page, "visual": scope_vis_label, "ref": b_ref})
+                    return
+
+                if (ent_l, prop_l) in col_canon_by_low:
+                    filter_ref_counts[(ent_l, prop_l)] += 1
+                    col_report_names[(ent_l, prop_l)].add(rep_label)
+                    return
+                if (ent_l, prop_l) in hierarchy_levels_by_low:
+                    for h_col_l in hierarchy_levels_by_low[(ent_l, prop_l)]:
+                        if (ent_l, h_col_l) in col_canon_by_low:
+                            filter_ref_counts[(ent_l, h_col_l)] += 1
+                            col_report_names[(ent_l, h_col_l)].add(rep_label)
+                    return
+                if (ent_l, prop_l) in measure_by_qual_low:
+                    m_key = measure_by_qual_low[(ent_l, prop_l)]
+                    rep_used_m_pages[m_key].add(scope_page)
+                    rep_used_m_vis_cnt[m_key] += 1
+                    return
+                if (
+                    (ent_l, prop_l) in valid_cols
+                    or ent_l.startswith(("localdatetable_", "datetabletemplate_"))
+                    or (fcand.get("level") and (ent_l, prop_l) in valid_cols)
+                ):
+                    return
+                # Flag broken filter reference when table or structured AST filter came from report metadata
+                if ent_l in table_name_by_low or fcand in (layout.get("report_filter_fields") or []) or vis_broken_out is not None or scope_vis_label in ("Page Filter", "Report Filter"):
+                    b_ref = fcand.get("ref") or (f"{ent}[{prop}]" if ent else prop)
+                    if vis_broken_out is not None:
+                        if b_ref not in vis_broken_out:
+                            vis_broken_out.append(b_ref)
+                    else:
+                        rep_broken.append({"page": scope_page, "visual": scope_vis_label, "ref": b_ref})
+
+            for rf in _extract_filter_candidates(layout.get("report_filter_fields"), layout.get("report_filters")):
+                _validate_and_record_filter(rf, "Report Filters", "Report Filter")
 
             for pg in layout.get("pages", []):
                 pg_name = pg.get("name", "Page")
+                for pf in _extract_filter_candidates(pg.get("filter_fields"), pg.get("filters")):
+                    _validate_and_record_filter(pf, pg_name, "Page Filter")
+
                 for vis in pg.get("visuals", []):
                     vis_broken: list[str] = []
                     for fld in vis.get("fields", []):
                         ent = (fld.get("entity") or "").strip()
                         prop = (fld.get("property") or "").strip()
-                        kind = fld.get("kind") or "column"
+                        kind = (fld.get("kind") or "column").lower()
                         if not prop:
                             continue
                         ent_l = ent.lower()
                         prop_l = prop.lower()
-                        m_key = measure_key_by_low.get(prop_l)
-                        if m_key:
-                            rep_used_m_pages[m_key].add(pg_name)
-                            rep_used_m_vis_cnt[m_key] += 1
-                            fld["broken"] = False
-                            fld["measure_key"] = m_key
-                            continue
-                        if prop_l in rep_meas_names:
-                            fld["broken"] = False
-                            fld["is_report_measure"] = True
-                            continue
-                        if kind == "measure":
+
+                        if kind == "measure" or (not ent_l and kind != "column" and (prop_l in measure_key_by_low or prop_l in rep_meas_names)):
+                            m_key = (measure_by_qual_low.get((ent_l, prop_l)) if ent_l else None) or measure_key_by_low.get(prop_l)
+                            if m_key:
+                                rep_used_m_pages[m_key].add(pg_name)
+                                rep_used_m_vis_cnt[m_key] += 1
+                                fld["broken"] = False
+                                fld["measure_key"] = m_key
+                                continue
+                            if prop_l in rep_meas_names:
+                                projected_rep_meas.add(prop_l)
+                                fld["is_report_measure"] = True
+                                rm_errs = broken_rep_meas_map.get(prop_l)
+                                if rm_errs:
+                                    fld["broken"] = True
+                                    for r_err in rm_errs:
+                                        msg = f"[{prop}] -> {r_err}"
+                                        if msg not in vis_broken:
+                                            vis_broken.append(msg)
+                                else:
+                                    fld["broken"] = False
+                                continue
                             fld["broken"] = True
                             vis_broken.append(fld.get("ref") or prop)
-                        else:
-                            is_valid_col = (
-                                (ent_l, prop_l) in valid_cols
-                                or (not ent_l and prop_l in valid_col_names)
-                                or ent_l.startswith("localdatetable_")
-                                or ent_l.startswith("datetabletemplate_")
-                                or prop_l in auto_date_levels
-                            )
-                            fld["broken"] = not is_valid_col
-                            if not is_valid_col:
-                                vis_broken.append(fld.get("ref") or prop)
+                            continue
+
+                        # Also support legacy/demo bindings where kind defaulted to 'column' on a measure or report measure ONLY if no column exists with that (ent_l, prop_l)
+                        if (ent_l, prop_l) not in col_canon_by_low:
+                            m_qual = measure_by_qual_low.get((ent_l, prop_l)) if ent_l else measure_key_by_low.get(prop_l)
+                            if m_qual:
+                                rep_used_m_pages[m_qual].add(pg_name)
+                                rep_used_m_vis_cnt[m_qual] += 1
+                                fld["broken"] = False
+                                fld["measure_key"] = m_qual
+                                continue
+                            if prop_l in rep_meas_names and (not ent_l or ent_l in table_name_by_low or ent_l == "report measures"):
+                                projected_rep_meas.add(prop_l)
+                                fld["is_report_measure"] = True
+                                rm_errs = broken_rep_meas_map.get(prop_l)
+                                if rm_errs:
+                                    fld["broken"] = True
+                                    for r_err in rm_errs:
+                                        msg = f"[{prop}] -> {r_err}"
+                                        if msg not in vis_broken:
+                                            vis_broken.append(msg)
+                                else:
+                                    fld["broken"] = False
+                                continue
+
+                        if (ent_l, prop_l) in col_canon_by_low:
+                            visual_ref_counts[(ent_l, prop_l)] += 1
+                            col_report_names[(ent_l, prop_l)].add(rep_label)
+                            fld["broken"] = False
+                            continue
+
+                        if (ent_l, prop_l) in hierarchy_levels_by_low:
+                            for h_col_l in hierarchy_levels_by_low[(ent_l, prop_l)]:
+                                if (ent_l, h_col_l) in col_canon_by_low:
+                                    visual_ref_counts[(ent_l, h_col_l)] += 1
+                                    col_report_names[(ent_l, h_col_l)].add(rep_label)
+                            fld["broken"] = False
+                            continue
+
+                        if (ent_l, prop_l) in level_alias_to_col_low:
+                            real_cl = level_alias_to_col_low[(ent_l, prop_l)]
+                            if (ent_l, real_cl) in col_canon_by_low:
+                                visual_ref_counts[(ent_l, real_cl)] += 1
+                                col_report_names[(ent_l, real_cl)].add(rep_label)
+                            fld["broken"] = False
+                            continue
+
+                        is_valid_col = (
+                            (ent_l, prop_l) in valid_cols
+                            or (not ent_l and prop_l in valid_col_names)
+                            or ent_l.startswith("localdatetable_")
+                            or ent_l.startswith("datetabletemplate_")
+                            or (kind == "hierarchy" and bool(fld.get("level")) and prop_l in auto_date_levels and not ent_l)
+                        )
+                        fld["broken"] = not is_valid_col
+                        if not is_valid_col:
+                            b_txt = fld.get("ref") or prop
+                            if b_txt not in vis_broken:
+                                vis_broken.append(b_txt)
+
+                    for vf in _extract_filter_candidates(vis.get("filter_fields"), vis.get("filters")):
+                        _validate_and_record_filter(vf, pg_name, vis.get("title") or vis.get("type_label") or "Visual", vis_broken_out=vis_broken)
+
                     vis["broken_refs"] = vis_broken
                     for br in vis_broken:
                         rep_broken.append({"page": pg_name, "visual": vis.get("title") or vis.get("type_label") or "Visual", "ref": br})
+
+            # Surface broken unprojected report-level DAX measures too
+            for rm_low, rm_errs in broken_rep_meas_map.items():
+                if rm_low not in projected_rep_meas:
+                    for r_err in rm_errs:
+                        rep_broken.append({"page": "Report Measures", "visual": f"Report DAX [{rm_low}]", "ref": r_err})
 
             for m_key, pg_set in rep_used_m_pages.items():
                 measure_report_usage[m_key].append(
                     {
                         "report_id": rep_copy.get("id", ""),
-                        "report_name": rep_copy.get("name", "Report"),
+                        "report_name": rep_label,
                         "workspace": rep_copy.get("workspace", ""),
                         "pages": sorted(pg_set),
                         "visual_count": rep_used_m_vis_cnt[m_key],
@@ -1020,13 +1492,13 @@ def analyze_full_model(
             rep_copy["report_measures_count"] = len(rep_meas)
             if rep_broken:
                 total_broken_refs += len(rep_broken)
-                broken_report_names.append(rep_copy.get("name", "Report"))
+                broken_report_names.append(rep_label)
         else:
             rep_copy.setdefault("broken_refs", [])
         enriched_reports.append(rep_copy)
 
-    # Propagate transitive usage upstream so base measures feeding report KPIs are recognized as used
-    directly_used_measures = set(measure_report_usage.keys())
+    # Propagate transitive usage upstream so base measures feeding report KPIs or Field Parameters are recognized as used
+    directly_used_measures = set(measure_report_usage.keys()) | intra_model_used_measures
     transitively_used_measures = set(directly_used_measures)
     queue = list(directly_used_measures)
     while queue:
@@ -1042,6 +1514,85 @@ def analyze_full_model(
         m_info["is_used_any"] = m_key in transitively_used_measures
 
     unused_measures_count = (measures_total - len(transitively_used_measures)) if has_parsed_layouts else 0
+
+    # Finalize Column Usage Profiles on all non-auto-date tables & table_summaries
+    unused_columns_count = 0
+    ts_by_name = {ts["name"]: ts for ts in table_summaries}
+    for tbl in data_tables:
+        tl = tbl["name"].lower()
+        tbl_unreferenced: list[str] = []
+        for c in tbl["columns"]:
+            cl = c["name"].lower()
+            pair = (tl, cl)
+            is_key = pair in key_cols_low
+            is_sort_by = pair in sort_by_cols_low
+            is_fp = pair in field_param_cols_low
+            is_hier = pair in hierarchy_cols_low
+            is_rls = pair in rls_cols_low
+            is_ref_m = pair in refresh_cols_low
+            dax_cnt = dax_ref_counts.get(pair, 0)
+            vis_cnt = visual_ref_counts.get(pair, 0)
+            flt_cnt = filter_ref_counts.get(pair, 0)
+
+            badges: list[dict[str, str]] = []
+            if is_key:
+                badges.append({"label": "Key", "tone": "accent"})
+            if is_sort_by:
+                badges.append({"label": "SortBy", "tone": "dim"})
+            if is_fp:
+                badges.append({"label": "Field Param", "tone": "accent"})
+            if is_hier:
+                badges.append({"label": "Hierarchy", "tone": "dim"})
+            if is_rls:
+                badges.append({"label": "RLS", "tone": "warn"})
+            if is_ref_m:
+                badges.append({"label": "Refresh", "tone": "dim"})
+            if dax_cnt > 0:
+                badges.append({"label": f"DAX ({dax_cnt})", "tone": "accent"})
+            if vis_cnt > 0:
+                badges.append({"label": f"Visuals ({vis_cnt})", "tone": "ok"})
+            if flt_cnt > 0:
+                badges.append({"label": f"Filter ({flt_cnt})", "tone": "dim"})
+
+            model_used = bool(is_key or is_sort_by or is_fp or is_hier or is_rls or is_ref_m or dax_cnt > 0)
+            report_used = bool(vis_cnt > 0 or flt_cnt > 0)
+            is_ref_any = model_used or report_used
+
+            if has_parsed_layouts:
+                status_val = "used" if is_ref_any else "unused"
+                if not is_ref_any:
+                    unused_columns_count += 1
+                    tbl_unreferenced.append(c["name"])
+                summary_str = ", ".join(b["label"] for b in badges) if badges else "Unused"
+            else:
+                status_val = "used" if model_used else "unknown"
+                summary_str = ", ".join(b["label"] for b in badges) if badges else "-"
+
+            c["usage"] = {
+                "status": status_val,
+                "is_referenced": is_ref_any,
+                "model_used": model_used,
+                "report_used": report_used,
+                "key": is_key,
+                "sort_by": is_sort_by,
+                "field_param": is_fp,
+                "hierarchy": is_hier,
+                "rls": is_rls,
+                "refresh": is_ref_m,
+                "dax_count": dax_cnt,
+                "visual_count": vis_cnt,
+                "filter_count": flt_cnt,
+                "reports": sorted(col_report_names.get(pair, set())),
+                "badges": badges,
+                "summary": summary_str,
+            }
+
+        ts_entry = ts_by_name.get(tbl["name"])
+        if ts_entry is not None:
+            ts_entry["unused_columns_count"] = len(tbl_unreferenced)
+            ts_entry["unreferenced_columns"] = tbl_unreferenced
+
+    used_columns_count = (columns_total - unused_columns_count) if has_parsed_layouts else columns_total
 
     if total_broken_refs > 0:
         findings.append(
@@ -1063,8 +1614,16 @@ def analyze_full_model(
         findings.append(
             {
                 "severity": "warn",
-                "title": f"{unused_measures_count} of {measures_total} DAX measure(s) not referenced by scanned reports",
-                "detail": "Review the 'Unused in Reports' filter in Section 4 before removing measures (verify Excel Analyze-in-Excel or ad-hoc consumers first).",
+                "title": f"{unused_measures_count} of {measures_total} DAX measure(s) unused in model & scanned reports",
+                "detail": "Review the 'Unused' filter in Section 4 before removing measures (verify unscanned workspaces, Analyze in Excel, or Paginated Reports first).",
+            }
+        )
+    if has_parsed_layouts and columns_total >= 8 and unused_columns_count > 0:
+        findings.append(
+            {
+                "severity": "warn",
+                "title": f"{unused_columns_count} of {columns_total} column(s) unused in model & scanned reports",
+                "detail": "Review the 'Unused' filter in Section 3 before removing columns to reduce VertiPaq memory (verify unscanned workspaces, Analyze in Excel, or Paginated Reports first).",
             }
         )
 
@@ -1166,6 +1725,8 @@ def analyze_full_model(
             "import_tables": import_count,
             "directquery_tables": dq_count,
             "columns": columns_total,
+            "used_columns": used_columns_count,
+            "unused_columns": unused_columns_count,
             "measures": measures_total,
             "used_measures": len(transitively_used_measures) if has_parsed_layouts else measures_total,
             "unused_measures": unused_measures_count,

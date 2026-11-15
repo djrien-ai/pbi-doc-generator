@@ -227,6 +227,21 @@ class CatalogMcpEngine:
             needle = (args.get("model") or "").strip().lower()
             for a in self._load_analyses(state):
                 if needle in (a["dataset_id"].lower(), a["name"].lower()) or needle in a["name"].lower():
+                    unref_cols = []
+                    if a.get("has_parsed_layouts"):
+                        for tbl in a["parsed"]["tables"]:
+                            if tbl.get("auto_date"):
+                                continue
+                            for c in tbl["columns"]:
+                                if (c.get("usage") or {}).get("status") == "unused":
+                                    unref_cols.append(
+                                        {
+                                            "ref": f"{tbl['name']}[{c['name']}]",
+                                            "table": tbl["name"],
+                                            "column": c["name"],
+                                            "type": c.get("type", ""),
+                                        }
+                                    )
                     return {
                         "name": a["name"],
                         "workspace": a["workspace"],
@@ -244,6 +259,7 @@ class CatalogMcpEngine:
                             for df in (a.get("upstream_dataflows") or [])
                         ],
                         "tables": a["table_summaries"],
+                        "unreferenced_columns": unref_cols,
                         "relationships": a["parsed"]["relationships"],
                         "rls_roles": a["parsed"]["roles"],
                         "reports": [r["name"] for r in a["reports"]],

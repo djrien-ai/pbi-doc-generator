@@ -220,6 +220,49 @@ def _extract_field_ref(expr: Any, alias_map: dict[str, str] | None = None) -> di
     return None
 
 
+def _walk_ast_field_refs(node: Any, alias_map: dict[str, str] | None = None) -> list[dict[str, str]]:
+    """Recursively collect deduplicated Power BI query AST field references across filters, sorts, and fx objects."""
+    found: list[dict[str, str]] = []
+    seen: set[tuple[str, str, str]] = set()
+
+    def _visit(cur: Any, amap: dict[str, str]) -> None:
+        if isinstance(cur, list):
+            for elem in cur:
+                _visit(elem, amap)
+            return
+        if not isinstance(cur, dict):
+            return
+        local_map = amap
+        from_arr = cur.get("From")
+        if isinstance(from_arr, list):
+            local_map = dict(amap)
+            for fr in from_arr:
+                if isinstance(fr, dict) and fr.get("Name") and fr.get("Entity"):
+                    local_map[str(fr["Name"])] = str(fr["Entity"])
+
+        if any(k in cur for k in ("Measure", "Column", "Aggregation", "SparklineData", "HierarchyLevel")):
+            ref_info = _extract_field_ref(cur, local_map)
+            if ref_info and ref_info.get("property"):
+                sig = (
+                    ref_info.get("kind", "").lower(),
+                    ref_info.get("entity", "").lower(),
+                    ref_info.get("property", "").lower(),
+                )
+                if sig not in seen:
+                    seen.add(sig)
+                    found.append(ref_info)
+                return
+
+        for k, sub in cur.items():
+            if k == "From":
+                continue
+            if isinstance(sub, (dict, list)):
+                _visit(sub, local_map)
+
+    _visit(node, alias_map or {})
+    return found
+
+
 def _literal_val(v: Any) -> str:
     s = str(v)
     if s == "null":
@@ -308,22 +351,40 @@ def _parse_filter_def(flt: Any) -> tuple[str, list[str]]:
     return " and ".join(texts), values
 
 
-def _parse_filters_rich(raw_filters: Any, level: str) -> tuple[list[str], list[dict[str, Any]]]:
-    """Return `(ref_strings, rich_filter_items)`."""
+def _parse_filters_full(raw_filters: Any, level: str) -> tuple[list[str], list[dict[str, Any]], list[dict[str, str]]]:
+    """Return `(ref_strings, rich_filter_items, structured_filter_fields)`."""
     arr = _loads(raw_filters, [])
     if not isinstance(arr, list):
-        return [], []
+        return [], [], []
     refs: list[str] = []
     seen_refs: set[str] = set()
+    field_refs: list[dict[str, str]] = []
+    seen_f_sigs: set[tuple[str, str, str]] = set()
     items: list[dict[str, Any]] = []
+
+    def _add_fref(fr: dict[str, str]) -> None:
+        if not fr or not fr.get("property"):
+            return
+        r_str = fr.get("ref") or ""
+        if r_str and r_str not in seen_refs:
+            seen_refs.add(r_str)
+            refs.append(r_str)
+        sig = (fr.get("kind", "").lower(), fr.get("entity", "").lower(), fr.get("property", "").lower())
+        if sig not in seen_f_sigs:
+            seen_f_sigs.add(sig)
+            field_refs.append(fr)
+
     for f in arr:
         if not isinstance(f, dict):
             continue
         fld = _extract_field_ref(f.get("field") or f.get("expression"))
-        cond, values = _parse_filter_def(f.get("filter"))
-        if fld and fld["ref"] not in seen_refs:
-            seen_refs.add(fld["ref"])
-            refs.append(fld["ref"])
+        raw_flt_obj = _loads(f.get("filter"), {}) or {}
+        ast_refs = _walk_ast_field_refs([f.get("field") or f.get("expression"), raw_flt_obj])
+        if fld:
+            _add_fref(fld)
+        for ar in ast_refs:
+            _add_fref(ar)
+        cond, values = _parse_filter_def(raw_flt_obj)
         if level == "visual" and not cond:
             continue
         if not fld and not cond:
@@ -333,6 +394,7 @@ def _parse_filters_rich(raw_filters: Any, level: str) -> tuple[list[str], list[d
                 "level": level,
                 "name": str(f.get("name") or ""),
                 "field": fld,
+                "field_refs": ast_refs,
                 "ref": fld["ref"] if fld else "",
                 "type": str(f.get("type") or ""),
                 "condition": cond,
@@ -341,6 +403,12 @@ def _parse_filters_rich(raw_filters: Any, level: str) -> tuple[list[str], list[d
                 "locked": bool(f.get("isLockedInViewMode")),
             }
         )
+    return refs, items, field_refs
+
+
+def _parse_filters_rich(raw_filters: Any, level: str) -> tuple[list[str], list[dict[str, Any]]]:
+    """Return `(ref_strings, rich_filter_items)`."""
+    refs, items, _ = _parse_filters_full(raw_filters, level)
     return refs, items
 
 
@@ -420,7 +488,15 @@ def parse_legacy_report_json(data: dict[str, Any], fmt_label: str = "PBIR-Legacy
     if isinstance(cfg_obj, dict) and "modelExtensions" in cfg_obj:
         report_measures.extend(_extract_model_extensions_measures(cfg_obj.get("modelExtensions")))
 
-    report_filters, report_filter_items = _parse_filters_rich(data.get("filters"), "report")
+    report_filters, report_filter_items, report_filter_fields = _parse_filters_full(data.get("filters"), "report")
+    if isinstance(cfg_obj, dict) and cfg_obj.get("bookmarks"):
+        for b_ref in _walk_ast_field_refs(cfg_obj.get("bookmarks")):
+            if not any(
+                (x.get("kind", "").lower(), x.get("entity", "").lower(), x.get("property", "").lower())
+                == (b_ref.get("kind", "").lower(), b_ref.get("entity", "").lower(), b_ref.get("property", "").lower())
+                for x in report_filter_fields
+            ):
+                report_filter_fields.append(b_ref)
     pages: list[dict[str, Any]] = []
 
     sections = sorted(data.get("sections") or [], key=lambda s: s.get("ordinal", 0))
@@ -432,7 +508,15 @@ def parse_legacy_report_json(data: dict[str, Any], fmt_label: str = "PBIR-Legacy
         ph = float(sec.get("height") or 720)
         sec_cfg = _loads(sec.get("config"), {}) or {}
         p_hidden = int((sec_cfg if isinstance(sec_cfg, dict) else {}).get("visibility", 0) or 0) == 1
-        p_filters, p_filter_items = _parse_filters_rich(sec.get("filters"), "page")
+        p_filters, p_filter_items, p_filter_fields = _parse_filters_full(sec.get("filters"), "page")
+        if isinstance(sec_cfg, dict):
+            for pb_ref in _walk_ast_field_refs(sec_cfg):
+                if not any(
+                    (x.get("kind", "").lower(), x.get("entity", "").lower(), x.get("property", "").lower())
+                    == (pb_ref.get("kind", "").lower(), pb_ref.get("entity", "").lower(), pb_ref.get("property", "").lower())
+                    for x in p_filter_fields
+                ):
+                    p_filter_fields.append(pb_ref)
 
         visuals: list[dict[str, Any]] = []
         for v_idx, vc in enumerate(sec.get("visualContainers") or [], 1):
@@ -468,6 +552,7 @@ def parse_legacy_report_json(data: dict[str, Any], fmt_label: str = "PBIR-Legacy
                         "fields": [],
                         "filters": [],
                         "filter_items": [],
+                        "filter_fields": [],
                     }
                 )
                 continue
@@ -495,6 +580,7 @@ def parse_legacy_report_json(data: dict[str, Any], fmt_label: str = "PBIR-Legacy
 
             fields: list[dict[str, Any]] = []
             seen_refs: set[tuple[str, str]] = set()
+            seen_field_sigs: set[tuple[str, str, str]] = set()
             dt = _loads(vc.get("dataTransforms"), {}) or {}
             if isinstance(dt, dict):
                 for sel in dt.get("selects") or []:
@@ -509,31 +595,45 @@ def parse_legacy_report_json(data: dict[str, Any], fmt_label: str = "PBIR-Legacy
                     rk = (role, f_info["ref"])
                     if rk not in seen_refs:
                         seen_refs.add(rk)
+                        seen_field_sigs.add((f_info.get("kind", "").lower(), f_info.get("entity", "").lower(), f_info.get("property", "").lower()))
                         fields.append({**f_info, "role": role, "display": disp})
 
-            if not fields:
-                proj_role: dict[str, str] = {}
-                for r_name, r_items in (sv.get("projections") or {}).items():
-                    if isinstance(r_items, list):
-                        for it in r_items:
-                            if isinstance(it, dict) and it.get("queryRef"):
-                                proj_role[str(it["queryRef"])] = str(r_name)
-                for sel in pq.get("Select") or []:
-                    if not isinstance(sel, dict):
-                        continue
-                    f_info = _extract_field_ref(sel, alias_map)
-                    if not f_info:
-                        continue
-                    qname = str(sel.get("Name") or "")
-                    disp = str(sel.get("NativeReferenceName") or f_info["property"]).strip()
-                    role = proj_role.get(qname, "Values")
-                    rk = (role, f_info["ref"])
-                    if rk not in seen_refs:
-                        seen_refs.add(rk)
-                        fields.append({**f_info, "role": role, "display": disp})
+            proj_role: dict[str, str] = {}
+            for r_name, r_items in (sv.get("projections") or {}).items():
+                if isinstance(r_items, list):
+                    for it in r_items:
+                        if isinstance(it, dict) and it.get("queryRef"):
+                            proj_role[str(it["queryRef"])] = str(r_name)
+            for sel in pq.get("Select") or []:
+                if not isinstance(sel, dict):
+                    continue
+                f_info = _extract_field_ref(sel, alias_map)
+                if not f_info:
+                    continue
+                qname = str(sel.get("Name") or "")
+                disp = str(sel.get("NativeReferenceName") or f_info["property"]).strip()
+                role = proj_role.get(qname, "Values")
+                sig = (f_info.get("kind", "").lower(), f_info.get("entity", "").lower(), f_info.get("property", "").lower())
+                rk = (role, f_info["ref"])
+                if rk not in seen_refs and sig not in seen_field_sigs:
+                    seen_refs.add(rk)
+                    seen_field_sigs.add(sig)
+                    fields.append({**f_info, "role": role, "display": disp})
 
-            v_filters, v_filter_items = _parse_filters_rich(vc.get("filters"), "visual")
             objs = sv.get("objects") or {}
+            vc_objs = sv.get("vcObjects") or {}
+            for s_ref in _walk_ast_field_refs([pq.get("OrderBy"), dt.get("orderBy") if isinstance(dt, dict) else None], alias_map):
+                sig = (s_ref.get("kind", "").lower(), s_ref.get("entity", "").lower(), s_ref.get("property", "").lower())
+                if sig not in seen_field_sigs:
+                    seen_field_sigs.add(sig)
+                    fields.append({**s_ref, "role": "Sort By", "display": s_ref["property"]})
+            for fx_ref in _walk_ast_field_refs([objs, vc_objs], alias_map):
+                sig = (fx_ref.get("kind", "").lower(), fx_ref.get("entity", "").lower(), fx_ref.get("property", "").lower())
+                if sig not in seen_field_sigs:
+                    seen_field_sigs.add(sig)
+                    fields.append({**fx_ref, "role": "Conditional Formatting", "display": fx_ref["property"]})
+
+            v_filters, v_filter_items, v_filter_fields = _parse_filters_full(vc.get("filters"), "visual")
             v_item: dict[str, Any] = {
                 "id": vid,
                 "type": vtype,
@@ -550,6 +650,7 @@ def parse_legacy_report_json(data: dict[str, Any], fmt_label: str = "PBIR-Legacy
                 "fields": fields,
                 "filters": v_filters,
                 "filter_items": v_filter_items,
+                "filter_fields": v_filter_fields,
             }
             if vtype == "textbox":
                 txt = _extract_text_runs(objs)
@@ -570,6 +671,7 @@ def parse_legacy_report_json(data: dict[str, Any], fmt_label: str = "PBIR-Legacy
                 "height": ph,
                 "filters": p_filters,
                 "filter_items": p_filter_items,
+                "filter_fields": p_filter_fields,
                 "visuals": visuals,
             }
         )
@@ -580,6 +682,7 @@ def parse_legacy_report_json(data: dict[str, Any], fmt_label: str = "PBIR-Legacy
         "dataset_ref": "",
         "report_filters": report_filters,
         "report_filter_items": report_filter_items,
+        "report_filter_fields": report_filter_fields,
         "report_measures": report_measures,
         "pages": pages,
     }
@@ -630,14 +733,25 @@ def parse_pbir_files_map(files: dict[str, str]) -> dict[str, Any]:
 
     report_filters: list[str] = []
     report_filter_items: list[dict[str, Any]] = []
+    report_filter_fields: list[dict[str, str]] = []
     rep_key = lower_to_norm.get("definition/report.json")
     if rep_key:
         rep_root = _loads(norm[rep_key], {})
         if isinstance(rep_root, dict):
-            report_filters, report_filter_items = _parse_filters_rich(
+            report_filters, report_filter_items, report_filter_fields = _parse_filters_full(
                 (rep_root.get("filterConfig") or {}).get("filters") or rep_root.get("filters"),
                 "report",
             )
+    for b_path, b_txt in sorted(norm.items()):
+        if re.match(r"(?i)^definition/bookmarks/.*\.json$", b_path):
+            b_obj = _loads(b_txt, {})
+            for b_ref in _walk_ast_field_refs(b_obj):
+                if not any(
+                    (x.get("kind", "").lower(), x.get("entity", "").lower(), x.get("property", "").lower())
+                    == (b_ref.get("kind", "").lower(), b_ref.get("entity", "").lower(), b_ref.get("property", "").lower())
+                    for x in report_filter_fields
+                ):
+                    report_filter_fields.append(b_ref)
 
     page_order: list[str] = []
     pages_meta_key = lower_to_norm.get("definition/pages/pages.json")
@@ -659,10 +773,18 @@ def parse_pbir_files_map(files: dict[str, str]) -> dict[str, Any]:
         ph = float(pdata.get("height") or (pdata.get("displayOption") or {}).get("height") or 720)
         vis_flag = pdata.get("visibility")
         p_hidden = vis_flag in (1, "HiddenInViewMode", True)
-        p_filters, p_filter_items = _parse_filters_rich(
+        p_filters, p_filter_items, p_filter_fields = _parse_filters_full(
             (pdata.get("filterConfig") or {}).get("filters") or pdata.get("filters"),
             "page",
         )
+        if pdata.get("pageBinding"):
+            for pb_ref in _walk_ast_field_refs(pdata.get("pageBinding")):
+                if not any(
+                    (x.get("kind", "").lower(), x.get("entity", "").lower(), x.get("property", "").lower())
+                    == (pb_ref.get("kind", "").lower(), pb_ref.get("entity", "").lower(), pb_ref.get("property", "").lower())
+                    for x in p_filter_fields
+                ):
+                    p_filter_fields.append(pb_ref)
         pages_by_id[pid] = {
             "id": pid,
             "name": str(pdata.get("displayName") or pid),
@@ -671,6 +793,7 @@ def parse_pbir_files_map(files: dict[str, str]) -> dict[str, Any]:
             "height": ph,
             "filters": p_filters,
             "filter_items": p_filter_items,
+            "filter_fields": p_filter_fields,
             "visuals": [],
         }
 
@@ -712,6 +835,7 @@ def parse_pbir_files_map(files: dict[str, str]) -> dict[str, Any]:
                     "fields": [],
                     "filters": [],
                     "filter_items": [],
+                    "filter_fields": [],
                 }
             )
             continue
@@ -729,6 +853,7 @@ def parse_pbir_files_map(files: dict[str, str]) -> dict[str, Any]:
 
         fields: list[dict[str, Any]] = []
         seen_refs: set[tuple[str, str]] = set()
+        seen_field_sigs: set[tuple[str, str, str]] = set()
         qstate = (vis.get("query") or {}).get("queryState") or {}
         if isinstance(qstate, dict):
             for role, role_obj in qstate.items():
@@ -749,13 +874,27 @@ def parse_pbir_files_map(files: dict[str, str]) -> dict[str, Any]:
                     rk = (str(role), f_info["ref"])
                     if rk not in seen_refs:
                         seen_refs.add(rk)
+                        seen_field_sigs.add((f_info.get("kind", "").lower(), f_info.get("entity", "").lower(), f_info.get("property", "").lower()))
                         fields.append({**f_info, "role": str(role), "display": disp})
 
-        v_filters, v_filter_items = _parse_filters_rich(
+        objs = vis.get("objects") or {}
+        vc_objs = vis.get("visualContainerObjects") or vis.get("vcObjects") or {}
+        sort_def = (vis.get("query") or {}).get("sortDefinition")
+        for s_ref in _walk_ast_field_refs(sort_def):
+            sig = (s_ref.get("kind", "").lower(), s_ref.get("entity", "").lower(), s_ref.get("property", "").lower())
+            if sig not in seen_field_sigs:
+                seen_field_sigs.add(sig)
+                fields.append({**s_ref, "role": "Sort By", "display": s_ref["property"]})
+        for fx_ref in _walk_ast_field_refs([objs, vc_objs]):
+            sig = (fx_ref.get("kind", "").lower(), fx_ref.get("entity", "").lower(), fx_ref.get("property", "").lower())
+            if sig not in seen_field_sigs:
+                seen_field_sigs.add(sig)
+                fields.append({**fx_ref, "role": "Conditional Formatting", "display": fx_ref["property"]})
+
+        v_filters, v_filter_items, v_filter_fields = _parse_filters_full(
             (vdata.get("filterConfig") or {}).get("filters") or vdata.get("filters"),
             "visual",
         )
-        objs = vis.get("objects") or {}
         v_item: dict[str, Any] = {
             "id": str(vdata.get("name") or vid),
             "type": vtype,
@@ -772,6 +911,7 @@ def parse_pbir_files_map(files: dict[str, str]) -> dict[str, Any]:
             "fields": fields,
             "filters": v_filters,
             "filter_items": v_filter_items,
+            "filter_fields": v_filter_fields,
         }
         if vtype == "textbox":
             txt = _extract_text_runs(objs)
@@ -790,6 +930,7 @@ def parse_pbir_files_map(files: dict[str, str]) -> dict[str, Any]:
         "dataset_ref": dataset_ref,
         "report_filters": report_filters,
         "report_filter_items": report_filter_items,
+        "report_filter_fields": report_filter_fields,
         "report_measures": report_measures,
         "pages": [pages_by_id[pid] for pid in ordered_ids],
     }

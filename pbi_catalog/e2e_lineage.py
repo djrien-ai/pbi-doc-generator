@@ -60,6 +60,7 @@ def dax_references(
     tables: dict[str, dict],
     measure_by_bare: dict[str, str],
     measure_by_qual: dict[tuple[str, str], str] | None = None,
+    row_context: bool = False,
 ) -> dict:
     """Find measures, columns `(table, column)`, and whole tables referenced by a DAX expression."""
     s = _strip_dax_noise(expr)
@@ -69,14 +70,18 @@ def dax_references(
     lower_tables = {t.lower(): t for t in tables}
     qual = measure_by_qual or {}
     host_low = (host_table or "").lower()
+    spans_blank: list[tuple[int, int]] = []
 
     for m in _TBL_COL_RE.finditer(s):
         raw_t = m.group(1)
         tname = raw_t[1:-1].replace("''", "'") if raw_t.startswith("'") else raw_t
-        col = m.group(2).strip()
         real_t = lower_tables.get(tname.lower())
+        if not raw_t.startswith("'") and not real_t:
+            continue
+        spans_blank.append(m.span())
         if not real_t:
             continue
+        col = m.group(2).strip()
         mkey = qual.get((real_t.lower(), col.lower()))
         if not mkey:
             cand = measure_by_bare.get(col.lower())
@@ -87,9 +92,20 @@ def dax_references(
         else:
             columns.add((real_t, col))
 
-    rest = _TBL_COL_RE.sub(" ", s)
+    if spans_blank:
+        ch_arr = list(s)
+        for s_i, e_i in spans_blank:
+            for k_i in range(s_i, e_i):
+                ch_arr[k_i] = " "
+        rest = "".join(ch_arr)
+    else:
+        rest = s
+
     for m in _BARE_RE.finditer(rest):
         ref = m.group(1).strip()
+        if row_context and host_table in tables and any(c["name"].lower() == ref.lower() for c in tables[host_table]["columns"]):
+            columns.add((host_table, ref))
+            continue
         mkey = qual.get((host_low, ref.lower())) or measure_by_bare.get(ref.lower())
         if mkey:
             measures.add(mkey)
@@ -254,8 +270,9 @@ def _wire_dax(
     nid: str,
     expr: str,
     host: str,
+    row_context: bool = False,
 ) -> None:
-    refs = dax_references(expr, host, tables, measure_by_bare, measure_by_qual)
+    refs = dax_references(expr, host, tables, measure_by_bare, measure_by_qual, row_context=row_context)
     for mk in refs["measures"]:
         g.edge(nid, f"m:{ds_id}:{mk}", "uses measure", "dax")
     for t_name, col in refs["columns"]:
@@ -577,12 +594,13 @@ def build_e2e_graph(store: CatalogStore, analyses: list[dict] | None = None) -> 
             nid: str,
             expr: str,
             host: str,
+            row_context: bool = False,
             _ds: str = ds_id,
             _t: dict = tables,
             _mb: dict = measure_by_bare,
             _mq: dict = measure_by_qual,
         ) -> None:
-            _wire_dax(g, _ds, _t, _mb, _mq, nid, expr, host)
+            _wire_dax(g, _ds, _t, _mb, _mq, nid, expr, host, row_context=row_context)
 
         m_table_names = [t["name"] for t in tables.values() if any(p["kind"] == "m" for p in t["partitions"])]
 
@@ -661,7 +679,15 @@ def build_e2e_graph(store: CatalogStore, analyses: list[dict] | None = None) -> 
                 storage_mode=mode or "import",
                 hierarchies=[h["name"] for h in t.get("hierarchies", [])],
                 columns=[
-                    {"name": c["name"], "type": c["type"], "source": c["source"], "calculated": bool(c["expr"])}
+                    {
+                        "name": c["name"],
+                        "type": c["type"],
+                        "source": c["source"],
+                        "format": c.get("format", ""),
+                        "expr": c.get("expr", ""),
+                        "calculated": bool(c["expr"]),
+                        "usage": (c.get("usage") or {}).get("summary", "-"),
+                    }
                     for c in t["columns"]
                 ],
                 **common,
@@ -698,7 +724,7 @@ def build_e2e_graph(store: CatalogStore, analyses: list[dict] | None = None) -> 
                         **common,
                     )
                     g.edge(cid, nid, "column of", "dax")
-                    wire_dax(cid, c["expr"], t["name"])
+                    wire_dax(cid, c["expr"], t["name"], row_context=True)
 
             for m in t["measures"]:
                 mid = f"m:{ds_id}:{t['name']}[{m['name']}]"

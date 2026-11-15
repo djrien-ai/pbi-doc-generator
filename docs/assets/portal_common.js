@@ -260,7 +260,8 @@
                 cols.forEach(function (c) {
                     var cname = typeof c === "string" ? c : (c.name || "");
                     var ctype = (typeof c === "object" && c.type) ? " (`" + c.type + "`)" : "";
-                    md.push("- `" + cname + "`" + ctype);
+                    var cusage = (typeof c === "object" && c.usage && c.usage !== "-") ? " - Usage: " + c.usage : "";
+                    md.push("- `" + cname + "`" + ctype + cusage);
                 });
             }
             if (t.code) md.push("", "```" + (t.lang || "powerquery"), t.code, "```");
@@ -273,19 +274,21 @@
             md.push("", "```dax", (m.code || ""), "```", "");
         });
 
-        var csvRows = ["ObjectType,Table,Name,DataTypeOrFolder,Format,StorageOrSource,Expression"];
+        var csvRows = ["ObjectType,Table,Name,DataTypeOrFolder,Format,Usage,StorageOrSource,Expression"];
         tables.forEach(function (t) {
             (t.columns || []).forEach(function (c) {
                 var cname = typeof c === "string" ? c : (c.name || "");
                 var ctype = typeof c === "object" ? (c.type || "") : "";
                 var cfmt = typeof c === "object" ? (c.format || "") : "";
+                var cusage = typeof c === "object" ? (c.usage || "-") : "-";
                 var csrc = typeof c === "object" ? (c.source || "") : (t.storage_mode || "");
                 var cexpr = typeof c === "object" ? (c.expr || "") : "";
-                csvRows.push(["Column", t.name, cname, ctype, cfmt, csrc, cexpr].map(csvEscape).join(","));
+                csvRows.push(["Column", t.name, cname, ctype, cfmt, cusage, csrc, cexpr].map(csvEscape).join(","));
             });
         });
         measures.forEach(function (m) {
-            csvRows.push(["Measure", m.table || "", m.name || "", m.folder || "General", m.format || "", "DAX", m.code || ""].map(csvEscape).join(","));
+            var mRepCnt = (m.used_in_reports && m.used_in_reports.length) ? ("Reports (" + m.used_in_reports.length + ")") : "-";
+            csvRows.push(["Measure", m.table || "", m.name || "", m.folder || "General", m.format || "", mRepCnt, "DAX", m.code || ""].map(csvEscape).join(","));
         });
         // Also harvest DOM columns if graph columns are compact strings
         if (tables.length === 0 && document.querySelectorAll("details.table-blueprint").length) {
@@ -293,8 +296,8 @@
                 var tTitle = (det.querySelector("summary span") && det.querySelector("summary span").textContent || "Table").split(":")[0].trim();
                 det.querySelectorAll("tbody tr").forEach(function (tr) {
                     var tds = tr.querySelectorAll("td");
-                    if (tds.length >= 4) {
-                        csvRows.push(["Column", tTitle, tds[0].textContent, tds[1].textContent, tds[3].textContent, tds[2].textContent, tds[4] ? tds[4].textContent : ""].map(csvEscape).join(","));
+                    if (tds.length >= 5) {
+                        csvRows.push(["Column", tTitle, tds[0].textContent, tds[1].textContent, tds[4].textContent, tds[2].textContent, tds[3].textContent, tds[5] ? tds[5].textContent : ""].map(csvEscape).join(","));
                     }
                 });
             });
@@ -372,6 +375,20 @@
         var prevTheme = document.documentElement.getAttribute("data-theme");
         document.documentElement.setAttribute("data-theme", "light");
         var openedDetails = [];
+        var unhiddenEls = [];
+        var hiddenScopeNotes = [];
+        if (preset === "full") {
+            document.querySelectorAll("tr[data-column-usage], [data-measure-usage], details.table-blueprint, details.dax-folder-details, details.dax-table-group").forEach(function (el) {
+                if (el.style.display === "none") {
+                    el.style.display = "";
+                    unhiddenEls.push(el);
+                }
+            });
+            document.querySelectorAll(".usage-scope-note.is-visible").forEach(function (n) {
+                n.classList.remove("is-visible");
+                hiddenScopeNotes.push(n);
+            });
+        }
         var alwaysOpenSel = "details.dax-folder-details, details.dax-table-group, details.principals-details, #tab-workspaces.active details.section-accordion";
         var fullOpenSel = "details.table-blueprint, details.dax-folder-details, details.dax-table-group, details.section-accordion, details.principals-details";
         document.querySelectorAll(preset === "full" ? fullOpenSel : alwaysOpenSel).forEach(function (d) {
@@ -387,6 +404,8 @@
             if (prevTheme) document.documentElement.setAttribute("data-theme", prevTheme);
             else document.documentElement.removeAttribute("data-theme");
             openedDetails.forEach(function (d) { d.open = false; });
+            unhiddenEls.forEach(function (el) { el.style.display = "none"; });
+            hiddenScopeNotes.forEach(function (n) { n.classList.add("is-visible"); });
             document.querySelectorAll(".section[data-print-hide]").forEach(function (s) { s.removeAttribute("data-print-hide"); });
             window.removeEventListener("afterprint", restoreAfterPrint);
         }
@@ -868,10 +887,35 @@
             }
             return;
         }
+        var colUsageBtn = e.target.closest("[data-col-usage]");
+        if (colUsageBtn) {
+            var cMode = colUsageBtn.getAttribute("data-col-usage");
+            document.querySelectorAll("[data-col-usage]").forEach(function (b) { b.classList.toggle("active", b === colUsageBtn); });
+            var colNote = document.getElementById("colUnusedScopeNote");
+            if (colNote) colNote.classList.toggle("is-visible", cMode === "unused");
+            document.querySelectorAll("tr[data-column-usage]").forEach(function (row) {
+                var cu = row.getAttribute("data-column-usage");
+                var showRow = (cMode === "all") || (cu === cMode);
+                row.style.display = showRow ? "" : "none";
+            });
+            document.querySelectorAll("details.table-blueprint").forEach(function (det) {
+                var colRows = Array.from(det.querySelectorAll("tr[data-column-usage]"));
+                if (!colRows.length) {
+                    det.style.display = (cMode === "all") ? "" : "none";
+                    return;
+                }
+                var anyColVis = colRows.some(function (r) { return r.style.display !== "none"; });
+                det.style.display = (cMode === "all" || anyColVis) ? "" : "none";
+                if (cMode !== "all" && anyColVis) det.open = true;
+            });
+            return;
+        }
         var daxUsageBtn = e.target.closest("[data-dax-usage]");
         if (daxUsageBtn) {
             var mode = daxUsageBtn.getAttribute("data-dax-usage");
             document.querySelectorAll("[data-dax-usage]").forEach(function (b) { b.classList.toggle("active", b === daxUsageBtn); });
+            var daxNote = document.getElementById("daxUnusedScopeNote");
+            if (daxNote) daxNote.classList.toggle("is-visible", mode === "unused");
             document.querySelectorAll("[data-measure-usage]").forEach(function (el) {
                 var u = el.getAttribute("data-measure-usage");
                 var show = (mode === "all") || (u === mode);
@@ -879,8 +923,13 @@
             });
             document.querySelectorAll("details.dax-folder-details").forEach(function (f) {
                 var anyVis = Array.from(f.querySelectorAll(".measure-card[data-measure-usage]")).some(function (c) { return c.style.display !== "none"; });
-                f.style.display = anyVis ? "" : "none";
+                f.style.display = (mode === "all" || anyVis) ? "" : "none";
                 if (mode !== "all" && anyVis) f.open = true;
+            });
+            document.querySelectorAll("details.dax-table-group").forEach(function (grp) {
+                var anyFolderVis = Array.from(grp.querySelectorAll("details.dax-folder-details")).some(function (f) { return f.style.display !== "none"; });
+                grp.style.display = (mode === "all" || anyFolderVis) ? "" : "none";
+                if (mode !== "all" && anyFolderVis) grp.open = true;
             });
             return;
         }

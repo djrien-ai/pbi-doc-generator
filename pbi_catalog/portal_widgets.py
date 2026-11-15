@@ -2513,6 +2513,17 @@ XRAY_DRAWER_JS = r"""
                     '</div>';
             } else {
                 brokenBadge = '<span class="badge badge-bad">' + item.broken_count + ' broken field(s)</span>';
+                if (item.broken_refs && item.broken_refs.length) {
+                    brokenStripHtml =
+                        '<div style="padding:8px 14px;border-radius:9px;background:var(--bad-bg);border:1px solid rgba(185,28,28,0.28);display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px">' +
+                        '<b style="color:var(--bad)">Broken Filter / DAX Bindings (' + item.broken_refs.length + '):</b>' +
+                        item.broken_refs.slice(0, 12).map(function (br) {
+                            return '<span class="dep-chip" style="border-color:var(--bad);color:var(--bad);background:var(--surface)">' +
+                                escHtml((br.page || "Report") + " > " + (br.visual || "Filter") + ": " + (br.ref || "")) +
+                                '</span>';
+                        }).join("") +
+                        '</div>';
+                }
             }
         }
         var shadowBadge = item.report_measures_count ? '<span class="badge badge-warn">' + item.report_measures_count + ' report-level DAX</span>' : '';
@@ -2752,6 +2763,12 @@ def build_report_xray_entry(
         for rm in rep_measures:
             desc_html = f'<div class="measure-desc">{esc(rm.get("description", ""))}</div>' if rm.get("description") else ""
             fmt_b = f'<span class="badge">Format: {esc(rm["format"])}</span>' if rm.get("format") else ""
+            rm_brk_list = rm.get("broken_refs") or []
+            rm_brk_b = (
+                "".join(f'<span class="badge badge-bad">Missing: {esc(br)}</span>' for br in rm_brk_list)
+                if rm_brk_list
+                else ""
+            )
             rm_e2e_btn = ""
             if e2e_graph and ds_id:
                 cand_id = f"m:{ds_id}:rpt:{rep_id}:{rm.get('table', '')}[{rm.get('name', '')}]"
@@ -2765,7 +2782,7 @@ def build_report_xray_entry(
             cards.append(
                 f'<div class="measure-card">'
                 f'<div class="measure-head"><span class="measure-name">{esc(rm.get("name", ""))}</span>'
-                f'<div class="model-meta"><span class="badge badge-warn">Report-Level DAX ({esc(rm.get("table", ""))})</span>{fmt_b}</div></div>'
+                f'<div class="model-meta"><span class="badge badge-warn">Report-Level DAX ({esc(rm.get("table", ""))})</span>{fmt_b}{rm_brk_b}</div></div>'
                 f"{desc_html}"
                 f'<div class="code-block"><button type="button" class="copy-btn" data-copy="1">Copy DAX</button><pre>{highlight_dax_fn(rm.get("expr", ""))}</pre></div>'
                 f"{rm_e2e_btn}"
@@ -2790,6 +2807,7 @@ def build_report_xray_entry(
         "model_workspace": model_workspace,
         "cross_workspace": cross,
         "broken_count": broken_cnt,
+        "broken_refs": rep.get("broken_refs") or [],
         "report_measures_count": len(rep_measures),
         "report_filters": layout.get("report_filters") or [],
         "pages": pages_out,
