@@ -101,6 +101,31 @@ pbi-doc-generator mcp
 
 ---
 
+## Local AI Assistant Setup (MCP Server - 10 Read-Only Tools)
+
+Connect **VS Code GitHub Copilot** (`.vscode/mcp.json`), **Claude Desktop** (`claude_desktop_config.json`), or **Cursor** (`~/.cursor/mcp.json`) to your scanned catalog so AI agents can trace lineage and audit models locally without cloud data exposure:
+
+```json
+{
+  "mcpServers": {
+    "pbi-doc-generator": {
+      "command": "pbi-doc-generator",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+*(Using the Windows Portable download instead of `pip`? Point `"command"` to `"C:\\path\\to\\PBI_Doc_Generator\\PBI_Doc_Generator.exe"` with `"args": ["mcp"]`.)*
+
+**Included read-only MCP tools (with automatic secret masking):**
+- **Catalog & Model Blueprint:** `pbi_catalog_summary`, `pbi_list_models`, `pbi_inspect_model`
+- **Code & Lineage Search:** `pbi_search_dax_and_m`, `pbi_measure_lineage`, `pbi_trace_measure_end_to_end`
+- **Report Visuals & Blast Radius:** `pbi_report_layout`, `pbi_source_impact`
+- **Governance & Publishing:** `pbi_health_audit`, `pbi_generate_portal`
+
+---
+
 ## Security & Privacy by Design
 
 - **100% Local Execution:** Metadata, TMDL/PBIR definitions, and generated HTML stay on your machine (`127.0.0.1`). Zero telemetry or external CDN calls.

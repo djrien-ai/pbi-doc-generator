@@ -104,11 +104,11 @@ jobs:
           $rcBanner = ""
           if ($tag -match "-") {
             $rcBanner = @(
-              "> [!TIP]"
-              "> **Public Release Candidate (`$tag`)**"
-              "> Looking for the current official stable release (`v1.0.0`)? Go to [**Latest Stable Release**](https://github.com/djrien-ai/pbi-doc-generator/releases/latest)."
-              "> Testing `v1.1`? Share your results or edge cases in [**Early Access & Feedback Hub (#20)**](https://github.com/djrien-ai/pbi-doc-generator/issues/20) to get credited in the official `v1.1.0` Release Notes!"
-              ""
+              '> [!TIP]'
+              ('> **Public Release Candidate (`' + $tag + '`)**')
+              '> Looking for the current official stable release (`v1.0.0`)? Go to [**Latest Stable Release**](https://github.com/djrien-ai/pbi-doc-generator/releases/latest).'
+              '> Testing `v1.1`? Share your results or edge cases in [**Early Access & Feedback Hub (#20)**](https://github.com/djrien-ai/pbi-doc-generator/issues/20) to get credited in the official `v1.1.0` Release Notes!'
+              ''
             ) -join "`r`n"
           }
           ($rcBanner + $hdr + "`r`n" + $chg) | Set-Content -Path "dist/RELEASE_NOTES.md" -Encoding UTF8
