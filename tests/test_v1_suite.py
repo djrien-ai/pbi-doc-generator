@@ -807,6 +807,12 @@ def test_v11_clean_slate_single_model_export_and_sharepoint_publisher() -> None:
         # Sibling models must NOT leak into scoped PBI_E2E_GRAPH
         assert "Group Working Capital & Margin" not in txt
         assert "clara.vance@northwind-global.example" not in txt, "Anonymous single-model export leaked owner email!"
+        # Verify isolated PDF / Print engine safeguards (screen responsive breakpoint must never fire on A4 print)
+        assert "@media screen and (max-width: 1100px)" in txt
+        assert "@media (max-width: 1100px)" not in txt
+        assert "print-only-star-stack" in txt and "buildSvgStarBlock" in txt
+        assert "print-only-doc-banner" in txt
+        assert "print-only-doc-banner" in idx.read_text(encoding="utf-8")
 
         # Verify Store.clear() resets everything cleanly
         store.clear()

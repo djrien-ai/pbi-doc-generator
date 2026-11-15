@@ -1370,7 +1370,7 @@ svg.mermaid-interactive.is-dimmed .flowchart-link.is-related,
 svg.mermaid-interactive.is-dimmed .flowchart-link.is-selected { opacity: 1; }
 svg.mermaid-interactive .node.is-selected rect { stroke: var(--accent) !important; stroke-width: 3px !important; }
 
-@media (max-width: 1100px) {
+@media screen and (max-width: 1100px) {
   .doc-shell { grid-template-columns: 1fr; }
   .doc-sidebar { position: relative; height: auto; border-right: none; border-bottom: 1px solid var(--border); }
   .lineage-app { grid-template-columns: 1fr; height: auto; }
@@ -2507,15 +2507,28 @@ PORTAL_COMMON_JS = r"""
         triggerDownload("PBI_Governance_Remediation_Backlog.csv", "text/csv;charset=utf-8", "\uFEFF" + rows.join("\r\n"));
     }
 
+    var _ctrlPOpened = [];
+    window.addEventListener("beforeprint", function () {
+        document.querySelectorAll("details.dax-folder-details, details.dax-table-group, details.principals-details, #tab-workspaces.active details.section-accordion").forEach(function (d) {
+            if (!d.open) { d.open = true; _ctrlPOpened.push(d); }
+        });
+    });
+    window.addEventListener("afterprint", function () {
+        while (_ctrlPOpened.length) {
+            var d = _ctrlPOpened.pop();
+            try { d.open = false; } catch (e) {}
+        }
+    });
+
     function runCleanPrint(preset) {
         var prevTheme = document.documentElement.getAttribute("data-theme");
         document.documentElement.setAttribute("data-theme", "light");
         var openedDetails = [];
-        if (preset === "full") {
-            document.querySelectorAll("details.table-blueprint, details.dax-folder-details, details.dax-table-group, details.section-accordion").forEach(function (d) {
-                if (!d.open) { d.open = true; openedDetails.push(d); }
-            });
-        }
+        var alwaysOpenSel = "details.dax-folder-details, details.dax-table-group, details.principals-details, #tab-workspaces.active details.section-accordion";
+        var fullOpenSel = "details.table-blueprint, details.dax-folder-details, details.dax-table-group, details.section-accordion, details.principals-details";
+        document.querySelectorAll(preset === "full" ? fullOpenSel : alwaysOpenSel).forEach(function (d) {
+            if (!d.open) { d.open = true; openedDetails.push(d); }
+        });
         var modal = document.getElementById("pbiPublishModal");
         if (modal) modal.classList.remove("is-open");
 
@@ -2745,8 +2758,7 @@ PORTAL_COMMON_JS = r"""
                     chChecks.forEach(function (chk) {
                         var sec = document.getElementById(chk.value);
                         if (!sec) return;
-                        if (pMode === "exec" && chk.value === "sec-lineage") sec.setAttribute("data-print-hide", "1");
-                        else if (!chk.checked) sec.setAttribute("data-print-hide", "1");
+                        if (!chk.checked) sec.setAttribute("data-print-hide", "1");
                         else sec.removeAttribute("data-print-hide");
                     });
                 }
@@ -4137,6 +4149,17 @@ def render_model_html(
   </aside>
 
   <main class="doc-main">
+    <div class="print-only-doc-banner">
+      <div>
+        <div style="font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#0b63ce;margin-bottom:2px">Power BI Semantic Model Blueprint</div>
+        <div style="font-size:19px;font-weight:800;color:#0f172a;line-height:1.2">{esc(analysis['name'])}</div>
+        <div style="font-size:11px;color:#475569;margin-top:3px">Workspace: <b>{esc(analysis['workspace'])}</b> &bull; Owner: <b>{esc(owner_txt)}</b></div>
+      </div>
+      <div style="text-align:right;font-size:10.5px;color:#475569;white-space:nowrap">
+        <div><b>{stats['tables']}</b> Tables &bull; <b>{stats['measures']}</b> Measures &bull; <b>{stats['relationships']}</b> Rels</div>
+        <div style="margin-top:2px">PBI Doc Generator v1.1</div>
+      </div>
+    </div>
     <div class="doc-topbar">
       <nav class="doc-crumbs" aria-label="Breadcrumb">
         <a href="../index.html">Catalog Home</a>
@@ -4825,6 +4848,17 @@ def generate_portal(store: CatalogStore, output_dir: str | Path | None = None, a
 </header>
 
 <main class="catalog-wrap">
+  <div class="print-only-doc-banner">
+    <div>
+      <div style="font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#0b63ce;margin-bottom:2px">Power BI Portfolio &amp; Governance Summary</div>
+      <div style="font-size:19px;font-weight:800;color:#0f172a;line-height:1.2">Power BI Documentation &amp; Live Lineage Portal</div>
+      <div style="font-size:11px;color:#475569;margin-top:3px">Generated: <b>{esc(gen_ts)}</b></div>
+    </div>
+    <div style="text-align:right;font-size:10.5px;color:#475569;white-space:nowrap">
+      <div><b>{total_ws}</b> Workspaces &bull; <b>{len(analyses)}</b> Models &bull; <b>{total_reports}</b> Reports</div>
+      <div style="margin-top:2px">PBI Doc Generator v1.1</div>
+    </div>
+  </div>
   <div class="kpi-grid">
     <div class="kpi-card"><div class="val">{total_ws}</div><div class="lbl">Workspaces</div></div>
     <div class="kpi-card"><div class="val">{len(analyses)}</div><div class="lbl">Semantic Models</div></div>

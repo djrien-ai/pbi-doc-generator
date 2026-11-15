@@ -355,15 +355,28 @@
         triggerDownload("PBI_Governance_Remediation_Backlog.csv", "text/csv;charset=utf-8", "\uFEFF" + rows.join("\r\n"));
     }
 
+    var _ctrlPOpened = [];
+    window.addEventListener("beforeprint", function () {
+        document.querySelectorAll("details.dax-folder-details, details.dax-table-group, details.principals-details, #tab-workspaces.active details.section-accordion").forEach(function (d) {
+            if (!d.open) { d.open = true; _ctrlPOpened.push(d); }
+        });
+    });
+    window.addEventListener("afterprint", function () {
+        while (_ctrlPOpened.length) {
+            var d = _ctrlPOpened.pop();
+            try { d.open = false; } catch (e) {}
+        }
+    });
+
     function runCleanPrint(preset) {
         var prevTheme = document.documentElement.getAttribute("data-theme");
         document.documentElement.setAttribute("data-theme", "light");
         var openedDetails = [];
-        if (preset === "full") {
-            document.querySelectorAll("details.table-blueprint, details.dax-folder-details, details.dax-table-group, details.section-accordion").forEach(function (d) {
-                if (!d.open) { d.open = true; openedDetails.push(d); }
-            });
-        }
+        var alwaysOpenSel = "details.dax-folder-details, details.dax-table-group, details.principals-details, #tab-workspaces.active details.section-accordion";
+        var fullOpenSel = "details.table-blueprint, details.dax-folder-details, details.dax-table-group, details.section-accordion, details.principals-details";
+        document.querySelectorAll(preset === "full" ? fullOpenSel : alwaysOpenSel).forEach(function (d) {
+            if (!d.open) { d.open = true; openedDetails.push(d); }
+        });
         var modal = document.getElementById("pbiPublishModal");
         if (modal) modal.classList.remove("is-open");
 
@@ -593,8 +606,7 @@
                     chChecks.forEach(function (chk) {
                         var sec = document.getElementById(chk.value);
                         if (!sec) return;
-                        if (pMode === "exec" && chk.value === "sec-lineage") sec.setAttribute("data-print-hide", "1");
-                        else if (!chk.checked) sec.setAttribute("data-print-hide", "1");
+                        if (!chk.checked) sec.setAttribute("data-print-hide", "1");
                         else sec.removeAttribute("data-print-hide");
                     });
                 }

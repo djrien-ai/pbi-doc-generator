@@ -317,6 +317,181 @@
 
         renderToolbar();
         renderDiagram();
+
+        function buildSvgStarBlock(titleLeft, titleRight, leftTbls, centerTbls, rightTbls, blockRels) {
+            var W = 920;
+            var colW = 248;
+            var xLeft = 12, xCenter = 336, xRight = 660;
+            var topY = 26;
+            var gapY = 14;
+
+            function keysForTable(tName) {
+                var ks = [];
+                blockRels.forEach(function (r) {
+                    if (r.from_table === tName && ks.indexOf(r.from_column) === -1) ks.push(r.from_column);
+                    if (r.to_table === tName && ks.indexOf(r.to_column) === -1) ks.push(r.to_column);
+                });
+                return ks;
+            }
+
+            function measureCard(t) {
+                var ks = keysForTable(t.name);
+                var shown = ks.slice(0, 5);
+                var extra = ks.length > 5 ? (ks.length - 5) : 0;
+                var h = 68 + (shown.length ? (8 + shown.length * 16 + (extra ? 14 : 0)) : 0);
+                return { t: t, keys: shown, extra: extra, h: h };
+            }
+
+            function layoutColumn(items, x) {
+                var measured = items.map(measureCard);
+                var total = measured.reduce(function (acc, m) { return acc + m.h; }, 0) + Math.max(0, measured.length - 1) * gapY;
+                return { items: measured, totalH: total, x: x };
+            }
+
+            var cL = layoutColumn(leftTbls, xLeft);
+            var cC = layoutColumn(centerTbls, xCenter);
+            var cR = layoutColumn(rightTbls, xRight);
+            var bodyH = Math.max(cL.totalH, cC.totalH, cR.totalH, 90);
+            var H = topY + bodyH + 10;
+
+            var posMap = new Map();
+            function placeCol(col, label) {
+                var out = [];
+                if (!col.items.length) return "";
+                var startY = topY + Math.round((bodyH - col.totalH) / 2);
+                out.push('<text x="' + col.x + '" y="' + Math.max(14, startY - 8) + '" font-size="9.5" font-weight="700" fill="#64748b" font-family="Segoe UI,Arial,sans-serif" letter-spacing="0.5">' + escHtml(label.toUpperCase()) + '</text>');
+                var curY = startY;
+                col.items.forEach(function (m) {
+                    var t = m.t;
+                    var isFact = t.role === "Fact";
+                    var accent = isFact ? "#0b63ce" : (t.role === "Dimension" ? "#0f766e" : "#475569");
+                    var pillBg = isFact ? "#dbeafe" : (t.role === "Dimension" ? "#ccfbf1" : "#f1f5f9");
+                    var pillFg = isFact ? "#1d4ed8" : (t.role === "Dimension" ? "#0f766e" : "#334155");
+                    posMap.set(t.name, { x: col.x, y: curY, w: colW, h: m.h });
+
+                    out.push('<g transform="translate(' + col.x + ',' + curY + ')">');
+                    out.push('<rect width="' + colW + '" height="' + m.h + '" rx="8" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.2"/>');
+                    out.push('<path d="M 2 7 Q 2 1 8 1 L ' + (colW - 8) + ' 1 Q ' + (colW - 2) + ' 1 ' + (colW - 2) + ' 7 L ' + (colW - 2) + ' 4 L 2 4 Z" fill="' + accent + '"/>');
+                    out.push('<rect x="1" y="1" width="' + (colW - 2) + '" height="3.5" rx="2" fill="' + accent + '"/>');
+                    // Role badge + storage mode
+                    var roleTxt = String(t.role || "Table");
+                    var rw = Math.max(42, roleTxt.length * 6.5 + 14);
+                    out.push('<rect x="10" y="10" width="' + rw.toFixed(0) + '" height="17" rx="8.5" fill="' + pillBg + '"/>');
+                    out.push('<text x="' + (10 + rw / 2).toFixed(1) + '" y="21.5" text-anchor="middle" font-size="9.5" font-weight="700" fill="' + pillFg + '" font-family="Segoe UI,Arial,sans-serif">' + escHtml(roleTxt) + '</text>');
+                    out.push('<text x="' + (colW - 10) + '" y="21.5" text-anchor="end" font-size="9.5" fill="#64748b" font-family="Consolas,monospace">' + escHtml(t.mode || "") + '</text>');
+                    // Table Name
+                    out.push('<text x="10" y="41" font-size="12" font-weight="700" fill="#0f172a" font-family="Segoe UI,Arial,sans-serif">' + escHtml(midTrunc(t.name, 31)) + '</text>');
+                    var ky = 50;
+                    if (m.keys.length) {
+                        out.push('<line x1="10" y1="' + ky + '" x2="' + (colW - 10) + '" y2="' + ky + '" stroke="#e2e8f0" stroke-dasharray="3,2"/>');
+                        m.keys.forEach(function (k, ki) {
+                            var ry = ky + 13 + ki * 16;
+                            out.push('<circle cx="14" cy="' + (ry - 3.5) + '" r="2.5" fill="' + accent + '"/>');
+                            out.push('<text x="21" y="' + ry + '" font-size="10" fill="#1e293b" font-family="Consolas,monospace">' + escHtml(midTrunc(k, 29)) + '</text>');
+                        });
+                        if (m.extra) {
+                            out.push('<text x="21" y="' + (ky + 12 + m.keys.length * 16) + '" font-size="9.5" fill="#64748b" font-family="Segoe UI,Arial,sans-serif">+' + m.extra + ' more join key(s)</text>');
+                        }
+                    }
+                    // Footer
+                    var fy = m.h - 8;
+                    out.push('<line x1="10" y1="' + (m.h - 22) + '" x2="' + (colW - 10) + '" y2="' + (m.h - 22) + '" stroke="#f1f5f9"/>');
+                    var footTxt = t.columns + " cols" + (t.measures ? ("  |  " + t.measures + " DAX") : "");
+                    out.push('<text x="10" y="' + fy + '" font-size="9.5" fill="#64748b" font-family="Segoe UI,Arial,sans-serif">' + escHtml(footTxt) + '</text>');
+                    out.push('</g>');
+                    curY += m.h + gapY;
+                });
+                return out.join("");
+            }
+
+            var cardsSvg =
+                placeCol(cL, leftTbls.length ? ("Dimensions (" + leftTbls.length + ")") : "") +
+                placeCol(cC, centerTbls.length === 1 && centerTbls[0].role === "Fact" ? "Central Fact Table" : ("Tables (" + centerTbls.length + ")")) +
+                placeCol(cR, rightTbls.length ? ("Dimensions (" + rightTbls.length + ")") : "");
+
+            var linesSvg = [];
+            blockRels.forEach(function (r) {
+                var a = posMap.get(r.from_table);
+                var b = posMap.get(r.to_table);
+                if (!a || !b) return;
+                var aCx = a.x + a.w / 2;
+                var bCx = b.x + b.w / 2;
+                var x1 = aCx <= bCx ? (a.x + a.w) : a.x;
+                var x2 = aCx <= bCx ? b.x : (b.x + b.w);
+                var y1 = a.y + a.h / 2;
+                var y2 = b.y + b.h / 2;
+                var dx = Math.max(28, Math.abs(x2 - x1) * 0.45);
+                var c1x = aCx <= bCx ? x1 + dx : x1 - dx;
+                var c2x = aCx <= bCx ? x2 - dx : x2 + dx;
+                var stroke = r.bidirectional ? "#d97706" : "#0b63ce";
+                var dash = r.active ? "" : ' stroke-dasharray="5,3"';
+                linesSvg.push('<path d="M ' + x1.toFixed(1) + ' ' + y1.toFixed(1) + ' C ' + c1x.toFixed(1) + ' ' + y1.toFixed(1) + ', ' + c2x.toFixed(1) + ' ' + y2.toFixed(1) + ', ' + x2.toFixed(1) + ' ' + y2.toFixed(1) + '" fill="none" stroke="' + stroke + '" stroke-width="1.6"' + dash + '/>');
+
+                var mx = (x1 + x2) / 2;
+                var my = (y1 + y2) / 2;
+                var fCard = r.cardinality.indexOf("many") === 0 ? "*" : "1";
+                var tCard = r.cardinality.slice(-4) === "many" ? "*" : "1";
+                var arrowTxt = r.bidirectional ? "<->" : "->";
+                var lbl = (aCx <= bCx) ? (fCard + " " + arrowTxt + " " + tCard) : (tCard + " " + arrowTxt + " " + fCard);
+                var pw = r.bidirectional ? 50 : 42;
+                linesSvg.push(
+                    '<g transform="translate(' + (mx - pw / 2).toFixed(1) + ',' + (my - 9).toFixed(1) + ')">' +
+                      '<rect width="' + pw + '" height="18" rx="9" fill="#ffffff" stroke="' + stroke + '" stroke-width="1.1"/>' +
+                      '<text x="' + (pw / 2) + '" y="12.5" text-anchor="middle" font-size="9.5" font-weight="700" font-family="Consolas,monospace" fill="#0f172a">' + escHtml(lbl) + '</text>' +
+                    '</g>'
+                );
+            });
+
+            return '<div class="print-star-diagram">' +
+                '<div class="print-star-hdr"><span>' + escHtml(titleLeft) + '</span><span>' + escHtml(titleRight) + '</span></div>' +
+                '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;height:auto;display:block" role="img" aria-label="' + escHtml(titleLeft) + '">' +
+                  linesSvg.join("") + cardsSvg +
+                '</svg>' +
+            '</div>';
+        }
+
+        try {
+            var existingStack = shell.parentNode && shell.parentNode.querySelector(".print-only-star-stack");
+            if (existingStack) existingStack.remove();
+            var stackDiv = document.createElement("div");
+            stackDiv.className = "print-only-star-stack";
+            var blocks = [];
+            if (facts.length > 0) {
+                facts.forEach(function (fn, idx) {
+                    var fTbl = tblByName.get(fn);
+                    if (!fTbl) return;
+                    var dNames = dimNeighborsForFact(fn);
+                    var dTbls = dNames.map(function (n) { return tblByName.get(n); }).filter(Boolean);
+                    var fRels = rels.filter(function (r) { return r.from_table === fn || r.to_table === fn; });
+                    var prefix = facts.length > 1 ? ("Focused Star " + (idx + 1) + " of " + facts.length + ": " + fn) : ("Star Schema: " + fn);
+                    if (!dTbls.length) {
+                        blocks.push(buildSvgStarBlock(prefix, "Standalone Fact Table", [], [fTbl], [], []));
+                    } else {
+                        var chunkSize = 8;
+                        var totalParts = Math.ceil(dTbls.length / chunkSize);
+                        for (var p = 0; p < totalParts; p++) {
+                            var slice = dTbls.slice(p * chunkSize, (p + 1) * chunkSize);
+                            var sSet = new Set(slice.map(function (x) { return x.name; }));
+                            sSet.add(fn);
+                            var sRels = fRels.filter(function (r) { return sSet.has(r.from_table) && sSet.has(r.to_table); });
+                            var half = Math.ceil(slice.length / 2);
+                            var pTitle = totalParts > 1 ? (prefix + " (Part " + (p + 1) + "/" + totalParts + ")") : prefix;
+                            blocks.push(buildSvgStarBlock(pTitle, slice.length + " connected table(s) | " + sRels.length + " relationship(s)", slice.slice(0, half), [fTbl], slice.slice(half), sRels));
+                        }
+                    }
+                });
+            } else {
+                var cSize = 9;
+                for (var i = 0; i < tables.length; i += cSize) {
+                    var grp = tables.slice(i, i + cSize);
+                    var gSet = new Set(grp.map(function (t) { return t.name; }));
+                    var gRels = rels.filter(function (r) { return gSet.has(r.from_table) && gSet.has(r.to_table); });
+                    blocks.push(buildSvgStarBlock("Data Model Tables", grp.length + " table(s)", grp.slice(0, 3), grp.slice(3, 6), grp.slice(6, 9), gRels));
+                }
+            }
+            stackDiv.innerHTML = blocks.join("");
+            shell.insertAdjacentElement("afterend", stackDiv);
+        } catch (printErr) {}
     }
 
     document.addEventListener("DOMContentLoaded", function () {

@@ -1102,7 +1102,7 @@ svg.mermaid-interactive.is-dimmed .flowchart-link.is-related,
 svg.mermaid-interactive.is-dimmed .flowchart-link.is-selected { opacity: 1; }
 svg.mermaid-interactive .node.is-selected rect { stroke: var(--accent) !important; stroke-width: 3px !important; }
 
-@media (max-width: 1100px) {
+@media screen and (max-width: 1100px) {
   .doc-shell { grid-template-columns: 1fr; }
   .doc-sidebar { position: relative; height: auto; border-right: none; border-bottom: 1px solid var(--border); }
   .lineage-app { grid-template-columns: 1fr; height: auto; }
@@ -1468,7 +1468,7 @@ details.section-accordion[open] > summary {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 11px;
 }
-@media (max-width: 640px) {
+@media screen and (max-width: 640px) {
   .publish-grid {
     grid-template-columns: 1fr;
   }
@@ -1539,18 +1539,115 @@ details.section-accordion[open] > summary {
   font-size: 12px;
 }
 
+.print-only-doc-banner,
+.print-only-star-stack {
+  display: none;
+}
+
 /* Clean A4 / Letter Print & PDF Stylesheet */
 @media print {
   @page { margin: 12mm 10mm; }
   html, body {
     background: #ffffff !important;
     color: #0f172a !important;
-    font-size: 11.5px !important;
+    font-size: 11px !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
   .topbar, .doc-sidebar, .doc-topbar, .filter-bar, .xray-trigger-btn, .copy-btn,
-  .measure-actions-row, .star-toolbar, .lin-toolbar, .lin-left, .pbi-modal-backdrop,
-  .xray-backdrop, .xray-drawer, [data-print-hide="1"], .studio-only-link {
+  .measure-actions-row, .star-toolbar, .star-shell, .lin-toolbar, .lin-left, .lin-right,
+  .pbi-modal-backdrop, .xray-backdrop, .xray-drawer, [data-print-hide="1"],
+  .studio-only-link, [data-details-toggle], .view-toggle, .star-jump-link,
+  #sec-schema .section-header .hint, #sec-dax .section-header .hint, #sec-lineage .section-header .hint,
+  div:has(+ .pq-pipeline) > span:last-child,
+  #boundReportsSearch, .principals-body > div:first-child,
+  details.principals-details > summary span:last-child,
+  details.table-blueprint:not([open]),
+  table.data-table:has(#boundReportsBody) col:last-child,
+  table.data-table:has(#boundReportsBody) th:last-child,
+  table.data-table:has(#boundReportsBody) td:last-child {
     display: none !important;
+  }
+  table.data-table:has(#boundReportsBody) {
+    table-layout: auto !important;
+  }
+  .lineage-app {
+    display: block !important;
+    height: auto !important;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .measure-grid {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+  }
+  .kpi-grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+  }
+  .kpi-card {
+    padding: 9px 10px !important;
+  }
+  .kpi-card .val {
+    font-size: 18px !important;
+  }
+  .section-header,
+  h1, h2, h3, h4,
+  details > summary {
+    break-after: avoid !important;
+    page-break-after: avoid !important;
+  }
+  details.section-accordion,
+  details.table-blueprint {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .print-only-doc-banner {
+    display: flex !important;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 16px;
+    padding-bottom: 10px;
+    margin-bottom: 16px;
+    border-bottom: 2px solid #0b63ce;
+  }
+  .print-only-star-stack {
+    display: block !important;
+  }
+  .print-star-diagram {
+    border: 1px solid #cbd5e1;
+    border-radius: 10px;
+    background: #ffffff;
+    padding: 10px 12px 12px 12px;
+    margin: 8px 0 14px 0;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .print-star-hdr {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 11.5px;
+    font-weight: 700;
+    color: #0f172a;
+    padding-bottom: 8px;
+    margin-bottom: 8px;
+    border-bottom: 1px solid #e2e8f0;
+  }
+  .print-star-hdr span:last-child {
+    font-weight: 600;
+    font-size: 10.5px;
+    color: #475569;
+  }
+  #daxListContainer {
+    display: none !important;
+  }
+  #daxCardsContainer {
+    display: block !important;
+  }
+  .measure-card .code-block pre {
+    max-height: none !important;
+    overflow: visible !important;
   }
   .doc-shell {
     display: block !important;
@@ -1560,10 +1657,22 @@ details.section-accordion[open] > summary {
     max-width: 100% !important;
     overflow: visible !important;
   }
-  .sticky-table-scroll, .table-scroll, .star-canvas-scroll, .lin-canvas-scroll {
+  .sticky-table-scroll, .table-scroll, .star-canvas-scroll, .star-viewport, .lin-canvas-scroll {
     max-height: none !important;
     overflow: visible !important;
     border-color: #cbd5e1 !important;
+  }
+  .sticky-table-scroll table.data-table thead th,
+  table.data-table th {
+    position: static !important;
+    box-shadow: none !important;
+  }
+  table.data-table td,
+  table.data-table td code,
+  table.data-table td b,
+  table.data-table td a {
+    overflow-wrap: break-word !important;
+    word-break: normal !important;
   }
   .measure-card, .finding, .kpi-card, .card {
     break-inside: avoid;
@@ -2133,7 +2242,7 @@ body.xray-open-lock {
   grid-template-columns: minmax(0, 1fr) 295px;
 }
 
-@media (max-width: 1100px) {
+@media screen and (max-width: 1100px) {
   .doc-topbar { margin: -20px -18px 18px -18px; padding: 10px 18px; }
   .star-grid, .star-grid.two-col { grid-template-columns: 1fr; gap: 16px; }
   svg.star-svg { display: none; }
