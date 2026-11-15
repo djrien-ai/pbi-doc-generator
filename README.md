@@ -6,7 +6,12 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-3776AB.svg)](https://www.python.org/)
 [![100% Local & Read-Only](https://img.shields.io/badge/Privacy-100%25_Local_%26_Read--Only-0f766e.svg)](SECURITY.md)
+[![LinkedIn](https://img.shields.io/badge/LinkedIn-Rien_Scheerlinck-0A66C2?logo=linkedin&logoColor=white)](https://www.linkedin.com/in/rienscheerlinck/)
 [![Support on Ko-fi](https://img.shields.io/badge/Support_on_Ko--fi-Buy_me_a_coffee-FF5E5B?logo=ko-fi&logoColor=white)](https://ko-fi.com/rienscheerlinck)
+
+> [!TIP]
+> **Early Access (`v1.1.0-rc.1`):** Next week's `v1.1` update (**Slide-Over Report X-Ray**, **Dataflow Gen1 & Fabric Gen2**, **Direct Lake**, and **1-Click SharePoint Publish**) is ready to test.
+> Want stable? Download **v1.0.0** below. Want early access? [**Grab the `v1.1.0-rc.1` Portable `.zip` & join the Early Access Hub (#20)**](https://github.com/djrien-ai/pbi-doc-generator/issues/20).
 
 Turn **Power BI Service Workspaces** and local **`.pbix` / `.pbip` / `.xlsx`** files into clean, searchable HTML documentation with **interactive Star-Schema diagrams**, **auto-formatted DAX catalogs**, **visual Power Query pipelines**, **3-panel end-to-end Live Lineage**, and a **built-in local Model Context Protocol (MCP) server** for AI assistants.
 
@@ -98,7 +103,7 @@ pbi-doc-generator mcp
 
 ## Enterprise Integrations & Architecture Audits
 
-The core of `pbi-doc-generator` is and remains 100% free and open-source under the MIT License. Organizations looking for custom enterprise integrations (automated CI/CD lineage publishing to SharePoint, Confluence, or Microsoft Purview, historical semantic-model drift monitoring, or white-label governance portals) or an independent **Power BI Estate & Semantic Model Architecture Audit** can inquire via **Bohan VOF** ([Rien Scheerlinck](https://github.com/djrien-ai)):
+The core of `pbi-doc-generator` is and remains 100% free and open-source under the MIT License. Organizations looking for custom enterprise integrations (automated CI/CD lineage publishing to SharePoint, Confluence, or Microsoft Purview, historical semantic-model drift monitoring, or white-label governance portals) or an independent **Power BI Estate & Semantic Model Architecture Audit** can connect with **Rien Scheerlinck** ([LinkedIn](https://www.linkedin.com/in/rienscheerlinck/) | **Bohan VOF**):
 
 [![Inquire via Email - Bohan VOF](https://img.shields.io/badge/Enterprise_&_Advisory_Inquiries-Email_Bohan_VOF-0b63ce?logo=gmail&logoColor=white)](mailto:dj.rien@gmail.com?subject=Power%20BI%20Enterprise%20%26%20Architecture%20Inquiry)
 
