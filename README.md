@@ -17,6 +17,8 @@
 
 Turn **Power BI Service / Microsoft Fabric Workspaces** and local **`.pbix` / `.pbip` / `.xlsx`** files into an interactive, searchable architecture portal. Trace any number on a report page from **Visual -> Report-Level DAX -> Semantic Model -> Power Query & Native SQL -> Dataflow Gen1 / Fabric Gen2 -> OneLake / Source Database**, 100% locally and read-only.
 
+![pbi-doc-generator v1.1 Interactive Portal, Report X-Ray & Live Lineage Walkthrough](docs/media/v1_1_showcase_walkthrough.gif)
+
 ---
 
 ## Why BI & Fabric Teams Upgrade to `v1.1`
