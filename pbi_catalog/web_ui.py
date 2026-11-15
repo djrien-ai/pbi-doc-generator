@@ -528,6 +528,7 @@ var wsLoadedOnce = false;
 var wasBusy = false;
 var latestAuthenticated = false;
 var latestBusy = false;
+var _lastLegacyBannerKey = "";
 
 function toggleStudioTheme() {
   var cur = document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark";
@@ -701,24 +702,36 @@ async function refreshStatus() {
     var isLegacy = !!leg.is_legacy;
     var hasModels = !isLegacy && typeof st.models_count === "number" && st.models_count > 0;
     var portalReady = !isLegacy && !!st.portal_ready;
+    if (hasModels || st.busy) {
+      window._legacyClearedFlash = false;
+    }
 
     var legBanner = document.getElementById("legacyUpgradeBanner");
     if (legBanner) {
       if (isLegacy) {
         window._legacyClearedFlash = false;
-        var legCnt = leg.models_count || leg.workspaces_count || 1;
-        legBanner.className = "inline-banner warn";
-        legBanner.style.display = "flex";
-        legBanner.innerHTML =
-          "<span style='flex:1;min-width:260px;line-height:1.45'><b>Version 1.0 local scan cache detected (" + legCnt + " cached item(s)):</b> " +
-          "Version 1.1 adds Report X-Ray wireframes, thin-report DAX measures, Unused Measure detection, and Dataflow Gen1/Gen2 M-lineage, which are not in your v1.0 cache. " +
-          "Start from a clean state before running your first v1.1 scan (your v1.0 state file is automatically backed up).</span>" +
-          "<button type='button' class='btn btn-primary' style='padding:7px 14px;font-size:12.5px;white-space:nowrap' onclick='startCleanFromLegacy()'>Start Clean for v1.1 &rarr;</button>";
-        var cleanRad = document.getElementById("radScanClean");
-        if (cleanRad) cleanRad.checked = true;
+        var legLabel = (leg.models_count > 0)
+          ? (leg.models_count + " model" + (leg.models_count === 1 ? "" : "s"))
+          : ((leg.workspaces_count || 1) + " cached item(s)");
+        var legKey = "legacy:" + legLabel;
+        if (_lastLegacyBannerKey !== legKey) {
+          _lastLegacyBannerKey = legKey;
+          legBanner.className = "inline-banner warn";
+          legBanner.style.display = "flex";
+          legBanner.innerHTML =
+            "<span style='flex:1;min-width:260px;line-height:1.45'><b>Version 1.0 local scan cache detected (" + legLabel + "):</b> " +
+            "Version 1.1 adds Report X-Ray wireframes, thin-report DAX measures, Unused Measure detection, and Dataflow Gen1/Gen2 M-lineage, which are not in your v1.0 cache. " +
+            "Start from a clean state before running your first v1.1 scan (your v1.0 state file is automatically backed up).</span>" +
+            "<button type='button' id='btnStartCleanLegacy' class='btn btn-primary' style='padding:7px 14px;font-size:12.5px;white-space:nowrap' onclick='startCleanFromLegacy()'>Start Clean for v1.1 &rarr;</button>";
+          var cleanRad = document.getElementById("radScanClean");
+          if (cleanRad) cleanRad.checked = true;
+        }
       } else if (!window._legacyClearedFlash) {
-        legBanner.style.display = "none";
-        legBanner.innerHTML = "";
+        if (_lastLegacyBannerKey !== "") {
+          _lastLegacyBannerKey = "";
+          legBanner.style.display = "none";
+          legBanner.innerHTML = "";
+        }
       }
     }
 
@@ -953,19 +966,31 @@ async function runScanAndBuild() {
 }
 
 async function startCleanFromLegacy() {
-  var res = await apiPost("/api/reset-catalog", { from_legacy: true });
-  if (res.ok) {
-    window._legacyClearedFlash = true;
-    var incRad = document.getElementById("radScanIncremental");
-    if (incRad) incRad.checked = true;
-    appendLog("Legacy v1.0 cache archived to catalog_state.v1_0.bak.json and cleared. Ready for clean v1.1 scan.");
-    await refreshStatus();
-    var legBanner = document.getElementById("legacyUpgradeBanner");
-    if (legBanner) {
-      legBanner.className = "inline-banner ok";
-      legBanner.style.display = "flex";
-      legBanner.innerHTML = "<span><b>Clean v1.1 state ready!</b> Previous v1.0 state was backed up to <code>catalog_state.v1_0.bak.json</code> and stale cache was cleared.</span>";
+  var btn = document.getElementById("btnStartCleanLegacy");
+  if (btn) { btn.disabled = true; btn.textContent = "Clearing v1.0 cache..."; }
+  try {
+    var res = await apiPost("/api/reset-catalog", { from_legacy: true });
+    if (res && res.ok) {
+      window._legacyClearedFlash = true;
+      _lastLegacyBannerKey = "cleared";
+      var incRad = document.getElementById("radScanIncremental");
+      if (incRad) incRad.checked = true;
+      appendLog("Legacy v1.0 cache archived to catalog_state.v1_0.bak.json and cleared. Ready for clean v1.1 scan.");
+      await refreshStatus();
+      var legBanner = document.getElementById("legacyUpgradeBanner");
+      if (legBanner) {
+        legBanner.className = "inline-banner ok";
+        legBanner.style.display = "flex";
+        legBanner.innerHTML = "<span><b>Clean v1.1 state ready!</b> Previous v1.0 state was backed up to <code>catalog_state.v1_0.bak.json</code> and stale cache was cleared.</span>";
+      }
+    } else {
+      var errMsg = (res && res.error) ? res.error : "Could not reset legacy cache.";
+      setBanner("scanBanner", "err", "<span><b>Could not clear legacy cache:</b> " + escHtml(errMsg) + "</span>");
+      if (btn) { btn.disabled = false; btn.innerHTML = "Start Clean for v1.1 &rarr;"; }
     }
+  } catch (err) {
+    setBanner("scanBanner", "err", "<span><b>Could not clear legacy cache:</b> " + escHtml(err) + "</span>");
+    if (btn) { btn.disabled = false; btn.innerHTML = "Start Clean for v1.1 &rarr;"; }
   }
 }
 
@@ -1609,7 +1634,12 @@ def create_studio_server(catalog_dir: str | Path, host: str = "127.0.0.1", port:
                 leg_portal = state.store.legacy_schema_info()
                 portal_root = (state.store.root / "portal").resolve()
                 target = (portal_root / rel).resolve()
-                if not leg_portal["is_legacy"] and target.is_relative_to(portal_root) and target.is_file():
+                if (
+                    not leg_portal["is_legacy"]
+                    and state.get_models_count() > 0
+                    and target.is_relative_to(portal_root)
+                    and target.is_file()
+                ):
                     ctype = mimetypes.guess_type(str(target))[0] or "application/octet-stream"
                     data = target.read_bytes()
                     self.send_response(200)
@@ -1690,10 +1720,12 @@ def create_studio_server(catalog_dir: str | Path, host: str = "127.0.0.1", port:
                     return
 
                 staging_root = (state.store.root / "_staged_imports").resolve()
-                staging_root.mkdir(parents=True, exist_ok=True)
                 staged_file = staging_root / safe_name
                 try:
+                    if Path(safe_name).suffix.lower() not in (".pbix", ".xlsx", ".xlsm", ".bim", ".tmdl"):
+                        raise ValueError(f"Unsupported file format '{safe_name}'. Select a .pbix, .pbip, or .xlsx file.")
                     _ensure_clean_if_legacy()
+                    staging_root.mkdir(parents=True, exist_ok=True)
                     staged_file.write_bytes(raw_bytes)
                     meta = WorkspaceScanner.register_local_any(state.store, str(staged_file))
                     state.invalidate_cache()
@@ -1720,8 +1752,11 @@ def create_studio_server(catalog_dir: str | Path, host: str = "127.0.0.1", port:
                 return
 
             if parsed.path == "/api/upload-local-folder":
-                _ensure_clean_if_legacy()
                 files_list = body.get("files") or []
+                if not files_list:
+                    self._json({"ok": False, "error": "No Power BI project metadata files provided."}, code=400)
+                    return
+                _ensure_clean_if_legacy()
                 staging_root = (state.store.root / "_staged_imports").resolve()
                 if staging_root.exists():
                     shutil.rmtree(staging_root, ignore_errors=True)
@@ -1943,6 +1978,8 @@ def create_studio_server(catalog_dir: str | Path, host: str = "127.0.0.1", port:
             if parsed.path == "/api/import-local":
                 p = Path(body.get("path", "")).expanduser()
                 try:
+                    if not str(body.get("path", "")).strip() or not p.exists():
+                        raise FileNotFoundError(f"Path not found: {p}")
                     _ensure_clean_if_legacy()
                     meta = WorkspaceScanner.register_local_any(state.store, str(p))
                     state.invalidate_cache()

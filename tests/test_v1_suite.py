@@ -1158,21 +1158,36 @@ def test_v11_legacy_v10_cache_detection_and_clean_upgrade() -> None:
                 assert "STALE_V10_PORTAL" not in p_html
                 assert "Clean v1.1 Scan Required" in p_html
 
-            # 3. Clicking 'Start Clean for v1.1' (/api/reset-catalog) backs up catalog_state.v1_0.bak.json and clears cache
-            req = urllib.request.Request(
-                f"{base}/api/reset-catalog",
-                data=b'{"from_legacy":true}',
+            # 2b. Bad path / unsupported extension upload must NOT prematurely wipe legacy v1.0 state
+            bad_imp = urllib.request.Request(
+                f"{base}/api/import-local",
+                data=json.dumps({"path": str(tmp / "missing_file_xyz.pbip")}).encode("utf-8"),
                 headers={"Content-Type": "application/json"},
                 method="POST",
             )
-            with urllib.request.urlopen(req, timeout=5) as r:
-                res = json.loads(r.read().decode("utf-8"))
-                assert res["ok"] is True
+            with urllib.request.urlopen(bad_imp, timeout=5) as r:
+                assert json.loads(r.read().decode("utf-8"))["ok"] is False
+            assert store.legacy_schema_info()["is_legacy"] is True
 
-            bak = tmp / "catalog_state.v1_0.bak.json"
-            assert bak.is_file(), "Expected v1.0 state backup file catalog_state.v1_0.bak.json"
-            assert "Legacy v1.0 Model" in bak.read_text(encoding="utf-8")
-            assert store.legacy_schema_info()["is_legacy"] is False
+            # 3. Clicking 'Start Clean for v1.1' (/api/reset-catalog) EVEN WHILE another reader holds catalog_state.json open on Windows!
+            open_reader = open(store.state_file, "r", encoding="utf-8")
+            try:
+                req = urllib.request.Request(
+                    f"{base}/api/reset-catalog",
+                    data=b'{"from_legacy":true}',
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with urllib.request.urlopen(req, timeout=5) as r:
+                    res = json.loads(r.read().decode("utf-8"))
+                    assert res["ok"] is True
+
+                bak = tmp / "catalog_state.v1_0.bak.json"
+                assert bak.is_file(), "Expected v1.0 state backup file catalog_state.v1_0.bak.json"
+                assert "Legacy v1.0 Model" in bak.read_text(encoding="utf-8")
+                assert store.legacy_schema_info()["is_legacy"] is False
+            finally:
+                open_reader.close()
 
             with urllib.request.urlopen(f"{base}/api/status", timeout=5) as r:
                 st_after = json.loads(r.read().decode("utf-8"))

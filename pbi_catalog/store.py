@@ -103,10 +103,24 @@ class CatalogStore:
             for sub in ("definitions", "dataflows", "portal", "report_layouts", "report_measures", "_exports", "_staged_imports"):
                 shutil.rmtree(self.root / sub, ignore_errors=True)
             for f in (self.state_file, self.state_file.with_suffix(".json.tmp")):
-                try:
-                    f.unlink(missing_ok=True)
-                except OSError:
-                    pass
+                removed = False
+                for attempt in range(6):
+                    try:
+                        f.unlink(missing_ok=True)
+                        removed = True
+                        break
+                    except PermissionError:
+                        time.sleep(0.03 * (attempt + 1))
+                    except OSError:
+                        break
+                if not removed and f == self.state_file and f.exists():
+                    # Windows fallback when another process (e.g. MCP stdio server, Defender AV, or indexer)
+                    # holds a shared read handle without FILE_SHARE_DELETE: truncate & overwrite in-place
+                    # with an empty v1.1 state so schema_version never stays stuck on "1.0".
+                    try:
+                        f.write_text(json.dumps(self._default_state(), indent=2), encoding="utf-8")
+                    except OSError:
+                        pass
             self.ensure_dirs()
 
     def _default_state(self) -> dict:
@@ -217,7 +231,14 @@ class CatalogStore:
                     return
                 except PermissionError:
                     if attempt == 11:
-                        raise
+                        # Windows fallback when a shared reader lacks FILE_SHARE_DELETE:
+                        # overwrite state_file directly (allowed under FILE_SHARE_WRITE) and clean tmp.
+                        self.state_file.write_text(payload, encoding="utf-8")
+                        try:
+                            tmp.unlink(missing_ok=True)
+                        except OSError:
+                            pass
+                        return
                     time.sleep(0.05 * (attempt + 1))
 
     # ----- Semantic model TMDL bundles -----
