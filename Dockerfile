@@ -10,6 +10,11 @@ COPY pyproject.toml README.md LICENSE ./
 COPY pbi_catalog ./pbi_catalog
 COPY launcher.py extract.py html_template.py pbip_adapter.py tmdl_parser.py dax_parser.py mermaid_js.py excel_extractor.py ./
 
-RUN mkdir -p /data/catalog && pip install --no-cache-dir .
+RUN useradd -m -u 10001 pbiuser \
+    && mkdir -p /data/catalog \
+    && pip install --no-cache-dir . \
+    && chown -R pbiuser:pbiuser /data /app
+
+USER pbiuser
 
 ENTRYPOINT ["pbi-doc-generator", "mcp"]

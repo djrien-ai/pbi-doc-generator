@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [main, "v*.*"]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -40,13 +44,16 @@ jobs:
       - name: Compile all Python modules
         run: python -m compileall -q .
 
-      - name: Run v1.1 test suite
-        run: python tests/test_v1_suite.py
+      - name: Run v1.1 test suite & demo portal smoke check
+        run: |
+          python tests/test_v1_suite.py
+          python scripts/build_demo_portal.py
 
       - name: Verify clean-room wheel build, requirements.txt & non-editable pip install from empty folder
         if: matrix.python-version == '3.12'
         shell: pwsh
         run: |
+          $expectedVer = (python -c "import pbi_catalog; print(pbi_catalog.__version__)").Trim()
           python -m pip install -r requirements.txt build twine
           python -m pip uninstall -y pbi-doc-generator
           python -m build
@@ -58,7 +65,7 @@ jobs:
           Push-Location $cleanDir
           try {
             $v = pbi-doc-generator --version
-            if ($LASTEXITCODE -ne 0 -or $v -notmatch "1\.1\.0") { throw "Wheel CLI --version failed: $v" }
+            if ($LASTEXITCODE -ne 0 -or $v -notmatch [regex]::Escape($expectedVer)) { throw "Wheel CLI --version failed: $v (expected $expectedVer)" }
             $smDir = Join-Path $cleanDir "TestModel.SemanticModel/definition/tables"
             New-Item -ItemType Directory -Force -Path $smDir | Out-Null
             Set-Content -Path (Join-Path $cleanDir "TestModel.SemanticModel/definition/model.tmdl") -Value "model Model`n`tculture: en-US`n"
@@ -70,7 +77,7 @@ jobs:
             if ($LASTEXITCODE -ne 0 -or -not (Test-Path (Join-Path $cleanDir "sp.html"))) { throw "export-site from installed wheel failed!" }
             pbi-doc-generator measure-doc "Rev" --catalog $cat -o (Join-Path $cleanDir "rev.md")
             if ($LASTEXITCODE -ne 0 -or -not (Test-Path (Join-Path $cleanDir "rev.md"))) { throw "measure-doc from installed wheel failed!" }
-            Write-Host "[PASS] Clean-room non-editable wheel install verified outside repo directory!"
+            Write-Host "[PASS] Clean-room non-editable wheel install ($expectedVer) verified outside repo directory!"
           } finally {
             Pop-Location
             Remove-Item -Recurse -Force $cleanDir -ErrorAction SilentlyContinue

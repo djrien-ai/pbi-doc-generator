@@ -12,14 +12,16 @@ on:
         default: ""
 
 permissions:
-  contents: write
-  actions: read
+  contents: read
 
 jobs:
   verify-existing-portable-zip:
     name: E2E Verify Published Portable ZIP on Clean Windows VM
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.verify_run_id != '' }}
     runs-on: windows-latest
+    permissions:
+      contents: read
+      actions: read
     steps:
       - name: Checkout E2E verification script
         uses: actions/checkout@v4
@@ -40,6 +42,8 @@ jobs:
     name: Build Windows Portable ZIP & Publish Release
     if: ${{ github.event_name != 'workflow_dispatch' || inputs.verify_run_id == '' }}
     runs-on: windows-latest
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout repository
@@ -99,15 +103,26 @@ jobs:
           $hdr = (Get-Content -Raw ".github/RELEASE_HEADER.md").Replace(
             "git+https://github.com/djrien-ai/pbi-doc-generator.git",
             "git+https://github.com/djrien-ai/pbi-doc-generator.git@$tag"
+          ).Replace(
+            "/releases/latest/download/PBI_Doc_Generator_Windows_Portable.zip",
+            "/releases/download/$tag/PBI_Doc_Generator_Windows_Portable.zip"
           )
-          $chg = Get-Content -Raw "CHANGELOG.md"
+          $chgRaw = Get-Content -Raw "CHANGELOG.md"
+          $parts = [regex]::Split($chgRaw, "(?m)(?=^## \[)")
+          if ($parts.Count -gt 2) {
+            $latestChg = $parts[0] + $parts[1]
+            $olderChg = ($parts[2..($parts.Count - 1)] -join "")
+            $chg = $latestChg + "`r`n<details>`r`n<summary><b>Previous Releases (Click to expand)</b></summary>`r`n`r`n" + $olderChg + "`r`n</details>`r`n"
+          } else {
+            $chg = $chgRaw
+          }
           $rcBanner = ""
           if ($tag -match "-") {
             $rcBanner = @(
               '> [!TIP]'
               ('> **Public Release Candidate (`' + $tag + '`)**')
-              '> Looking for the current official stable release (`v1.0.0`)? Go to [**Latest Stable Release**](https://github.com/djrien-ai/pbi-doc-generator/releases/latest).'
-              '> Testing `v1.1`? Share your results or edge cases in [**Early Access & Feedback Hub (#20)**](https://github.com/djrien-ai/pbi-doc-generator/issues/20) to get credited in the official `v1.1.0` Release Notes!'
+              '> Looking for the current official stable release? Go to [**Latest Stable Release**](https://github.com/djrien-ai/pbi-doc-generator/releases/latest).'
+              '> Found an edge case while testing this pre-release? [Open an issue](https://github.com/djrien-ai/pbi-doc-generator/issues/new/choose).'
               ''
             ) -join "`r`n"
           }

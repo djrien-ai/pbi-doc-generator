@@ -16,7 +16,7 @@
 
 ## Download & Start in 30 Seconds (Windows - No Python Required)
 
-1. **Download:** Click **`PBI_Doc_Generator_Windows_Portable.zip`** under **Assets** at the bottom of this page *(ignore `Source code (zip)` and `Source code (tar.gz)`, which GitHub adds automatically for developers)*.
+1. **Download:** [**Click here to download `PBI_Doc_Generator_Windows_Portable.zip`**](https://github.com/djrien-ai/pbi-doc-generator/releases/latest/download/PBI_Doc_Generator_Windows_Portable.zip) *(or pick it under **Assets** below; ignore `Source code (zip)` and `Source code (tar.gz)`, which GitHub adds automatically for developers)*.
 2. **Extract:** Right-click the downloaded ZIP file and choose **Extract All...**
 3. **Launch:** Open the extracted folder and double-click **`PBI_Doc_Generator.exe`**. Your default browser opens automatically at **`http://127.0.0.1:8765`**.
    - *First-run Windows SmartScreen note:* Click **More info** -> **Run anyway** if Windows prompts on first launch.

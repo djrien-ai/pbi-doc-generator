@@ -2,12 +2,15 @@
 
 [![CI](https://github.com/djrien-ai/pbi-doc-generator/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/djrien-ai/pbi-doc-generator/actions/workflows/ci.yml)
 [![Latest Release](https://img.shields.io/github/v/release/djrien-ai/pbi-doc-generator?label=Latest%20Release&color=0284c7)](https://github.com/djrien-ai/pbi-doc-generator/releases/latest)
+[![GitHub Stars](https://img.shields.io/github/stars/djrien-ai/pbi-doc-generator?style=flat&logo=github&label=Stars&color=0f172a)](https://github.com/djrien-ai/pbi-doc-generator/stargazers)
 [![Live Demo](https://img.shields.io/badge/Live_Demo-Explore_v1.1_Portal-2563eb)](https://djrien-ai.github.io/pbi-doc-generator/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-3776AB.svg)](https://www.python.org/)
 [![100% Local & Read-Only](https://img.shields.io/badge/Privacy-100%25_Local_%26_Read--Only-0f766e.svg)](SECURITY.md)
 [![LinkedIn](https://img.shields.io/badge/LinkedIn-Rien_Scheerlinck-0A66C2?logo=linkedin&logoColor=white)](https://www.linkedin.com/in/rienscheerlinck/)
 [![Support on Ko-fi](https://img.shields.io/badge/Support_on_Ko--fi-Buy_me_a_coffee-FF5E5B?logo=ko-fi&logoColor=white)](https://ko-fi.com/rienscheerlinck)
+
+[**Live Interactive Demo**](https://djrien-ai.github.io/pbi-doc-generator/) &bull; [**Download Windows `.zip` (No Python)**](https://github.com/djrien-ai/pbi-doc-generator/releases/latest) &bull; [**What's New in `v1.1`**](#why-bi--fabric-teams-upgrade-to-v11) &bull; [**Quick Start**](#quick-start) &bull; [**10-Tool MCP Setup**](#local-ai-assistant-setup-mcp-server---10-read-only-tools) &bull; [**Security**](SECURITY.md) &bull; [**`v1.2` Roadmap**](ROADMAP.md)
 
 > [!TIP]
 > **Try `v1.1.0` Latest Stable Release in 30 Seconds**
@@ -50,6 +53,8 @@ Most Power BI documentation tools stop at a single `.pbix` file, while Power BI'
 6. **10-Tool Local Model Context Protocol (MCP) Server for AI Assistants**
    - Connect **VS Code GitHub Copilot**, **Claude Desktop**, **Cursor**, or **Antigravity** to your local catalog (`pbi-doc-generator mcp`) for instant visual-to-SQL impact analysis, DAX explanations, report layout inspection, and governance audits with automatic secret masking.
 
+> **Help shape `v1.2`:** Want Fabric PySpark/SQL Notebook -> Lakehouse lineage ([#18](https://github.com/djrien-ai/pbi-doc-generator/issues/18)), Hidden Filter & RLS-Bypass Risk Audits ([#17](https://github.com/djrien-ai/pbi-doc-generator/issues/17)), Pro-workspace REST fallback ([#16](https://github.com/djrien-ai/pbi-doc-generator/issues/16)), or `DEV` vs. `PROD` model diffs ([#15](https://github.com/djrien-ai/pbi-doc-generator/issues/15))? Check [ROADMAP.md](ROADMAP.md) and vote with a 👍 on the [`v1.2` Milestone Issues](https://github.com/djrien-ai/pbi-doc-generator/milestone/3).
+
 ---
 
 ## Quick Start
@@ -88,10 +93,10 @@ pbi-doc-generator scan --workspace "Supply Chain" --follow-outside
 pbi-doc-generator portal --anonymous
 
 # Package the entire portal into a single SharePoint-safe HTML file
-pbi-doc-generator export-site --out ./PBI_Catalog_SharePoint.html
+pbi-doc-generator export-site -o ./PBI_Catalog_SharePoint.html
 
 # Export a deep end-to-end SQL -> Power Query -> DAX -> Visual lineage spec for one measure
-pbi-doc-generator measure-doc "Global Supply Chain & OTIF Core" "OTIF %" --out ./OTIF_Lineage.md
+pbi-doc-generator measure-doc "OTIF %" --model "Global Supply Chain & OTIF Core" -o ./OTIF_Lineage.md
 
 # Import a local .pbip, .SemanticModel, .pbix, or .xlsx into the catalog
 pbi-doc-generator import-local ./SalesModel.pbip

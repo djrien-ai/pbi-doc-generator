@@ -5,13 +5,28 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Power BI Documentation &amp; Live Lineage Portal</title>
   <link rel="stylesheet" href="assets/portal.css">
+  <meta name="description" content="Interactive Power BI &amp; Microsoft Fabric Architecture Portal: 16:9 Report X-Ray, Broken Visual Audit, Dataflow Gen1/Gen2 to SQL Lineage, Star Schema &amp; PDF/SharePoint Export.">
+  <link rel="canonical" href="https://djrien-ai.github.io/pbi-doc-generator/">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Power BI Doc Generator (Open-Source MIT)">
+  <meta property="og:title" content="Power BI &amp; Fabric Live Demo - 16:9 Report X-Ray, Dataflow-to-SQL Lineage &amp; Star Schema">
+  <meta property="og:description" content="Click through a live generated catalog: inspect 16:9 report layouts, jump to broken visual bindings, trace DAX KPIs back to Dataflows &amp; SQL, and preview print-ready PDFs. 100% local &amp; MIT open-source.">
+  <meta property="og:url" content="https://djrien-ai.github.io/pbi-doc-generator/">
+  <meta property="og:image" content="https://djrien-ai.github.io/pbi-doc-generator/media/v1_1_social_preview.png">
+  <meta property="og:image:width" content="1280">
+  <meta property="og:image:height" content="640">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Power BI &amp; Fabric Live Demo - Report X-Ray &amp; Visual-to-SQL Lineage">
+  <meta name="twitter:description" content="Interactive generated Power BI &amp; Fabric catalog: 16:9 Report X-Ray, Dataflow Gen1/Gen2 lineage, Star-Schema blueprints &amp; 10-tool MCP server.">
+  <meta name="twitter:image" content="https://djrien-ai.github.io/pbi-doc-generator/media/v1_1_social_preview.png">
+  <style>@media print { .demo-tour-bar, .demo-gh-links { display: none !important; } }</style>
 </head>
 <body>
 <header class="topbar">
   <div class="topbar-row">
     <div>
       <h1>Power BI Documentation &amp; Live Lineage Portal</h1>
-      <p>3 Workspaces &bull; 3 Semantic Models &bull; 4 Reports &bull; Generated 2026-11-15 12:29</p>
+      <p>3 Workspaces &bull; 3 Semantic Models &bull; 4 Reports &bull; Generated 2026-11-15 16:50</p>
     </div>
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
       <div class="app-switcher studio-only-link" style="display:none">
@@ -32,13 +47,28 @@
     <button type="button" class="top-tab" data-tab="tab-health">4. Governance &amp; Health (8)</button>
   </nav>
 </header>
+<div class="demo-tour-bar" style="background:linear-gradient(90deg,#0f172a,#1e293b);color:#f8fafc;padding:9px 24px;font-size:12.5px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;border-bottom:1px solid #334155">
+  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+    <span style="background:#2563eb;color:#fff;font-weight:700;padding:2px 8px;border-radius:999px;font-size:11px;letter-spacing:0.03em">LIVE v1.1 DEMO</span>
+    <span style="color:#cbd5e1">1-click tour:</span>
+    <button type="button" data-open-xray="rep:r-1" style="background:#1e293b;color:#93c5fd;border:1px solid #3b82f6;border-radius:6px;padding:3px 9px;font-size:12px;font-weight:600;cursor:pointer">16:9 Report X-Ray &rarr;</button>
+    <button type="button" data-open-xray="rep:r-4" data-xray-jump-broken="0" style="background:#450a0a;color:#fca5a5;border:1px solid #dc2626;border-radius:6px;padding:3px 9px;font-size:12px;font-weight:600;cursor:pointer">! Broken Visual Audit &rarr;</button>
+    <button type="button" data-open-xray="df:df-raw-erp" style="background:#1e293b;color:#e2e8f0;border:1px solid #475569;border-radius:6px;padding:3px 9px;font-size:12px;font-weight:600;cursor:pointer">Dataflow &rarr; Native SQL</button>
+    <a href="models/enterprise-core-semantic-models-global-supply-chain-otif-core.html" style="background:#1e293b;color:#e2e8f0;border:1px solid #475569;border-radius:6px;padding:3px 9px;font-size:12px;font-weight:600;text-decoration:none">Star-Schema Blueprint &rarr;</a>
+  </div>
+  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+    <a href="https://github.com/djrien-ai/pbi-doc-generator" target="_blank" rel="noopener" style="background:transparent;color:#f8fafc;border:1px solid #64748b;border-radius:6px;padding:4px 10px;font-size:12px;font-weight:700;text-decoration:none">&#9733; Star on GitHub (MIT)</a>
+    <a href="https://github.com/djrien-ai/pbi-doc-generator/releases/latest" target="_blank" rel="noopener" style="background:#2563eb;color:#fff;border:1px solid #3b82f6;border-radius:6px;padding:4px 11px;font-size:12px;font-weight:700;text-decoration:none">Download v1.1 (.zip)</a>
+  </div>
+</div>
+
 
 <main class="catalog-wrap">
   <div class="print-only-doc-banner">
     <div>
       <div style="font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#0b63ce;margin-bottom:2px">Power BI Portfolio &amp; Governance Summary</div>
       <div style="font-size:19px;font-weight:800;color:#0f172a;line-height:1.2">Power BI Documentation &amp; Live Lineage Portal</div>
-      <div style="font-size:11px;color:#475569;margin-top:3px">Generated: <b>2026-11-15 12:29</b></div>
+      <div style="font-size:11px;color:#475569;margin-top:3px">Generated: <b>2026-11-15 16:50</b></div>
     </div>
     <div style="text-align:right;font-size:10.5px;color:#475569;white-space:nowrap">
       <div><b>3</b> Workspaces &bull; <b>3</b> Models &bull; <b>4</b> Reports</div>
@@ -67,7 +97,7 @@
       <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
         <select id="catalogSort" class="sort-select" aria-label="Sort semantic models">
           <option value="name">Sort: Name (A-Z)</option>
-          <option value="measures">Sort: Most DAX Measures</option>
+          <option value="measures" selected>Sort: Most DAX Measures</option>
           <option value="tables">Sort: Most Tables</option>
           <option value="ws">Sort: Workspace (A-Z)</option>
           <option value="sev">Sort: Health / Warnings First</option>
@@ -135,7 +165,7 @@
       </div>
     </div>
 
-    <details class="section-accordion">
+    <details class="section-accordion" open>
       <summary>
         <span class="acc-title"><span class="acc-chev">&#9656;</span> 1. Workspace Inventory &amp; Capacity Overview</span>
         <span class="badge badge-accent">3 workspace(s)</span>
@@ -155,7 +185,7 @@
       </div>
     </details>
 
-    <details class="section-accordion">
+    <details class="section-accordion" open>
       <summary>
         <span class="acc-title"><span class="acc-chev">&#9656;</span> 2. Power BI Reports &amp; Semantic Model Mapping</span>
         <span style="display:flex;gap:6px;align-items:center">
@@ -178,7 +208,7 @@
       </div>
     </details>
 
-    <details class="section-accordion"><summary><span class="acc-title"><span class="acc-chev">&#9656;</span> 3. Dataflows &amp; Upstream Fabric Items (Gen1 &amp; Gen2)</span><span class="badge badge-accent">4 item(s)</span></summary><div class="accordion-body"><div class="table-scroll sticky-table-scroll"><table class="data-table fixed-table"><colgroup><col style="width:30%"><col style="width:16%"><col style="width:20%"><col style="width:18%"><col style="width:16%"></colgroup><thead><tr><th>Item Name</th><th>Type</th><th>Workspace</th><th>Entities / Notes</th><th style='text-align:right'>Inspector</th></tr></thead><tbody><tr data-wstab-row="1" data-wstab-search="master vendor &amp; material harmonization enterprise core semantic models dataflow" data-wstab-broken="0" data-wstab-cross="0"><td><b>Master Vendor &amp; Material Harmonization</b></td><td><span class="badge badge-dim">Dataflow Gen1</span></td><td>Enterprise Core Semantic Models</td><td>2 entities</td><td style="text-align:right"><button type="button" class="xray-trigger-btn" data-open-xray="df:df-1">Inspect Dataflow &rarr;</button></td></tr><tr data-wstab-row="1" data-wstab-search="raw s/4hana master staging enterprise core semantic models dataflow" data-wstab-broken="0" data-wstab-cross="0"><td><b>Raw S/4HANA Master Staging</b></td><td><span class="badge badge-dim">Dataflow Gen1</span></td><td>Enterprise Core Semantic Models</td><td>2 entities</td><td style="text-align:right"><button type="button" class="xray-trigger-btn" data-open-xray="df:df-raw-erp">Inspect Dataflow &rarr;</button></td></tr><tr data-wstab-row="1" data-wstab-search="warehouse daily inventory ingestion (gen2) enterprise core semantic models dataflow" data-wstab-broken="0" data-wstab-cross="0"><td><b>Warehouse Daily Inventory Ingestion (Gen2)</b></td><td><span class="badge badge-accent">Fabric Dataflow Gen2</span></td><td>Enterprise Core Semantic Models</td><td>1 entity</td><td style="text-align:right"><button type="button" class="xray-trigger-btn" data-open-xray="df:df-gen2-inv">Inspect Dataflow &rarr;</button></td></tr><tr data-wstab-row="1" data-wstab-search="lh_supply_chain_gold enterprise core semantic models lakehouse" data-wstab-broken="0" data-wstab-cross="0"><td><b>lh_supply_chain_gold</b></td><td><span class='badge badge-accent'>Lakehouse</span></td><td>Enterprise Core Semantic Models</td><td>Curated OneLake Delta tables for daily warehouse inventory snapshots.</td><td style="text-align:right"><span style="font-size:11.5px;color:var(--fg-muted)">Cataloged</span></td></tr></tbody></table></div></div></details>
+    <details class="section-accordion" open><summary><span class="acc-title"><span class="acc-chev">&#9656;</span> 3. Dataflows &amp; Upstream Fabric Items (Gen1 &amp; Gen2)</span><span class="badge badge-accent">4 item(s)</span></summary><div class="accordion-body"><div class="table-scroll sticky-table-scroll"><table class="data-table fixed-table"><colgroup><col style="width:30%"><col style="width:16%"><col style="width:20%"><col style="width:18%"><col style="width:16%"></colgroup><thead><tr><th>Item Name</th><th>Type</th><th>Workspace</th><th>Entities / Notes</th><th style='text-align:right'>Inspector</th></tr></thead><tbody><tr data-wstab-row="1" data-wstab-search="master vendor &amp; material harmonization enterprise core semantic models dataflow" data-wstab-broken="0" data-wstab-cross="0"><td><b>Master Vendor &amp; Material Harmonization</b></td><td><span class="badge badge-dim">Dataflow Gen1</span></td><td>Enterprise Core Semantic Models</td><td>2 entities</td><td style="text-align:right"><button type="button" class="xray-trigger-btn" data-open-xray="df:df-1">Inspect Dataflow &rarr;</button></td></tr><tr data-wstab-row="1" data-wstab-search="raw s/4hana master staging enterprise core semantic models dataflow" data-wstab-broken="0" data-wstab-cross="0"><td><b>Raw S/4HANA Master Staging</b></td><td><span class="badge badge-dim">Dataflow Gen1</span></td><td>Enterprise Core Semantic Models</td><td>2 entities</td><td style="text-align:right"><button type="button" class="xray-trigger-btn" data-open-xray="df:df-raw-erp">Inspect Dataflow &rarr;</button></td></tr><tr data-wstab-row="1" data-wstab-search="warehouse daily inventory ingestion (gen2) enterprise core semantic models dataflow" data-wstab-broken="0" data-wstab-cross="0"><td><b>Warehouse Daily Inventory Ingestion (Gen2)</b></td><td><span class="badge badge-accent">Fabric Dataflow Gen2</span></td><td>Enterprise Core Semantic Models</td><td>1 entity</td><td style="text-align:right"><button type="button" class="xray-trigger-btn" data-open-xray="df:df-gen2-inv">Inspect Dataflow &rarr;</button></td></tr><tr data-wstab-row="1" data-wstab-search="lh_supply_chain_gold enterprise core semantic models lakehouse" data-wstab-broken="0" data-wstab-cross="0"><td><b>lh_supply_chain_gold</b></td><td><span class='badge badge-accent'>Lakehouse</span></td><td>Enterprise Core Semantic Models</td><td>Curated OneLake Delta tables for daily warehouse inventory snapshots.</td><td style="text-align:right"><span style="font-size:11.5px;color:var(--fg-muted)">Cataloged</span></td></tr></tbody></table></div></div></details>
     
   </section>
 
@@ -443,5 +473,6 @@
   });
 })();
 </script>
+<script>document.addEventListener('DOMContentLoaded',function(){var s=document.getElementById('catalogSort');if(s&&s.value==='measures'){s.dispatchEvent(new Event('change'));}});</script>
 </body>
 </html>

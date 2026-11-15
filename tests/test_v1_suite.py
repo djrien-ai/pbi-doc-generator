@@ -1,5 +1,5 @@
 """
-Automated Verification Suite for PBI Doc Generator v1.0.
+Automated Verification Suite for PBI Doc Generator v1.1.
 Verifies:
 1. Issue #12 fix: leading /// TMDL table doc-comments do not overwrite Table Name.
 2. Security redaction: passwords, bearer tokens, SAS tokens, and account keys are masked.

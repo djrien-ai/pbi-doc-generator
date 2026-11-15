@@ -901,7 +901,113 @@ def build_demo(out_dir: Path) -> Path:
     return generate_portal(store)
 
 
+def publish_to_docs(portal_dir: Path, docs_dir: Path) -> None:
+    """Copy generated demo portal into docs/ (preserving docs/media/) and add public OpenGraph + Demo Tour UX."""
+    import re
+    import shutil
+
+    docs_dir.mkdir(parents=True, exist_ok=True)
+    for item in portal_dir.iterdir():
+        dest = docs_dir / item.name
+        if item.is_dir():
+            if dest.exists():
+                shutil.rmtree(dest)
+            shutil.copytree(item, dest)
+        else:
+            shutil.copy2(item, dest)
+
+    og_img = "https://djrien-ai.github.io/pbi-doc-generator/media/v1_1_social_preview.png"
+    index_meta = (
+        '  <meta name="description" content="Interactive Power BI &amp; Microsoft Fabric Architecture Portal: 16:9 Report X-Ray, Broken Visual Audit, Dataflow Gen1/Gen2 to SQL Lineage, Star Schema &amp; PDF/SharePoint Export.">\n'
+        '  <link rel="canonical" href="https://djrien-ai.github.io/pbi-doc-generator/">\n'
+        '  <meta property="og:type" content="website">\n'
+        '  <meta property="og:site_name" content="Power BI Doc Generator (Open-Source MIT)">\n'
+        '  <meta property="og:title" content="Power BI &amp; Fabric Live Demo - 16:9 Report X-Ray, Dataflow-to-SQL Lineage &amp; Star Schema">\n'
+        '  <meta property="og:description" content="Click through a live generated catalog: inspect 16:9 report layouts, jump to broken visual bindings, trace DAX KPIs back to Dataflows &amp; SQL, and preview print-ready PDFs. 100% local &amp; MIT open-source.">\n'
+        '  <meta property="og:url" content="https://djrien-ai.github.io/pbi-doc-generator/">\n'
+        f'  <meta property="og:image" content="{og_img}">\n'
+        '  <meta property="og:image:width" content="1280">\n'
+        '  <meta property="og:image:height" content="640">\n'
+        '  <meta name="twitter:card" content="summary_large_image">\n'
+        '  <meta name="twitter:title" content="Power BI &amp; Fabric Live Demo - Report X-Ray &amp; Visual-to-SQL Lineage">\n'
+        '  <meta name="twitter:description" content="Interactive generated Power BI &amp; Fabric catalog: 16:9 Report X-Ray, Dataflow Gen1/Gen2 lineage, Star-Schema blueprints &amp; 10-tool MCP server.">\n'
+        f'  <meta name="twitter:image" content="{og_img}">\n'
+        '  <style>@media print { .demo-tour-bar, .demo-gh-links { display: none !important; } }</style>\n'
+    )
+
+    tour_bar = (
+        '<div class="demo-tour-bar" style="background:linear-gradient(90deg,#0f172a,#1e293b);color:#f8fafc;padding:9px 24px;font-size:12.5px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;border-bottom:1px solid #334155">\n'
+        '  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">\n'
+        '    <span style="background:#2563eb;color:#fff;font-weight:700;padding:2px 8px;border-radius:999px;font-size:11px;letter-spacing:0.03em">LIVE v1.1 DEMO</span>\n'
+        '    <span style="color:#cbd5e1">1-click tour:</span>\n'
+        '    <button type="button" data-open-xray="rep:r-1" style="background:#1e293b;color:#93c5fd;border:1px solid #3b82f6;border-radius:6px;padding:3px 9px;font-size:12px;font-weight:600;cursor:pointer">16:9 Report X-Ray &rarr;</button>\n'
+        '    <button type="button" data-open-xray="rep:r-4" data-xray-jump-broken="0" style="background:#450a0a;color:#fca5a5;border:1px solid #dc2626;border-radius:6px;padding:3px 9px;font-size:12px;font-weight:600;cursor:pointer">! Broken Visual Audit &rarr;</button>\n'
+        '    <button type="button" data-open-xray="df:df-raw-erp" style="background:#1e293b;color:#e2e8f0;border:1px solid #475569;border-radius:6px;padding:3px 9px;font-size:12px;font-weight:600;cursor:pointer">Dataflow &rarr; Native SQL</button>\n'
+        '    <a href="models/enterprise-core-semantic-models-global-supply-chain-otif-core.html" style="background:#1e293b;color:#e2e8f0;border:1px solid #475569;border-radius:6px;padding:3px 9px;font-size:12px;font-weight:600;text-decoration:none">Star-Schema Blueprint &rarr;</a>\n'
+        '  </div>\n'
+        '  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">\n'
+        '    <a href="https://github.com/djrien-ai/pbi-doc-generator" target="_blank" rel="noopener" style="background:transparent;color:#f8fafc;border:1px solid #64748b;border-radius:6px;padding:4px 10px;font-size:12px;font-weight:700;text-decoration:none">&#9733; Star on GitHub (MIT)</a>\n'
+        '    <a href="https://github.com/djrien-ai/pbi-doc-generator/releases/latest" target="_blank" rel="noopener" style="background:#2563eb;color:#fff;border:1px solid #3b82f6;border-radius:6px;padding:4px 11px;font-size:12px;font-weight:700;text-decoration:none">Download v1.1 (.zip)</a>\n'
+        '  </div>\n'
+        '</div>\n'
+    )
+
+    idx_file = docs_dir / "index.html"
+    idx_html = idx_file.read_text(encoding="utf-8")
+    idx_html = idx_html.replace("</head>", index_meta + "</head>", 1)
+    idx_html = idx_html.replace("</header>", "</header>\n" + tour_bar, 1)
+    # Default Tab 1 sort to 'measures' so flagship Direct Lake + Dataflow + SAP HANA model leads first
+    idx_html = idx_html.replace(
+        '<option value="measures">Sort: Most DAX Measures</option>',
+        '<option value="measures" selected>Sort: Most DAX Measures</option>',
+        1,
+    )
+    # Open Tab 2 accordions in the compact 3-workspace demo so visitors immediately see X-Ray & Dataflows
+    idx_html = idx_html.replace('<details class="section-accordion">', '<details class="section-accordion" open>')
+    idx_html = idx_html.replace(
+        "</body>",
+        "<script>document.addEventListener('DOMContentLoaded',function(){var s=document.getElementById('catalogSort');if(s&&s.value==='measures'){s.dispatchEvent(new Event('change'));}});</script>\n</body>",
+        1,
+    )
+    idx_file.write_text(idx_html, encoding="utf-8")
+
+    # Enrich individual model blueprint pages in docs/models/*.html with OpenGraph + subtle GitHub bar
+    models_dir = docs_dir / "models"
+    if models_dir.is_dir():
+        for mf in sorted(models_dir.glob("*.html")):
+            mhtml = mf.read_text(encoding="utf-8")
+            t_match = re.search(r"<title>(.*?)</title>", mhtml, flags=re.S)
+            page_title = t_match.group(1).strip() if t_match else "Semantic Model Blueprint - PBI Doc Generator"
+            model_url = f"https://djrien-ai.github.io/pbi-doc-generator/models/{mf.name}"
+            model_meta = (
+                f'  <meta name="description" content="{page_title} - Interactive Star Schema, SQLBI-formatted DAX, Power Query M, Native SQL &amp; Visual Lineage.">\n'
+                f'  <link rel="canonical" href="{model_url}">\n'
+                '  <meta property="og:type" content="website">\n'
+                f'  <meta property="og:title" content="{page_title}">\n'
+                '  <meta property="og:description" content="Interactive Power BI &amp; Fabric Semantic Model Blueprint: SVG Star-Schema Explorer, DAX lineage, Power Query steps &amp; A4 PDF export.">\n'
+                f'  <meta property="og:url" content="{model_url}">\n'
+                f'  <meta property="og:image" content="{og_img}">\n'
+                '  <meta name="twitter:card" content="summary_large_image">\n'
+                f'  <meta name="twitter:image" content="{og_img}">\n'
+                '  <style>@media print { .demo-tour-bar { display: none !important; } }</style>\n'
+            )
+            model_bar = (
+                '<div class="demo-tour-bar" style="background:linear-gradient(90deg,#0f172a,#1e293b);color:#f8fafc;padding:7px 24px;font-size:12px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;border-bottom:1px solid #334155">\n'
+                '  <div><span style="background:#2563eb;color:#fff;font-weight:700;padding:2px 8px;border-radius:999px;font-size:10.5px;margin-right:8px">LIVE v1.1 DEMO</span><a href="../index.html" style="color:#93c5fd;font-weight:600;text-decoration:none">&larr; Back to Full Multi-Workspace Catalog &amp; Report X-Ray</a></div>\n'
+                '  <div style="display:flex;align-items:center;gap:8px"><a href="https://github.com/djrien-ai/pbi-doc-generator" target="_blank" rel="noopener" style="color:#f8fafc;border:1px solid #64748b;border-radius:6px;padding:3px 9px;font-weight:700;text-decoration:none">&#9733; Star on GitHub</a><a href="https://github.com/djrien-ai/pbi-doc-generator/releases/latest" target="_blank" rel="noopener" style="background:#2563eb;color:#fff;border-radius:6px;padding:3px 10px;font-weight:700;text-decoration:none">Download v1.1 (.zip)</a></div>\n'
+                '</div>\n'
+            )
+            mhtml = mhtml.replace("</head>", model_meta + "</head>", 1)
+            mhtml = mhtml.replace("<body", "<body", 1)
+            # Insert right after opening <body...>
+            mhtml = re.sub(r"(<body[^>]*>)", r"\1\n" + model_bar, mhtml, count=1)
+            mf.write_text(mhtml, encoding="utf-8")
+
+
 if __name__ == "__main__":
     demo_dir = ROOT / "demo_catalog"
     idx = build_demo(demo_dir)
     print(f"Demo portal generated at: {idx}")
+    if "--publish-docs" in sys.argv:
+        publish_to_docs(idx.parent, ROOT / "docs")
+        print(f"Published enriched Live Demo with OpenGraph & Tour Bar to: {ROOT / 'docs'}")

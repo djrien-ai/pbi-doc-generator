@@ -4,6 +4,11 @@ on:
   release:
     types: [published]
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release git tag to build and publish to PyPI (e.g. v1.1.0)"
+        required: true
+        default: "v1.1.0"
 
 permissions:
   contents: read
@@ -11,6 +16,7 @@ permissions:
 jobs:
   pypi-publish:
     name: Build & Publish Python Package to PyPI
+    if: ${{ github.event_name == 'workflow_dispatch' || !github.event.release.prerelease }}
     runs-on: ubuntu-latest
     environment:
       name: pypi
@@ -19,8 +25,10 @@ jobs:
       id-token: write
       contents: read
     steps:
-      - name: Checkout repository
+      - name: Checkout release tag
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.tag) || github.ref }}
 
       - name: Set up Python 3.12
         uses: actions/setup-python@v5

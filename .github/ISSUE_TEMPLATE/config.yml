@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security or Secret-Redaction Vulnerability
+    url: https://github.com/djrien-ai/pbi-doc-generator/security/advisories/new
+    about: Please report security or credential-masking issues privately here instead of opening a public issue.
+  - name: Live Interactive Demo (v1.1)
+    url: https://djrien-ai.github.io/pbi-doc-generator/
+    about: Explore the generated v1.1 Power BI & Fabric Architecture Portal in your browser.
