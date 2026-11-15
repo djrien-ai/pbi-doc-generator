@@ -8,11 +8,12 @@
 [![Support on Ko-fi](https://img.shields.io/badge/Support_on_Ko--fi-Buy_me_a_coffee-FF5E5B?logo=ko-fi&logoColor=white)](https://ko-fi.com/rienscheerlinck)
 
 > [!IMPORTANT]
-> **`v1.1` Public Preview (In Progress)**
-> You are viewing the active **`v1.1` preview branch**, open for early testing and community feedback ahead of the official `v1.1.0` release.
-> - **Try `v1.1` right now:** `pip install --upgrade "git+https://github.com/djrien-ai/pbi-doc-generator.git@v1.1"` -> run `pbi-doc-generator`
-> - **Explore the `v1.1` Demo offline:** Clone or download this `v1.1` branch and open [`docs/index.html`](docs/index.html) directly in your browser (or double-click `Start_Studio.cmd` on Windows).
-> - **Looking for the current stable release (`v1.0.0`)?** Switch to [`main`](https://github.com/djrien-ai/pbi-doc-generator/tree/main) or download the stable Windows `.exe` from [Releases](https://github.com/djrien-ai/pbi-doc-generator/releases/latest).
+> **`v1.1.0-rc.1` Public Preview (Early Access)**
+> You are viewing the active **`v1.1` preview branch**, open for early testing ahead of next week's official `v1.1.0` release.
+> - **Windows Portable (No Python required):** [**Download `PBI_Doc_Generator_Windows_Portable.zip` (`v1.1.0-rc.1`)**](https://github.com/djrien-ai/pbi-doc-generator/releases/download/v1.1.0-rc.1/PBI_Doc_Generator_Windows_Portable.zip) -> Extract All -> run `PBI_Doc_Generator.exe`
+> - **Via `pip`:** `pip install --upgrade "git+https://github.com/djrien-ai/pbi-doc-generator.git@v1.1"` -> run `pbi-doc-generator`
+> - **Share feedback & get credited in `v1.1.0`:** Drop a quick test note in [**Early Access Hub (#20)**](https://github.com/djrien-ai/pbi-doc-generator/issues/20).
+> - **Looking for the current stable release (`v1.0.0`)?** Switch to [`main`](https://github.com/djrien-ai/pbi-doc-generator/tree/main) or [Latest Stable Release](https://github.com/djrien-ai/pbi-doc-generator/releases/latest).
 
 Turn **Power BI Service / Microsoft Fabric Workspaces** and local **`.pbix` / `.pbip` / `.xlsx`** files into an interactive, searchable architecture portal. Trace any number on a report page from **Visual -> Report-Level DAX -> Semantic Model -> Power Query & Native SQL -> Dataflow Gen1 / Fabric Gen2 -> OneLake / Source Database**, 100% locally and read-only.
 
@@ -48,29 +49,22 @@ Most Power BI documentation tools stop at a single `.pbix` file, while Power BI'
 
 ---
 
-## Quick Start (`v1.1` Preview)
+## Quick Start (`v1.1.0-rc.1` Preview)
 
-### Option 1: Install `v1.1` Preview via `pip` (Python 3.10+ on Windows, macOS & Linux)
+### Option 1: Portable Windows Download (No Python Required)
+
+1. [**Download `PBI_Doc_Generator_Windows_Portable.zip` (`v1.1.0-rc.1` Pre-release)**](https://github.com/djrien-ai/pbi-doc-generator/releases/download/v1.1.0-rc.1/PBI_Doc_Generator_Windows_Portable.zip) *(or view the [v1.1.0-rc.1 Pre-release page](https://github.com/djrien-ai/pbi-doc-generator/releases/tag/v1.1.0-rc.1))*.
+2. Right-click the downloaded ZIP file and choose **Extract All...**
+3. Open the extracted folder and double-click **`PBI_Doc_Generator.exe`** -> your browser opens **`http://127.0.0.1:8765`** automatically.
+
+### Option 2: Install via `pip` (Python 3.10+ on Windows, macOS & Linux)
 
 ```bash
 pip install --upgrade "git+https://github.com/djrien-ai/pbi-doc-generator.git@v1.1"
-```
-
-Launch the local Web Studio:
-
-```bash
 pbi-doc-generator
 ```
 
-### Option 2: Run from Source on Windows (`Start_Studio.cmd`)
-
-```bash
-git clone -b v1.1 https://github.com/djrien-ai/pbi-doc-generator.git
-cd pbi-doc-generator
-Start_Studio.cmd
-```
-
-*(Note: Once `v1.1` preview testing wraps up, the zero-install `PBI_Doc_Generator_Windows_Portable.zip` executable on the [Releases page](https://github.com/djrien-ai/pbi-doc-generator/releases/latest) will be updated from `v1.0.0` to `v1.1.0`.)*
+*(Or on Windows with Python installed: `git clone -b v1.1 https://github.com/djrien-ai/pbi-doc-generator.git` and double-click **`Start_Studio.cmd`**.)*
 
 > [!NOTE]
 > **Power BI Service Workspace Role Prerequisite (`Contributor` or higher)**
