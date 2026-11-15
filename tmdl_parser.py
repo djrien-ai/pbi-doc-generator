@@ -1,17 +1,17 @@
 """
-TMDL Parser – extracts metadata from a Power BI PBIP SemanticModel folder.
+TMDL Parser - extracts metadata from a Power BI PBIP SemanticModel folder.
 
 Parses the following TMDL artefacts:
-  • Tables   (tables/*.tmdl)   – columns, measures, partitions, hierarchies
-  • Relationships              – from/to tables and columns, cardinality, cross-filter
-  • Expressions                – M parameters and helper functions
+  • Tables   (tables/*.tmdl)   - columns, measures, partitions, hierarchies
+  • Relationships              - from/to tables and columns, cardinality, cross-filter
+  • Expressions                - M parameters and helper functions
 
 Usage
 -----
     from tmdl_parser import TmdlModel
 
     model = TmdlModel(r"path/to/MyReport.SemanticModel")
-    # – or –
+    # - or -
     model = TmdlModel.from_pbip_folder(r"path/to/MyReport")
 
     for table in model.tables:
@@ -186,12 +186,12 @@ def _parse_name_from_header(line: str, keyword: str):
         return text, ""
 
     if text.startswith("'"):
-        # Quoted name – find the closing quote
+        # Quoted name - find the closing quote
         end = text.index("'", 1)
         name = text[1:end]
         remainder = text[end + 1:].strip()
     else:
-        # Unquoted name – ends at first whitespace or '='
+        # Unquoted name - ends at first whitespace or '='
         m = re.match(r"(\S+)(.*)", text)
         if m:
             name = m.group(1)
@@ -380,7 +380,7 @@ def _parse_column(lines: List[str], start: int, table_name: str):
         name = after_keyword[1:end_quote]
         remainder = after_keyword[end_quote + 1:].strip()
     else:
-        # Unquoted – name ends at whitespace or '='
+        # Unquoted - name ends at whitespace or '='
         m = re.match(r"(\S+)(.*)", after_keyword)
         name = m.group(1) if m else after_keyword
         remainder = (m.group(2) if m else "").strip()
@@ -474,7 +474,7 @@ def _parse_measure(lines: List[str], start: int, table_name: str):
             name = after_keyword[:eq_pos].strip()
             remainder = after_keyword[eq_pos:].strip()
         else:
-            # No '=' on this line — name is everything, no inline expression
+            # No '=' on this line - name is everything, no inline expression
             name = after_keyword.strip()
             remainder = ""
 
@@ -777,7 +777,7 @@ def _parse_relationships_file(path: str) -> List[RelationshipInfo]:
 def _parse_expressions_file(path: str):
     """Parse ``definition/expressions.tmdl``.
 
-    Returns ``(parameters, functions)`` – two lists of
+    Returns ``(parameters, functions)`` - two lists of
     :class:`ParameterInfo` and :class:`FunctionInfo` respectively.
     """
     if not os.path.isfile(path):

@@ -752,7 +752,7 @@ JS_MERMAID_INIT = r"""
         graph.edges.forEach(function (edge) {
             edge.elements = findEdgeElements(svg, edge);
             edgeByKey.set(edge.key, edge);
-            const titleText = edge.label ? (edge.from + " → " + edge.to + " — " + edge.label) : (edge.from + " → " + edge.to);
+            const titleText = edge.label ? (edge.from + " → " + edge.to + " - " + edge.label) : (edge.from + " → " + edge.to);
             edge.elements.paths.concat(edge.elements.labels).forEach(function (el) {
                 el.dataset.edgeKey = edge.key;
                 el.setAttribute("tabindex", "0");
@@ -1182,7 +1182,7 @@ JS_AI_IMPORTER = r"""
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = document.title.replace(" — Data Documentation", "") + "_enriched.html";
+        a.download = document.title.replace(" - Data Documentation", "") + "_enriched.html";
         a.click();
         URL.revokeObjectURL(url);
     });
@@ -1217,7 +1217,7 @@ def generate_html(report_name: str, sections_html: str, sidebar_html: str, metad
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>{report_name} — Data Documentation</title>
+<title>{report_name} - Data Documentation</title>
 ''')
     
     # Mermaid JS

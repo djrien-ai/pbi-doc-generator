@@ -1,29 +1,52 @@
 """
-Workspace, Semantic Model, Report, Dataflow, and Governance Metadata Scanner.
+Workspace, Semantic Model, Report, Dataflow (Gen1 & Gen2), and Governance Metadata Scanner.
 """
 
 from __future__ import annotations
 
 import hashlib
 import re
+import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Callable
 
 from .analyzer import bundle_from_local_tmdl_dir
 from .api import PowerBiReadOnlyClient
-from .store import CatalogStore, utc_now_iso
+from .dataflows import (
+    definition_dataflow_refs,
+    parse_dataflow_definition,
+    referenced_dataflow_ids,
+    strip_data_locations,
+)
+from .report_parser import (
+    LAYOUT_VERSION,
+    parse_pbip_report_dir,
+    parse_pbix_report,
+    parse_report_definition_files,
+)
+from .store import (
+    CatalogStore,
+    add_scope_extra,
+    scope_workspace_ids,
+    set_scan_scope,
+    utc_now_iso,
+)
 
 
 class WorkspaceScanner:
-    """Orchestrates incremental read-only scanning of Power BI workspaces and Fabric TMDL definitions."""
+    """Orchestrates incremental read-only scanning of Power BI workspaces, models, reports, and dataflows."""
 
     def __init__(self, client: PowerBiReadOnlyClient, store: CatalogStore, log_fn: Callable[[str], None] | None = None):
         self.client = client
         self.store = store
+        self.definition_workers = 4
+        self.report_workers = 8
+        self.follow_outside = False
         self.log = log_fn or (lambda msg: print(msg))
 
     def scan_inventory(self, workspace_filter: str = "", workspace_ids: list[str] | None = None) -> dict:
-        """Step 1: List visible workspaces and collect reports, semantic models, dataflows, and data sources."""
+        """Step 1: List visible workspaces and collect reports, semantic models, dataflows (Gen1/Gen2), and links."""
         state = self.store.load()
         self.log("Fetching visible Power BI workspaces...")
 
@@ -35,10 +58,8 @@ class WorkspaceScanner:
             pass
 
         raw_groups = self.client.pbi_get_list("groups?$top=5000")
-        visible_ids = set()
         for g in raw_groups:
             ws_id = g["id"]
-            visible_ids.add(ws_id)
             cap_id = g.get("capacityId") or ""
             sku = capacities.get(cap_id, "Dedicated" if cap_id else "Shared (Pro)")
             prev = state["workspaces"].get(ws_id) or {}
@@ -61,33 +82,52 @@ class WorkspaceScanner:
         else:
             chosen = list(state["workspaces"].values())
 
+        set_scan_scope(state, [w["id"] for w in chosen], follow_outside=bool(self.follow_outside))
         self.log(f"Scanning inventory for {len(chosen)} workspace(s)...")
+
         for idx, ws in enumerate(chosen, 1):
             ws_id = ws["id"]
             ws_name = ws["name"]
-            # Clear stale reports/dataflows for this workspace before refreshing
+            prev_reports = {rid: r for rid, r in state["reports"].items() if r.get("workspace_id") == ws_id}
+            prev_dfs = {did: d for did, d in state["dataflows"].items() if d.get("workspace_id") == ws_id}
             state["reports"] = {rid: r for rid, r in state["reports"].items() if r.get("workspace_id") != ws_id}
             state["dataflows"] = {did: d for did, d in state["dataflows"].items() if d.get("workspace_id") != ws_id}
+            state["fabric_items"] = {
+                iid: it for iid, it in state.get("fabric_items", {}).items() if it.get("workspace_id") != ws_id
+            }
 
             r_count = m_count = df_count = 0
             try:
                 for r in self.client.pbi_get_list(f"groups/{ws_id}/reports"):
                     r_count += 1
-                    state["reports"][r["id"]] = {
-                        "id": r["id"],
-                        "name": r.get("name", ""),
-                        "report_type": r.get("reportType", "PowerBIReport"),
-                        "dataset_id": r.get("datasetId", ""),
-                        "dataset_workspace_id": r.get("datasetWorkspaceId", ws_id),
+                    rid = r["id"]
+                    prev_r = prev_reports.get(rid) or {}
+                    same_ds = prev_r.get("dataset_id") == r.get("datasetId", "")
+                    rep_obj = {
+                        "id": rid,
+                        "name": r.get("name") or "",
+                        "report_type": r.get("reportType") or "PowerBIReport",
+                        "dataset_id": r.get("datasetId") or "",
+                        "dataset_workspace_id": r.get("datasetWorkspaceId") or ws_id,
                         "workspace_id": ws_id,
                         "workspace": ws_name,
-                        "web_url": r.get("webUrl", ""),
+                        "web_url": r.get("webUrl") or "",
+                        "layout_status": prev_r.get("layout_status", "pending") if same_ds else "pending",
+                        "measures_status": prev_r.get("measures_status", "pending") if same_ds else "pending",
+                        "layout_version": prev_r.get("layout_version", 0) if same_ds else 0,
+                        "pages_count": prev_r.get("pages_count", 0) if same_ds else 0,
+                        "page_count": prev_r.get("pages_count", 0) if same_ds else 0,
+                        "visuals_count": prev_r.get("visuals_count", 0) if same_ds else 0,
+                        "visual_count": prev_r.get("visuals_count", 0) if same_ds else 0,
+                        "report_measures_count": prev_r.get("report_measures_count", 0) if same_ds else 0,
+                        "report_measure_count": prev_r.get("report_measures_count", 0) if same_ds else 0,
                     }
+                    state["reports"][rid] = rep_obj
             except Exception as exc:
                 state["errors"].append({"step": "reports", "workspace": ws_name, "error": str(exc)})
 
+            ws_ds_ids: set[str] = set()
             try:
-                ws_ds_ids = set()
                 for d in self.client.pbi_get_list(f"groups/{ws_id}/datasets"):
                     m_count += 1
                     ds_id = d["id"]
@@ -100,12 +140,12 @@ class WorkspaceScanner:
                         pass
                     state["models"][ds_id] = {
                         "id": ds_id,
-                        "name": d.get("name", ""),
+                        "name": d.get("name") or "",
                         "workspace_id": ws_id,
                         "workspace": ws_name,
-                        "configured_by": d.get("configuredBy", ""),
-                        "created_date": d.get("createdDate", ""),
-                        "target_storage_mode": d.get("targetStorageMode", ""),
+                        "configured_by": d.get("configuredBy") or "",
+                        "created_date": d.get("createdDate") or "",
+                        "target_storage_mode": d.get("targetStorageMode") or "",
                         "is_refreshable": bool(d.get("isRefreshable")),
                         "datasources": sources,
                         "last_refresh": prev_m.get("last_refresh", {}),
@@ -114,8 +154,9 @@ class WorkspaceScanner:
                         "definition_status": prev_m.get("definition_status", "pending"),
                         "definition_read_at": prev_m.get("definition_read_at", ""),
                     }
-                # Prune models deleted from this workspace
-                for old_id in [mid for mid, m in state["models"].items() if m.get("workspace_id") == ws_id and mid not in ws_ds_ids]:
+                for old_id in [
+                    mid for mid, m in state["models"].items() if m.get("workspace_id") == ws_id and mid not in ws_ds_ids
+                ]:
                     state["models"].pop(old_id, None)
             except Exception as exc:
                 state["errors"].append({"step": "datasets", "workspace": ws_name, "error": str(exc)})
@@ -124,14 +165,88 @@ class WorkspaceScanner:
                 for df in self.client.pbi_get_list(f"groups/{ws_id}/dataflows"):
                     df_count += 1
                     df_id = df["objectId"]
+                    prev_df = prev_dfs.get(df_id) or {}
+                    modified = df.get("modifiedDateTime") or ""
+                    unchanged = bool(prev_df) and prev_df.get("modified_at", "") == modified
+                    gen_val = df.get("generation", 1)
+                    gen_label = "Gen2" if str(gen_val) in ("2", "Gen2") else "Gen1"
                     state["dataflows"][df_id] = {
                         "id": df_id,
-                        "name": df.get("name", ""),
+                        "name": df.get("name") or "",
+                        "description": df.get("description") or "",
+                        "generation": gen_label,
                         "workspace_id": ws_id,
                         "workspace": ws_name,
-                        "configured_by": df.get("configuredBy", ""),
-                        "modified_at": df.get("modifiedDateTime", ""),
+                        "configured_by": df.get("configuredBy") or "",
+                        "modified_at": modified,
+                        "upstream": prev_df.get("upstream", []),
+                        "datasources": prev_df.get("datasources", []),
+                        "entities": prev_df.get("entities", []) if unchanged else [],
+                        "source_types": prev_df.get("source_types", []) if unchanged else [],
+                        "definition_status": prev_df.get("definition_status", "pending") if unchanged else "pending",
+                        "definition_read_at": prev_df.get("definition_read_at", "") if unchanged else "",
                     }
+                if ws_id in state["workspaces"]:
+                    state["workspaces"][ws_id]["dataflows_listed"] = True
+            except Exception as exc:
+                if ws_id in state["workspaces"]:
+                    state["workspaces"][ws_id]["dataflows_listed"] = False
+                state["errors"].append({"step": "dataflows", "workspace": ws_name, "error": str(exc)})
+
+            try:
+                links = self.client.get_dataset_dataflow_links(ws_id)
+                state.setdefault("dataset_dataflow_links", {})
+                for ds_id in ws_ds_ids:
+                    state["dataset_dataflow_links"].pop(ds_id, None)
+                for ln in links:
+                    ds_id = ln.get("datasetObjectId") or ""
+                    if ds_id:
+                        state["dataset_dataflow_links"].setdefault(ds_id, []).append(
+                            {
+                                "dataflow_id": ln.get("dataflowObjectId", ""),
+                                "workspace_id": ln.get("workspaceObjectId", ""),
+                            }
+                        )
+            except Exception:
+                pass
+
+            try:
+                fabric_keep = {"Lakehouse", "Warehouse", "SQLEndpoint", "Dataflow", "Notebook", "DataPipeline"}
+                for fitem in self.client.get_fabric_workspace_items(ws_id):
+                    ftype = fitem.get("type", "")
+                    fid = fitem.get("id", "")
+                    if not fid or ftype not in fabric_keep:
+                        continue
+                    fname = fitem.get("displayName") or fitem.get("name") or ""
+                    fdesc = fitem.get("description", "")
+                    if ftype == "Dataflow" and fid not in state["dataflows"]:
+                        df_count += 1
+                        prev_df = prev_dfs.get(fid) or {}
+                        state["dataflows"][fid] = {
+                            "id": fid,
+                            "name": fname,
+                            "description": fdesc,
+                            "generation": "Gen2",
+                            "workspace_id": ws_id,
+                            "workspace": ws_name,
+                            "configured_by": prev_df.get("configured_by", ""),
+                            "modified_at": prev_df.get("modified_at", ""),
+                            "upstream": prev_df.get("upstream", []),
+                            "datasources": prev_df.get("datasources", []),
+                            "entities": prev_df.get("entities", []),
+                            "source_types": prev_df.get("source_types", []),
+                            "definition_status": prev_df.get("definition_status", "pending"),
+                            "definition_read_at": prev_df.get("definition_read_at", ""),
+                        }
+                    if fid not in state["dataflows"]:
+                        state["fabric_items"][fid] = {
+                            "id": fid,
+                            "name": fname,
+                            "type": ftype,
+                            "description": fdesc,
+                            "workspace_id": ws_id,
+                            "workspace": ws_name,
+                        }
             except Exception:
                 pass
 
@@ -150,9 +265,9 @@ class WorkspaceScanner:
         include_access: bool = True,
         limit: int = 0,
     ) -> dict:
-        """Step 2: Fetch full TMDL definitions, refresh history, and access lists for semantic models."""
+        """Step 2: Fetch full TMDL definitions in parallel, plus refresh history and access lists."""
         state = self.store.load()
-        models = list(state["models"].values())
+        models = [m for m in state["models"].values() if m.get("workspace_id") != "local-workspace"]
         if dataset_ids:
             target_set = set(dataset_ids)
             models = [m for m in models if m["id"] in target_set]
@@ -167,59 +282,387 @@ class WorkspaceScanner:
             models = [m for m in models if m.get("definition_status") != "ok"]
         if limit > 0:
             models = models[:limit]
+        if not models:
+            return state
 
         self.log(f"Reading full TMDL definitions for {len(models)} semantic model(s)...")
         ws_users_cache: dict[str, list[dict]] = {}
+        pool = ThreadPoolExecutor(max_workers=max(1, self.definition_workers))
+        futures = {m["id"]: pool.submit(self.client.get_model_tmdl_files, m["workspace_id"], m["id"]) for m in models}
 
-        for idx, m in enumerate(models, 1):
-            ws_id = m["workspace_id"]
-            ds_id = m["id"]
-            self.log(f"  [{idx}/{len(models)}] {m['workspace']} / {m['name']}")
+        try:
+            for idx, m in enumerate(models, 1):
+                ws_id = m["workspace_id"]
+                ds_id = m["id"]
+                self.log(f"  [{idx}/{len(models)}] {m['workspace']} / {m['name']}")
 
-            try:
-                files = self.client.get_model_tmdl_files(ws_id, ds_id)
-                self.store.write_tmdl_bundle(m["name"], ds_id, files)
-                m["definition_status"] = "ok"
-                m["definition_read_at"] = utc_now_iso()
-            except Exception as exc:
-                err_txt = str(exc)
-                low_err = err_txt.lower()
-                if any(tok in low_err for tok in ("403", "401", "forbidden", "insufficientprivileges", "unauthorized")):
-                    hint = "Requires at least Contributor workspace role (Viewer role cannot extract TMDL definitions)"
-                    err_txt = f"{hint} - {err_txt}"
-                    self.log(f"    Skipped TMDL for '{m['name']}': {hint}")
-                m["definition_status"] = f"error: {err_txt[:180]}"
-                state["errors"].append({"step": "getDefinition", "workspace": m["workspace"], "model": m["name"], "error": err_txt})
+                try:
+                    files = futures[ds_id].result()
+                    self.store.write_tmdl_bundle(m["name"], ds_id, files)
+                    m["definition_status"] = "ok"
+                    m["definition_read_at"] = utc_now_iso()
+                except Exception as exc:
+                    err_txt = str(exc)
+                    low_err = err_txt.lower()
+                    if any(tok in low_err for tok in ("403", "401", "forbidden", "insufficientprivileges", "unauthorized")):
+                        hint = "Requires at least Contributor workspace role (Viewer role cannot extract TMDL definitions)"
+                        err_txt = f"{hint} - {err_txt}"
+                        self.log(f"    Skipped TMDL for '{m['name']}': {hint}")
+                    m["definition_status"] = f"error: {err_txt[:180]}"
+                    state["errors"].append({"step": "getDefinition", "workspace": m["workspace"], "model": m["name"], "error": err_txt})
 
-            if include_access:
-                if ws_id not in ws_users_cache:
+                if include_access:
+                    if ws_id not in ws_users_cache:
+                        try:
+                            ws_users_cache[ws_id] = self.client.pbi_get_list(f"groups/{ws_id}/users")
+                            if ws_id in state["workspaces"]:
+                                state["workspaces"][ws_id]["users"] = ws_users_cache[ws_id]
+                        except Exception:
+                            ws_users_cache[ws_id] = []
+                    m["workspace_users"] = ws_users_cache[ws_id]
+
                     try:
-                        ws_users_cache[ws_id] = self.client.pbi_get_list(f"groups/{ws_id}/users")
-                        if ws_id in state["workspaces"]:
-                            state["workspaces"][ws_id]["users"] = ws_users_cache[ws_id]
+                        refs = self.client.pbi_get_list(f"groups/{ws_id}/datasets/{ds_id}/refreshes?$top=1")
+                        if refs:
+                            r0 = refs[0]
+                            m["last_refresh"] = {
+                                "status": r0.get("status", ""),
+                                "end_time": r0.get("endTime", ""),
+                                "refresh_type": r0.get("refreshType", ""),
+                            }
                     except Exception:
-                        ws_users_cache[ws_id] = []
-                m["workspace_users"] = ws_users_cache[ws_id]
+                        pass
 
-                try:
-                    refs = self.client.pbi_get_list(f"groups/{ws_id}/datasets/{ds_id}/refreshes?$top=1")
-                    if refs:
-                        r0 = refs[0]
-                        m["last_refresh"] = {
-                            "status": r0.get("status", ""),
-                            "end_time": r0.get("endTime", ""),
-                            "refresh_type": r0.get("refreshType", ""),
-                        }
-                except Exception:
-                    pass
+                    try:
+                        m["permissions"] = self.client.pbi_get_list(f"groups/{ws_id}/datasets/{ds_id}/users")
+                    except Exception:
+                        pass
 
-                try:
-                    m["permissions"] = self.client.pbi_get_list(f"groups/{ws_id}/datasets/{ds_id}/users")
-                except Exception:
-                    pass
+                self.store.save(state)
+        finally:
+            pool.shutdown(wait=False, cancel_futures=True)
+
+        return state
+
+    def scan_report_definitions(
+        self,
+        workspace_filter: str = "",
+        workspace_ids: list[str] | None = None,
+        refresh: bool = False,
+        limit: int = 0,
+        follow_shared_models: bool | None = None,
+    ) -> dict:
+        """Step 3: Fetch PBIR / layout definitions and thin-report DAX measures in parallel."""
+        if follow_shared_models is None:
+            follow_shared_models = bool(self.follow_outside)
+
+        state = self.store.load()
+        reps = [
+            r
+            for r in state.get("reports", {}).values()
+            if r.get("workspace_id") != "local-workspace" and (r.get("report_type") or "PowerBIReport") == "PowerBIReport"
+        ]
+        if workspace_ids:
+            ws_set = set(workspace_ids)
+            reps = [r for r in reps if r.get("workspace_id") in ws_set]
+        elif workspace_filter:
+            needle = workspace_filter.lower()
+            reps = [r for r in reps if needle in (r.get("workspace") or "").lower()]
+
+        todo = [
+            r
+            for r in reps
+            if refresh or r.get("layout_status") != "ok" or r.get("layout_version") != LAYOUT_VERSION
+        ]
+        if limit > 0:
+            todo = todo[:limit]
+
+        if todo:
+            self.log(f"Reading visual layouts & thin-report DAX for {len(todo)} Power BI report(s)...")
+            pool = ThreadPoolExecutor(max_workers=max(1, self.report_workers))
+            futures = {r["id"]: pool.submit(self.client.get_report_definition_files, r["workspace_id"], r["id"]) for r in todo}
+            found_measures = 0
+            last_save = time.monotonic()
+            try:
+                for idx, rep in enumerate(todo, 1):
+                    rep_id = rep["id"]
+                    try:
+                        parts = futures[rep_id].result()
+                        layout = parse_report_definition_files(parts)
+                        ds_id = rep.get("dataset_id") or layout.get("dataset_ref") or ""
+                        if ds_id and not rep.get("dataset_id"):
+                            rep["dataset_id"] = ds_id
+                        layout["report_id"] = rep_id
+                        layout["dataset_id"] = ds_id
+                        self.store.write_report_layout(rep_id, layout)
+
+                        p_cnt = len(layout.get("pages", []))
+                        v_cnt = sum(len(p.get("visuals", [])) for p in layout.get("pages", []))
+                        rm_cnt = len(layout.get("report_measures", []))
+                        rep["layout_status"] = "ok" if (p_cnt or rm_cnt) else "empty"
+                        rep["measures_status"] = "ok"
+                        rep["layout_version"] = LAYOUT_VERSION
+                        rep["definition_format"] = layout.get("format", "")
+                        rep["pages_count"] = rep["page_count"] = p_cnt
+                        rep["visuals_count"] = rep["visual_count"] = v_cnt
+                        rep["report_measures_count"] = rep["report_measure_count"] = rm_cnt
+                        found_measures += rm_cnt
+                        if rm_cnt:
+                            self.log(
+                                f"  [{idx}/{len(todo)}] {rep.get('workspace')} / {rep.get('name')}: "
+                                f"{p_cnt} page(s), {v_cnt} visual(s), {rm_cnt} report-level measure(s)"
+                            )
+                    except Exception as exc:
+                        err = str(exc)
+                        if any(t in err.lower() for t in ("403", "401", "forbidden", "unauthorized")):
+                            err = f"No access to report definition (requires Contributor role or higher) - {err}"
+                        rep["layout_status"] = "unavailable"
+                        rep["measures_status"] = f"error: {err[:180]}"
+                        state["errors"].append(
+                            {"step": "reportDefinition", "workspace": rep.get("workspace", ""), "report": rep.get("name", ""), "error": err}
+                        )
+                    if time.monotonic() - last_save > 5:
+                        self.store.save(state)
+                        last_save = time.monotonic()
+            finally:
+                pool.shutdown(wait=False, cancel_futures=True)
 
             self.store.save(state)
+            self.log(
+                f"Report definitions read: {sum(r.get('pages_count', 0) for r in todo)} page(s), "
+                f"{sum(r.get('visuals_count', 0) for r in todo)} visual(s), {found_measures} report-level measure(s)."
+            )
 
+        if follow_shared_models:
+            self.follow_shared_models(reps)
+        return self.store.load()
+
+    def follow_shared_models(self, reports: list[dict]) -> list[str]:
+        """Register and read shared models used by thin reports when they reside outside selected workspaces."""
+        state = self.store.load()
+        in_scope = scope_workspace_ids(state)
+        missing: dict[str, str] = {}
+        for r in reports:
+            ds = r.get("dataset_id") or ""
+            if ds and ds not in state["models"]:
+                missing[ds] = r.get("dataset_workspace_id") or r.get("workspace_id") or ""
+            elif ds and in_scope and state["models"][ds].get("workspace_id") not in in_scope:
+                add_scope_extra(state, ds)
+        for ds in missing:
+            add_scope_extra(state, ds)
+
+        added: list[str] = []
+        for ds, ws in missing.items():
+            if not ws:
+                continue
+            ws_name = (state["workspaces"].get(ws) or {}).get("name") or f"Workspace {ws[:8]}"
+            try:
+                d = self.client.pbi_get_json(f"groups/{ws}/datasets/{ds}")
+            except Exception as exc:
+                self.log(f"  Shared model {ds[:8]} in '{ws_name}' not readable: {str(exc)[:140]}")
+                continue
+            state["models"][ds] = {
+                "id": ds,
+                "name": d.get("name", f"Model {ds[:8]}"),
+                "workspace_id": ws,
+                "workspace": ws_name,
+                "configured_by": d.get("configuredBy", ""),
+                "created_date": d.get("createdDate", ""),
+                "target_storage_mode": d.get("targetStorageMode", ""),
+                "is_refreshable": bool(d.get("isRefreshable")),
+                "datasources": [],
+                "last_refresh": {},
+                "permissions": [],
+                "workspace_users": [],
+                "definition_status": "pending",
+                "definition_read_at": "",
+                "discovered_via": "thin report",
+            }
+            added.append(ds)
+            self.log(f"  Followed shared model in external workspace: {ws_name} / {state['models'][ds]['name']}")
+        self.store.save(state)
+        if added:
+            self.scan_model_definitions(dataset_ids=added, include_access=False)
+        return added
+
+    def scan_dataflow_definitions(
+        self,
+        workspace_filter: str = "",
+        workspace_ids: list[str] | None = None,
+        refresh: bool = False,
+        follow_upstream: bool = True,
+        max_follow_depth: int = 6,
+        follow_outside: bool | None = None,
+        limit: int = 0,
+    ) -> dict:
+        """Step 4: Export Dataflow Gen1 (`model.json`) & Fabric Gen2 (`mashup.pq`) definitions and follow multi-hop chains."""
+        if follow_outside is None:
+            follow_outside = bool(self.follow_outside)
+        state = self.store.load()
+        state.setdefault("dataflows", {})
+        dfs = list(state["dataflows"].values())
+        ws_set: set[str] | None = None
+        if workspace_ids:
+            ws_set = set(workspace_ids)
+        elif workspace_filter:
+            needle = workspace_filter.lower()
+            ws_set = {wid for wid, w in state.get("workspaces", {}).items() if needle in (w.get("name") or "").lower()}
+        if ws_set is not None:
+            dfs = [d for d in dfs if d.get("workspace_id") in ws_set]
+
+        queue: list[tuple[str, str, int]] = [(d.get("workspace_id", ""), d["id"], 0) for d in dfs]
+
+        if follow_upstream:
+            extra = {x.lower() for x in (state.get("scope") or {}).get("extra_ids") or []}
+            for ds_id, m_meta in state.get("models", {}).items():
+                if ws_set is not None and m_meta.get("workspace_id") not in ws_set and ds_id.lower() not in extra:
+                    continue
+                for ln in (state.get("dataset_dataflow_links") or {}).get(ds_id, []):
+                    if ln.get("dataflow_id"):
+                        queue.append((ln.get("workspace_id", ""), ln["dataflow_id"], 1))
+                bundle = self.store.read_tmdl_bundle(m_meta.get("name", ""), ds_id)
+                if bundle and ("dataflowid" in bundle.lower() or "dataflows" in bundle.lower()):
+                    for ws_ref, df_ref in referenced_dataflow_ids([bundle]):
+                        queue.append((ws_ref or m_meta.get("workspace_id", ""), df_ref, 1))
+
+        done: set[str] = set()
+        fetched = 0
+        outside = 0
+        missing = 0
+        scope_ws = scope_workspace_ids(state)
+        last_save = time.monotonic()
+
+        if queue:
+            self.log(
+                f"Reading Dataflow Gen1/Gen2 definitions ({len(dfs)} in selected workspaces, following upstream chains"
+                + (" across workspaces)..." if follow_outside else " within selection)...")
+            )
+
+        while queue:
+            ws_id, df_id, depth = queue.pop(0)
+            key = (df_id or "").lower()
+            if not df_id or key in done:
+                continue
+            done.add(key)
+
+            meta = state["dataflows"].get(df_id)
+            if meta is None:
+                exist_id = next((k for k in state["dataflows"] if k.lower() == key), None)
+                if exist_id:
+                    df_id = exist_id
+                    meta = state["dataflows"][df_id]
+                else:
+                    ws_meta = state["workspaces"].get(ws_id) or {}
+                    meta = {
+                        "id": df_id,
+                        "name": f"Dataflow {df_id[:8]}",
+                        "description": "",
+                        "workspace_id": ws_id,
+                        "workspace": ws_meta.get("name") or (f"Workspace {ws_id[:8]}" if ws_id else "Unknown workspace"),
+                        "configured_by": "",
+                        "modified_at": "",
+                        "generation": "Gen1",
+                        "discovered_via": "reference",
+                        "upstream": [],
+                        "datasources": [],
+                        "entities": [],
+                        "source_types": [],
+                        "definition_status": "pending",
+                    }
+                    state["dataflows"][df_id] = meta
+
+            ws_id = ws_id or meta.get("workspace_id", "")
+            if not ws_id:
+                meta["definition_status"] = "error: unknown workspace for referenced dataflow"
+                continue
+
+            if ws_set is not None and ws_id not in ws_set:
+                if not follow_outside:
+                    outside += 1
+                    if meta.get("discovered_via") == "reference" and meta.get("definition_status") != "ok":
+                        meta["definition_status"] = "outside selected workspaces"
+                    continue
+                add_scope_extra(state, df_id)
+
+            listed_ws = {wid for wid, w in state.get("workspaces", {}).items() if w.get("dataflows_listed")}
+            if meta.get("discovered_via") == "reference" and ws_id in listed_ws:
+                users = sorted(
+                    state["models"].get(ds, {}).get("name", ds[:8])
+                    for ds, links in (state.get("dataset_dataflow_links") or {}).items()
+                    if any((ln.get("dataflow_id") or "").lower() == key for ln in links)
+                )
+                meta["definition_status"] = (
+                    f"missing: not in the dataflow list of workspace '{meta.get('workspace', '')}' (deleted or re-created under a new id)"
+                    + (f" - referenced by {', '.join(users)}" if users else "")
+                )
+                missing += 1
+                self.log(
+                    f"    Dataflow {df_id} referenced by {', '.join(users) or 'upstream chain'} no longer exists in '{meta.get('workspace', '')}' - recorded as broken reference."
+                )
+                continue
+
+            definition = self.store.read_dataflow_definition(df_id)
+            is_gen2 = str(meta.get("generation", "")).upper().endswith("2")
+            if refresh or meta.get("definition_status") != "ok" or not definition:
+                try:
+                    if is_gen2:
+                        definition = self.client.get_fabric_dataflow_definition(ws_id, df_id)
+                    else:
+                        definition = strip_data_locations(self.client.get_dataflow_definition(ws_id, df_id))
+                    self.store.write_dataflow_definition(df_id, definition)
+                    meta["workspace_id"] = ws_id
+                    if definition.get("name") and meta.get("discovered_via") == "reference":
+                        meta["name"] = definition["name"]
+                    meta["definition_status"] = "ok"
+                    meta["definition_read_at"] = utc_now_iso()
+                    fetched += 1
+                    self.log(f"  Dataflow ({meta.get('generation', 'Gen1')}): {meta.get('workspace', '')} / {meta.get('name', df_id)}")
+                except Exception as exc:
+                    err_txt = str(exc)
+                    if any(tok in err_txt.lower() for tok in ("403", "401", "forbidden", "unauthorized")):
+                        err_txt = f"No access to export dataflow (requires Contributor+ or dataflow owner) - {err_txt}"
+                    meta["definition_status"] = f"error: {err_txt[:180]}"
+                    state["errors"].append(
+                        {"step": "dataflowDefinition", "workspace": meta.get("workspace", ""), "dataflow": meta.get("name", df_id), "error": err_txt}
+                    )
+                    self.log(f"    Skipped dataflow '{meta.get('name', df_id)}': {err_txt[:140]}")
+                    definition = {}
+
+                if not is_gen2:
+                    for attr, fn in (("upstream", self.client.get_dataflow_upstream), ("datasources", self.client.get_dataflow_datasources)):
+                        try:
+                            meta[attr] = fn(ws_id, df_id)
+                        except Exception:
+                            pass
+
+            if definition:
+                parsed_df = parse_dataflow_definition(meta, definition)
+                meta["entities"] = parsed_df.get("entities", [])
+                meta["source_types"] = parsed_df.get("source_types", [])
+                if parsed_df.get("description") and not meta.get("description"):
+                    meta["description"] = parsed_df["description"]
+
+            if follow_upstream and definition and depth < max_follow_depth:
+                for ws_ref, df_ref in definition_dataflow_refs(definition):
+                    queue.append((ws_ref, df_ref, depth + 1))
+                for up in meta.get("upstream") or []:
+                    if not isinstance(up, dict):
+                        continue
+                    up_id = up.get("targetDataflowId") or up.get("dataflowObjectId") or ""
+                    if up_id:
+                        queue.append((up.get("groupId") or up.get("workspaceObjectId") or "", up_id, depth + 1))
+
+            if time.monotonic() - last_save > 5:
+                self.store.save(state)
+                last_save = time.monotonic()
+
+        if done:
+            self.log(
+                f"Dataflow definitions read: {fetched} exported, {len(done) - outside} in lineage scope"
+                + (f", {outside} external skipped" if outside else "")
+                + (f", {missing} broken reference(s) to deleted dataflows." if missing else ".")
+            )
+        self.store.save(state)
         return state
 
     @staticmethod
@@ -275,6 +718,9 @@ class WorkspaceScanner:
             rep_name = rdir.name[: -len(".Report")]
             rh12 = hashlib.sha1(str(rdir).lower().encode("utf-8")).hexdigest()[:12]
             rep_id = f"rep-{rh12}"
+            layout = parse_pbip_report_dir(rdir)
+            if layout.get("pages"):
+                store.write_report_layout(rep_id, layout)
             state["reports"][rep_id] = {
                 "id": rep_id,
                 "name": rep_name,
@@ -282,6 +728,10 @@ class WorkspaceScanner:
                 "workspace": workspace_name,
                 "dataset_id": ds_id,
                 "report_type": "PowerBIReport (PBIP)",
+                "layout_status": "ok" if layout.get("pages") else "unavailable",
+                "pages_count": len(layout.get("pages", [])),
+                "visuals_count": sum(len(pg.get("visuals", [])) for pg in layout.get("pages", [])),
+                "report_measures_count": len(layout.get("report_measures", [])),
             }
 
         store.save(state)
@@ -572,6 +1022,9 @@ class WorkspaceScanner:
 
         if not is_excel:
             rep_id = f"rep-{ds_id}"
+            layout = parse_pbix_report(p)
+            if layout.get("pages"):
+                store.write_report_layout(rep_id, layout)
             state["reports"][rep_id] = {
                 "id": rep_id,
                 "name": f"{model_name} (Embedded Report)",
@@ -579,6 +1032,10 @@ class WorkspaceScanner:
                 "workspace": workspace_name,
                 "dataset_id": ds_id,
                 "report_type": "PowerBIReport (PBIX)",
+                "layout_status": "ok" if layout.get("pages") else "unavailable",
+                "pages_count": len(layout.get("pages", [])),
+                "visuals_count": sum(len(pg.get("visuals", [])) for pg in layout.get("pages", [])),
+                "report_measures_count": len(layout.get("report_measures", [])),
             }
 
         store.save(state)

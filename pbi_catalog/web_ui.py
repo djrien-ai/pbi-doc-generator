@@ -22,8 +22,10 @@ from pathlib import Path
 
 from .api import PowerBiReadOnlyClient
 from .auth import TokenProvider
+from .export_bundle import build_single_model_export, build_site_export
 from .portal import generate_portal
 from .scanner import WorkspaceScanner
+from .sharepoint_publisher import publish_file_to_sharepoint
 from .store import CatalogStore
 
 
@@ -32,7 +34,7 @@ STUDIO_HTML = r"""<!DOCTYPE html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>PBI Doc Generator v1.0 - Studio</title>
+  <title>PBI Doc Generator v1.1 - Studio</title>
   <style>
     :root {
       --bg: #f4f7fb;
@@ -186,7 +188,10 @@ STUDIO_HTML = r"""<!DOCTYPE html>
     .btn-secondary { background: var(--surface-alt); color: var(--fg); border-color: var(--border); }
     .btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
     .btn-success { background: var(--ok); color: #fff; }
-    .btn:disabled { opacity: 0.6; cursor: not-allowed; pointer-events: none; }
+    .btn:disabled { opacity: 0.55; cursor: not-allowed; pointer-events: none; }
+    .step-card { transition: opacity 0.18s ease, border-color 0.18s ease; }
+    .step-card.is-locked { opacity: 0.52; pointer-events: none; user-select: none; }
+    .step-num.done { background: var(--ok); color: #fff; }
 
     .status-pill {
       display: inline-flex;
@@ -230,27 +235,6 @@ STUDIO_HTML = r"""<!DOCTYPE html>
     .inline-banner.info { background: var(--accent-soft); border-color: #bfdbfe; color: #1e40af; }
     .inline-banner.ok { background: var(--ok-bg); border-color: #bbf7d0; color: var(--ok); }
     .inline-banner.err { background: #fef2f2; border-color: #fecaca; color: #b91c1c; }
-
-    .preset-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-      gap: 12px;
-      margin-bottom: 14px;
-    }
-    .preset-box {
-      border: 1.5px solid var(--border);
-      border-radius: 11px;
-      padding: 13px 15px;
-      cursor: pointer;
-      background: var(--surface);
-      text-align: left;
-    }
-    .preset-box.active {
-      border-color: var(--accent);
-      background: var(--accent-soft);
-    }
-    .preset-box b { display: block; font-size: 13.5px; margin-bottom: 3px; }
-    .preset-box span { font-size: 12px; color: var(--fg-muted); }
 
     .ws-list {
       max-height: 240px;
@@ -342,7 +326,7 @@ STUDIO_HTML = r"""<!DOCTYPE html>
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
       <div style="display:inline-flex;background:rgba(255,255,255,0.12);padding:4px;border-radius:11px;border:1px solid rgba(255,255,255,0.24);gap:4px;align-items:center">
         <span style="padding:7px 13px;border-radius:8px;background:#fff;color:#072854;font-weight:700;font-size:12.5px">1. Scanner &amp; Setup</span>
-        <a href="/portal/index.html" id="topOpenPortalBtn" style="padding:7px 13px;border-radius:8px;color:#fff;text-decoration:none;font-weight:650;font-size:12.5px">2. Documentation Portal &rarr;</a>
+        <a href="/portal/index.html" id="topOpenPortalBtn" title="Scan at least one workspace or import a local file first" style="padding:7px 13px;border-radius:8px;color:rgba(255,255,255,0.5);text-decoration:none;font-weight:650;font-size:12.5px;pointer-events:none;cursor:default">2. Documentation Portal (scan first)</a>
       </div>
       <button type="button" class="theme-icon-btn" onclick="toggleStudioTheme()" title="Toggle Light / Dark theme" aria-label="Toggle Light / Dark theme">
         <svg class="icon-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
@@ -360,76 +344,120 @@ STUDIO_HTML = r"""<!DOCTYPE html>
 <main class="wrap">
   <!-- MODE 1: POWER BI SERVICE -->
   <section class="pane active" id="pane-service">
-    <div class="step-card">
+    <div class="step-card" id="stepCard1">
       <div class="step-hdr">
-        <h2 class="step-title"><span class="step-num">1</span> Sign in to Power BI</h2>
+        <h2 class="step-title"><span class="step-num" id="stepNum1">1</span> Sign in to Power BI</h2>
         <span class="status-pill" id="authStatusPill">Not connected</span>
       </div>
-      <p style="margin:0 0 14px 0;color:var(--fg-muted);font-size:13px">
-        Sign in with your Microsoft work account in your default browser. Read-only metadata access; credentials are never stored on disk.
-      </p>
-      <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">
-        <button type="button" class="btn btn-primary" id="btnAuthOauth" onclick="connectAuth('oauth')">Sign in with Microsoft</button>
-        <button type="button" class="btn btn-secondary" id="btnRefreshWs" onclick="loadWorkspaces(true)">Refresh Workspace List</button>
+
+      <div id="authDisconnectedWrap">
+        <p style="margin:0 0 14px 0;color:var(--fg-muted);font-size:13px">
+          Sign in with your Microsoft work account in your default browser. Read-only metadata access; credentials are never stored on disk.
+        </p>
+        <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">
+          <button type="button" class="btn btn-primary" id="btnAuthOauth" onclick="connectAuth('oauth')">Sign in with Microsoft</button>
+        </div>
+
+        <details class="subtle" id="altAuthDetails">
+          <summary>Corporate tenant restricts standard OAuth apps? Alternative sign-in options</summary>
+          <div style="margin-top:10px;padding:12px;background:var(--surface-alt);border-radius:10px;display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+            <button type="button" class="btn btn-secondary" id="btnAuthBrowser" onclick="connectAuth('browser')">Sign in via Power BI Web Window (Edge/Chrome)</button>
+            <button type="button" class="btn btn-secondary" id="btnAuthAz" onclick="connectAuth('az')">Use Azure CLI (az login)</button>
+          </div>
+        </details>
+      </div>
+
+      <div id="authConnectedWrap" style="display:none;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:10px 14px;background:var(--surface-alt);border:1px solid var(--border);border-radius:10px">
+        <span style="font-size:13px">Signed in as <b id="authPrincipalLabel">Microsoft account</b></span>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button type="button" class="btn btn-secondary" style="padding:6px 12px;font-size:12px" onclick="connectAuth('oauth')">Switch Account</button>
+          <button type="button" class="btn btn-secondary" style="padding:6px 12px;font-size:12px" onclick="signOutAuth()">Sign Out</button>
+        </div>
       </div>
 
       <div id="authBanner" class="inline-banner info" style="display:none"></div>
-
-      <details class="subtle" id="altAuthDetails">
-        <summary>Corporate tenant restricts standard OAuth apps? Alternative sign-in options</summary>
-        <div style="margin-top:10px;padding:12px;background:var(--surface-alt);border-radius:10px;display:flex;flex-wrap:wrap;gap:8px;align-items:center">
-          <button type="button" class="btn btn-secondary" id="btnAuthBrowser" onclick="connectAuth('browser')">Sign in via Power BI Web Window (Edge/Chrome)</button>
-          <button type="button" class="btn btn-secondary" id="btnAuthAz" onclick="connectAuth('az')">Use Azure CLI (az login)</button>
-        </div>
-      </details>
     </div>
 
-    <div class="step-card">
+    <div class="step-card is-locked" id="stepCard2">
       <div class="step-hdr">
-        <h2 class="step-title"><span class="step-num">2</span> Choose Workspaces to Document</h2>
-        <div style="display:flex;gap:6px">
-          <button type="button" class="btn btn-secondary" style="padding:5px 10px;font-size:12px" onclick="toggleAllWs(true)">Select All</button>
-          <button type="button" class="btn btn-secondary" style="padding:5px 10px;font-size:12px" onclick="toggleAllWs(false)">Clear</button>
+        <h2 class="step-title"><span class="step-num" id="stepNum2">2</span> Choose Workspaces to Document</h2>
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+          <span class="status-pill" id="wsSelectedPill" style="display:none">0 selected</span>
+          <button type="button" class="btn btn-secondary" id="btnRefreshWs" style="padding:5px 10px;font-size:12px" onclick="loadWorkspaces(true)" disabled>Refresh</button>
+          <button type="button" class="btn btn-secondary" id="btnWsAll" style="padding:5px 10px;font-size:12px" onclick="toggleAllWs(true)" disabled>Select All</button>
+          <button type="button" class="btn btn-secondary" id="btnWsClear" style="padding:5px 10px;font-size:12px" onclick="toggleAllWs(false)" disabled>Clear</button>
         </div>
       </div>
       <p style="margin:0 0 10px 0;color:var(--fg-muted);font-size:12.5px">
         <b>Workspace permission required:</b> You need at least <b>Contributor</b> (or Member / Admin) access in a workspace to extract full semantic model definitions (tables, DAX &amp; Power Query). Workspaces where you only have <b>Viewer</b> access return basic inventory only.
       </p>
-      <input type="search" id="wsFilter" placeholder="Filter workspaces by name (e.g. Finance, Sales, PROD)..." oninput="filterWs()" style="margin-bottom:10px">
+      <input type="search" id="wsFilter" placeholder="Filter workspaces by name (e.g. Finance, Sales, PROD)..." oninput="filterWs()" style="margin-bottom:10px" disabled>
       <div class="ws-list" id="wsList">
-        <div style="color:var(--fg-muted);padding:8px;font-size:12.5px">Sign in above to load your visible Power BI workspaces.</div>
+        <div style="color:var(--fg-muted);padding:8px;font-size:12.5px">Complete Step 1 above to load your visible Power BI workspaces.</div>
       </div>
-      <label style="display:inline-flex;align-items:center;gap:8px;margin-top:12px;font-size:13px;cursor:pointer">
-        <input type="checkbox" id="chkIncremental" checked>
-        <b>Incremental scan (Recommended):</b> only fetch TMDL definitions for new or previously unscanned models
-      </label>
     </div>
 
-    <div class="step-card">
+    <div class="step-card is-locked" id="stepCard3">
       <div class="step-hdr">
-        <h2 class="step-title"><span class="step-num">3</span> Generate Documentation Portal</h2>
+        <h2 class="step-title"><span class="step-num" id="stepNum3">3</span> Generate Documentation Portal</h2>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <span class="status-pill" id="activeCatalogPill">Catalog: Empty</span>
+          <button type="button" class="btn btn-secondary" id="btnResetCatalog" style="padding:5px 11px;font-size:12px;display:none" onclick="resetCatalogFresh()" title="Wipe local catalog cache and start completely empty">Reset Catalog (Start Fresh)</button>
+        </div>
       </div>
-      <p style="margin:0 0 14px 0;color:var(--fg-muted);font-size:13px">
-        Builds the complete interactive HTML portal: Semantic Models, Star-Schema diagrams, formatted DAX &amp; Power Query catalogs, Workspaces &amp; Reports mapping, Governance Health checks, and Live Lineage.
+      <p style="margin:0 0 12px 0;color:var(--fg-muted);font-size:13px">
+        <b>Full Blueprint included by default:</b> Semantic Models (TMDL), Star-Schema diagrams, SQLBI-formatted DAX, Slide-Over Report X-Ray wireframes, Dataflow Gen1/Gen2 pipelines &amp; Live Lineage.
       </p>
 
-      <div style="display:grid;gap:10px;margin-bottom:16px;padding:12px 14px;background:var(--surface-alt);border:1px solid var(--border);border-radius:10px;font-size:13px">
-        <label style="display:flex;align-items:flex-start;gap:9px;cursor:pointer">
-          <input type="checkbox" id="chkAccess" style="margin-top:3px">
-          <span><b>Include user permissions &amp; refresh history</b> <span style="color:var(--fg-muted)">- also fetches who has Admin/Member/Viewer access on each workspace &amp; dataset plus latest refresh status (takes slightly longer on large tenants).</span></span>
-        </label>
-        <label style="display:flex;align-items:flex-start;gap:9px;cursor:pointer">
-          <input type="checkbox" id="chkAnon" style="margin-top:3px">
-          <span><b>Anonymize personal names &amp; emails</b> <span style="color:var(--fg-muted)">- replaces owner names and user emails with <code>Redacted</code> when sharing the HTML folder externally (e.g. with external consultants or auditors).</span></span>
-        </label>
-      </div>
+      <details class="subtle" id="advScanDetails" style="margin-top:0;margin-bottom:16px">
+        <summary>Advanced scan &amp; privacy options (cross-workspace lineage, permissions, anonymization)</summary>
+        <div style="display:grid;gap:10px;margin-top:10px;padding:12px 14px;background:var(--surface-alt);border:1px solid var(--border);border-radius:10px;font-size:13px;color:var(--fg)">
+          <div id="existingCatalogModeWrap" style="display:none;padding-bottom:10px;border-bottom:1px solid var(--border)">
+            <div style="font-weight:700;font-size:12.5px;margin-bottom:6px">Existing catalog update mode:</div>
+            <div style="display:flex;flex-wrap:wrap;gap:14px">
+              <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer">
+                <input type="radio" name="scanCatalogMode" id="radScanIncremental" value="incremental" checked>
+                <span><b>Incremental update (Recommended)</b> - keep cached models &amp; scan new/unscanned</span>
+              </label>
+              <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer">
+                <input type="radio" name="scanCatalogMode" id="radScanClean" value="clean">
+                <span><b>Replace catalog</b> - clear previous scan before running</span>
+              </label>
+            </div>
+          </div>
+          <label style="display:flex;align-items:flex-start;gap:9px;cursor:pointer">
+            <input type="checkbox" id="chkReports" checked style="margin-top:3px">
+            <span><b>Include report visual layouts &amp; report-level DAX</b> <span style="color:var(--fg-muted)">- enables the Slide-Over Report X-Ray Inspector, broken visual field detection, and Used vs. Unused DAX measure tracking.</span></span>
+          </label>
+          <label style="display:flex;align-items:flex-start;gap:9px;cursor:pointer">
+            <input type="checkbox" id="chkDataflows" checked style="margin-top:3px">
+            <span><b>Include Dataflow Gen1 &amp; Fabric Dataflow Gen2 M scripts + Native SQL</b> <span style="color:var(--fg-muted)">- parses Power Query transformation pipelines, formatted Native SQL queries, OneLake destinations, and multi-hop Dataflow chains.</span></span>
+          </label>
+          <label style="display:flex;align-items:flex-start;gap:9px;cursor:pointer">
+            <input type="checkbox" id="chkFollowOutside" style="margin-top:3px">
+            <span><b>Follow linked models &amp; upstream dataflows outside selected workspaces</b> <span style="color:var(--fg-muted)">- resolves cross-workspace shared semantic models and upstream L2+ staging dataflows in other workspaces where you have access.</span></span>
+          </label>
+          <label style="display:flex;align-items:flex-start;gap:9px;cursor:pointer">
+            <input type="checkbox" id="chkAccess" style="margin-top:3px">
+            <span><b>Include user permissions &amp; refresh history</b> <span style="color:var(--fg-muted)">- also fetches who has Admin/Member/Viewer access on each workspace &amp; dataset plus latest refresh status (slower on large tenants).</span></span>
+          </label>
+          <label style="display:flex;align-items:flex-start;gap:9px;cursor:pointer">
+            <input type="checkbox" id="chkAnon" style="margin-top:3px">
+            <span><b>Anonymize personal names, emails &amp; report filter literals</b> <span style="color:var(--fg-muted)">- scrubs owner names, user emails, slicer selections, and filter values when sharing externally.</span></span>
+          </label>
+        </div>
+      </details>
 
       <div id="scanBanner" class="inline-banner info" style="display:none;margin-top:0;margin-bottom:14px"></div>
 
       <div style="display:flex;flex-wrap:wrap;gap:10px">
-        <button type="button" class="btn btn-primary" id="btnScanBuild" onclick="runScanAndBuild()">Scan Selected Workspaces &amp; Build Portal</button>
-        <button type="button" class="btn btn-secondary" id="btnRebuildOnly" onclick="rebuildPortalOnly()">Rebuild HTML Portal from Local Cache</button>
-        <a class="btn btn-success" href="/portal/index.html">Open Documentation Portal &rarr;</a>
+        <button type="button" class="btn btn-primary" id="btnScanBuild" onclick="runScanAndBuild()" disabled>Sign in &amp; select workspaces above to scan</button>
+        <button type="button" class="btn btn-secondary" id="btnRebuildOnly" style="display:none" onclick="rebuildPortalOnly()">Rebuild HTML Portal from Local Cache</button>
+        <a class="btn btn-success" id="btnOpenPortalStep3" style="display:none" href="/portal/index.html">Open Documentation Portal &rarr;</a>
+      </div>
+
+      <div id="portalExportHint" style="margin-top:12px;padding-top:10px;border-top:1px dashed var(--border);font-size:12.5px;color:var(--fg-muted);display:none">
+        <b>PDF, Standalone HTML, SharePoint Online &amp; Data Dictionary:</b> open the Documentation Portal and click <b>Export / Publish</b> in the top bar (available for the <b>entire catalog</b> or any <b>individual semantic model</b>).
       </div>
 
       <div class="log-box" id="logBox">Ready. Catalog folder: {{CATALOG_DIR}}</div>
@@ -452,7 +480,7 @@ STUDIO_HTML = r"""<!DOCTYPE html>
         <div style="font-size:12.5px;color:var(--fg-muted);margin-bottom:14px">Supports <code>.pbix</code>, <code>.pbip</code> (automatically loads its companion <code>.SemanticModel</code>), and Excel PowerPivot <code>.xlsx</code></div>
         <div style="display:flex;justify-content:center;gap:10px;flex-wrap:wrap">
           <button type="button" class="btn btn-primary" id="btnPickFile" onclick="document.getElementById('nativeFilePicker').click()">Select Power BI File (.pbix, .pbip, .xlsx)...</button>
-          <a class="btn btn-success" href="/portal/index.html">Open Documentation Portal &rarr;</a>
+          <a class="btn btn-success" id="btnOpenPortalLocal" style="display:none" href="/portal/index.html">Open Documentation Portal &rarr;</a>
         </div>
       </div>
 
@@ -461,8 +489,8 @@ STUDIO_HTML = r"""<!DOCTYPE html>
       <details class="subtle">
         <summary>Advanced: select a standalone .SemanticModel folder or paste a path</summary>
         <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
-          <input type="text" id="localPathInput" style="flex:1;min-width:260px" placeholder="e.g. C:\Reports\Sales.pbip or C:\Projects\Sales.SemanticModel">
-          <button type="button" class="btn btn-primary" id="btnImportLocal" onclick="importLocalPath()">Generate from Path</button>
+          <input type="text" id="localPathInput" style="flex:1;min-width:260px" placeholder="e.g. C:\Reports\Sales.pbip or C:\Projects\Sales.SemanticModel" oninput="document.getElementById('btnImportLocal').disabled=!this.value.trim()">
+          <button type="button" class="btn btn-primary" id="btnImportLocal" onclick="importLocalPath()" disabled>Generate from Path</button>
           <button type="button" class="btn btn-secondary" id="btnPickFolder" onclick="document.getElementById('nativeFolderPicker').click()">Browse .SemanticModel Folder...</button>
         </div>
       </details>
@@ -485,7 +513,7 @@ STUDIO_HTML = r"""<!DOCTYPE html>
 </main>
 
 <footer style="max-width:1120px;margin:24px auto 14px auto;padding:14px 24px;border-top:1px solid var(--border);display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;font-size:12px;color:var(--fg-muted)">
-  <span><a href="https://github.com/djrien-ai/pbi-doc-generator" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none;font-weight:600">PBI Doc Generator v1.0</a> &bull; 100% Local &amp; Read-Only (MIT Open Source)</span>
+  <span><a href="https://github.com/djrien-ai/pbi-doc-generator" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none;font-weight:600">PBI Doc Generator v1.1</a> &bull; 100% Local &amp; Read-Only (MIT Open Source)</span>
   <span>Created by <a href="https://github.com/djrien-ai" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none;font-weight:600">Rien Scheerlinck</a> &bull; <a href="mailto:dj.rien@gmail.com?subject=Power%20BI%20Enterprise%20%26%20Architecture%20Inquiry" style="color:var(--accent);text-decoration:none;font-weight:600">Contact</a> &bull; <a href="https://ko-fi.com/rienscheerlinck" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:none;font-weight:600">Support on Ko-fi</a></span>
 </footer>
 
@@ -493,6 +521,8 @@ STUDIO_HTML = r"""<!DOCTYPE html>
 var uiConnecting = false;
 var wsLoadedOnce = false;
 var wasBusy = false;
+var latestAuthenticated = false;
+var latestBusy = false;
 
 function toggleStudioTheme() {
   var cur = document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark";
@@ -502,6 +532,7 @@ function toggleStudioTheme() {
 
 document.querySelectorAll(".mode-tab").forEach(function(btn) {
   btn.addEventListener("click", function() {
+    if (latestBusy) return;
     var target = btn.getAttribute("data-pane");
     document.querySelectorAll(".mode-tab").forEach(function(b) { b.classList.toggle("active", b === btn); });
     document.querySelectorAll(".pane").forEach(function(p) { p.classList.toggle("active", p.id === target); });
@@ -528,12 +559,6 @@ function setAuthButtonsDisabled(disabled) {
   });
 }
 
-function selectPreset(name, el) {
-  document.querySelectorAll(".preset-box").forEach(function(b) { b.classList.toggle("active", b === el); });
-  document.getElementById("chkAccess").checked = (name === "governance");
-  document.getElementById("chkAnon").checked = (name === "anonymous");
-}
-
 function appendLog(msg, boxId) {
   var box = document.getElementById(boxId || "logBox");
   box.textContent += "\n" + msg;
@@ -545,8 +570,68 @@ async function apiPost(path, payload) {
   return await res.json();
 }
 
+function updateWsSelectionUi() {
+  var allChks = Array.from(document.querySelectorAll("#wsList .ws-chk"));
+  var checkedChks = allChks.filter(function(c) { return c.checked; });
+  var total = allChks.length;
+  var sel = checkedChks.length;
+
+  var wsPill = document.getElementById("wsSelectedPill");
+  if (wsPill) {
+    if (latestAuthenticated && total > 0) {
+      wsPill.style.display = "inline-flex";
+      wsPill.textContent = sel + " of " + total + " selected";
+      wsPill.className = sel > 0 ? "status-pill connected" : "status-pill";
+    } else {
+      wsPill.style.display = "none";
+    }
+  }
+
+  var hasItems = latestAuthenticated && total > 0 && !latestBusy;
+  ["btnWsAll", "btnWsClear", "wsFilter"].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) el.disabled = !hasItems;
+  });
+  var refBtn = document.getElementById("btnRefreshWs");
+  if (refBtn) refBtn.disabled = !latestAuthenticated || latestBusy;
+
+  var scanBtn = document.getElementById("btnScanBuild");
+  if (scanBtn) {
+    if (latestBusy) {
+      scanBtn.disabled = true;
+      scanBtn.textContent = "Scanning workspaces...";
+    } else if (!latestAuthenticated) {
+      scanBtn.disabled = true;
+      scanBtn.textContent = "Sign in & select workspaces above to scan";
+    } else if (sel === 0) {
+      scanBtn.disabled = true;
+      scanBtn.textContent = total > 0 ? "Select at least 1 workspace in Step 2" : "No workspaces available to scan";
+    } else {
+      scanBtn.disabled = false;
+      scanBtn.textContent = "Scan " + sel + " Selected Workspace" + (sel === 1 ? "" : "s") + " & Build Portal";
+    }
+  }
+}
+
+async function signOutAuth() {
+  await apiPost("/api/sign-out", {});
+  wsLoadedOnce = false;
+  latestAuthenticated = false;
+  var wsFilter = document.getElementById("wsFilter");
+  if (wsFilter) wsFilter.value = "";
+  var list = document.getElementById("wsList");
+  if (list) {
+    list.innerHTML = "<div style='color:var(--fg-muted);padding:8px;font-size:12.5px'>Complete Step 1 above to load your visible Power BI workspaces.</div>";
+  }
+  setBanner("authBanner", "", "");
+  await refreshStatus();
+}
+
 async function cancelAuth() {
+  uiConnecting = false;
+  setAuthButtonsDisabled(false);
   await apiPost("/api/cancel-auth", {});
+  await refreshStatus();
   setBanner("authBanner", "err",
     "<span>Sign-in cancelled. If standard Microsoft OAuth is restricted by your IT policy, use <b>Power BI Web Window</b>.</span>" +
     "<button type='button' class='btn btn-secondary' style='padding:6px 12px;font-size:12px' onclick=\"connectAuth('browser')\">Use Power BI Web Window &rarr;</button>"
@@ -557,10 +642,24 @@ async function refreshStatus() {
   try {
     var st = await (await fetch("/api/status")).json();
     var pill = document.getElementById("authStatusPill");
+    var stepNum1 = document.getElementById("stepNum1");
+    var disWrap = document.getElementById("authDisconnectedWrap");
+    var conWrap = document.getElementById("authConnectedWrap");
+    var prinLbl = document.getElementById("authPrincipalLabel");
+    var step2 = document.getElementById("stepCard2");
+    var step3 = document.getElementById("stepCard3");
 
-    if (uiConnecting || (st.auth && st.auth.auth_in_progress)) {
+    var isConnecting = !!(uiConnecting || (st.auth && st.auth.auth_in_progress));
+    var isAuth = !!(st.auth && st.auth.authenticated);
+    latestAuthenticated = isAuth;
+    latestBusy = !!st.busy;
+
+    if (isConnecting) {
       pill.className = "status-pill connecting";
       pill.innerHTML = "<span class='spin'></span> Connecting...";
+      if (disWrap) disWrap.style.display = "";
+      if (conWrap) conWrap.style.display = "none";
+      if (stepNum1) { stepNum1.className = "step-num"; stepNum1.textContent = "1"; }
       if (st.auth && st.auth.pending_auth_url) {
         setBanner("authBanner", "info",
           "<span style='display:flex;align-items:center;gap:10px'><span class='spin'></span>" +
@@ -568,9 +667,13 @@ async function refreshStatus() {
           "<button type='button' class='btn btn-secondary' style='padding:5px 12px;font-size:12px' onclick='cancelAuth()'>Cancel</button>"
         );
       }
-    } else if (st.auth && st.auth.authenticated) {
+    } else if (isAuth) {
       pill.className = "status-pill connected";
-      pill.textContent = "Connected" + (st.auth.principal ? " (" + st.auth.principal + ")" : "") + " - " + st.auth.minutes_remaining + "m remaining";
+      pill.textContent = "Connected (" + st.auth.minutes_remaining + "m remaining)";
+      if (disWrap) disWrap.style.display = "none";
+      if (conWrap) conWrap.style.display = "flex";
+      if (prinLbl) prinLbl.textContent = st.auth.principal || "Microsoft account";
+      if (stepNum1) { stepNum1.className = "step-num done"; stepNum1.innerHTML = "&#10003;"; }
       if (!wsLoadedOnce) {
         wsLoadedOnce = true;
         loadWorkspaces(false);
@@ -578,10 +681,26 @@ async function refreshStatus() {
     } else if (st.auth && st.auth.last_error) {
       pill.className = "status-pill failed";
       pill.textContent = "Sign-in failed";
+      if (disWrap) disWrap.style.display = "";
+      if (conWrap) conWrap.style.display = "none";
+      if (stepNum1) { stepNum1.className = "step-num"; stepNum1.textContent = "1"; }
     } else {
       pill.className = "status-pill";
       pill.textContent = "Not connected";
+      if (disWrap) disWrap.style.display = "";
+      if (conWrap) conWrap.style.display = "none";
+      if (stepNum1) { stepNum1.className = "step-num"; stepNum1.textContent = "1"; }
     }
+
+    var hasModels = typeof st.models_count === "number" && st.models_count > 0;
+    var portalReady = !!st.portal_ready;
+
+    if (step2) step2.classList.toggle("is-locked", !isAuth || !!st.busy);
+    if (step3) step3.classList.toggle("is-locked", (!isAuth && !hasModels && !portalReady));
+    document.querySelectorAll(".mode-tab").forEach(function(b) { b.disabled = !!st.busy; });
+
+    var existingModeWrap = document.getElementById("existingCatalogModeWrap");
+    if (existingModeWrap) existingModeWrap.style.display = hasModels ? "" : "none";
 
     if (st.logs && st.logs.length) {
       document.getElementById("logBox").textContent = st.logs.join("\n");
@@ -589,8 +708,43 @@ async function refreshStatus() {
     }
 
     var topPortalBtn = document.getElementById("topOpenPortalBtn");
-    if (topPortalBtn && typeof st.models_count === "number") {
-      topPortalBtn.innerHTML = "2. Documentation Portal" + (st.models_count > 0 ? " (" + st.models_count + ")" : "") + " &rarr;";
+    if (topPortalBtn) {
+      if (portalReady) {
+        topPortalBtn.innerHTML = "2. Documentation Portal (" + st.models_count + ") &rarr;";
+        topPortalBtn.style.pointerEvents = "auto";
+        topPortalBtn.style.color = "#fff";
+        topPortalBtn.style.cursor = "pointer";
+        topPortalBtn.title = "Open generated Documentation Portal";
+      } else {
+        topPortalBtn.innerHTML = st.busy ? "2. Documentation Portal (scanning...)" : "2. Documentation Portal (scan first)";
+        topPortalBtn.style.pointerEvents = "none";
+        topPortalBtn.style.color = "rgba(255,255,255,0.5)";
+        topPortalBtn.style.cursor = "default";
+        topPortalBtn.title = "Scan at least one workspace or import a local file first";
+      }
+    }
+    var catPill = document.getElementById("activeCatalogPill");
+    if (catPill && typeof st.models_count === "number") {
+      catPill.textContent = hasModels
+        ? ("Catalog: " + st.models_count + " model" + (st.models_count === 1 ? "" : "s") + " ready")
+        : "Catalog: Empty";
+      catPill.className = hasModels ? "status-pill connected" : "status-pill";
+    }
+    var rebuildBtn = document.getElementById("btnRebuildOnly");
+    if (rebuildBtn) {
+      rebuildBtn.style.display = hasModels ? "" : "none";
+      rebuildBtn.disabled = !!st.busy;
+    }
+    var openStep3 = document.getElementById("btnOpenPortalStep3");
+    if (openStep3) openStep3.style.display = portalReady ? "" : "none";
+    var openLocal = document.getElementById("btnOpenPortalLocal");
+    if (openLocal) openLocal.style.display = portalReady ? "" : "none";
+    var exportHint = document.getElementById("portalExportHint");
+    if (exportHint) exportHint.style.display = portalReady ? "" : "none";
+    var resetCatBtn = document.getElementById("btnResetCatalog");
+    if (resetCatBtn) {
+      resetCatBtn.style.display = (hasModels || portalReady) ? "" : "none";
+      resetCatBtn.disabled = !!st.busy;
     }
 
     var azBtn = document.getElementById("btnAuthAz");
@@ -600,17 +754,17 @@ async function refreshStatus() {
       azBtn.textContent = "Azure CLI (not installed on this PC)";
     }
 
-    var scanBtn = document.getElementById("btnScanBuild");
+    updateWsSelectionUi();
+
     if (st.busy) {
       wasBusy = true;
-      if (scanBtn) scanBtn.disabled = true;
       var lastLine = (st.logs && st.logs.length) ? st.logs[st.logs.length - 1] : "Scanning workspaces...";
       setBanner("scanBanner", "info",
         "<span style='display:flex;align-items:center;gap:10px'><span class='spin'></span><span><b>Scan in progress:</b> " + escHtml(lastLine) + "</span></span>"
       );
     } else if (wasBusy) {
       wasBusy = false;
-      if (scanBtn) scanBtn.disabled = false;
+      updateWsSelectionUi();
       if (st.last_scan_error) {
         setBanner("scanBanner", "err", "<span><b>Scan failed:</b> " + escHtml(st.last_scan_error) + "</span>");
       } else {
@@ -638,7 +792,7 @@ async function connectAuth(mode) {
 
   setBanner("authBanner", "info",
     "<span style='display:flex;align-items:center;gap:10px'><span class='spin'></span><span>" + escHtml(msg) + "</span></span>" +
-    (mode === "oauth" ? "<button type='button' class='btn btn-secondary' style='padding:5px 12px;font-size:12px' onclick='cancelAuth()'>Cancel</button>" : "")
+    ((mode === "oauth" || mode === "browser") ? "<button type='button' class='btn btn-secondary' style='padding:5px 12px;font-size:12px' onclick='cancelAuth()'>Cancel</button>" : "")
   );
   appendLog("Starting sign-in (" + mode + ")...");
 
@@ -655,11 +809,14 @@ async function connectAuth(mode) {
       var count = await loadWorkspaces(false);
       if (count !== null) {
         setBanner("authBanner", "ok",
-          "<span><b>Connected as " + escHtml(who) + "</b> - " + count + " workspace(s) loaded in Step 2 below.</span>"
+          "<span><b>Connected!</b> " + count + " workspace(s) loaded in Step 2 below.</span>"
         );
       }
     } else {
       var errTxt = data.error || "Unknown sign-in error";
+      if (errTxt.toLowerCase().indexOf("cancelled") !== -1) {
+        return;
+      }
       appendLog("Sign-in error: " + errTxt);
       var altBtn = (mode !== "browser")
         ? "<button type='button' class='btn btn-secondary' style='padding:6px 12px;font-size:12px;background:#fff' onclick=\"connectAuth('browser')\">Try Power BI Web Window &rarr;</button>"
@@ -674,8 +831,10 @@ async function connectAuth(mode) {
     }
   } catch (err) {
     uiConnecting = false;
+    await refreshStatus();
     setBanner("authBanner", "err", "<span><b>Connection error:</b> " + escHtml(err) + "</span>");
   } finally {
+    uiConnecting = false;
     setAuthButtonsDisabled(false);
   }
 }
@@ -691,25 +850,30 @@ async function loadWorkspaces(showBanner) {
       appendLog("Could not fetch workspaces: " + data.error);
       list.innerHTML = "<div style='padding:10px;color:#b91c1c'>Could not load workspaces: " + escHtml(data.error) + "</div>";
       if (showBanner) {
-        setBanner("authBanner", "err", "<span><b>Could not refresh workspaces:</b> " + escHtml(data.error) + " (Sign in first in Step 1).</span>");
+        setBanner("authBanner", "err", "<span><b>Could not refresh workspaces:</b> " + escHtml(data.error) + "</span>");
       }
+      updateWsSelectionUi();
       return null;
     }
     if (!data.workspaces.length) {
       list.innerHTML = "<div style='padding:8px;color:var(--fg-muted)'>No workspaces returned for this account.</div>";
+      updateWsSelectionUi();
       return 0;
     }
+    // Auto-select all only on small estates (<= 5 workspaces); on larger tenants let user pick deliberately
+    var autoCheck = data.workspaces.length <= 5 ? " checked" : "";
     list.innerHTML = data.workspaces.map(function(w) {
       return '<label class="ws-item" data-wsname="' + escHtml(w.name.toLowerCase()) + '">' +
-        '<span style="display:flex;align-items:center;gap:8px"><input type="checkbox" class="ws-chk" value="' + escHtml(w.id) + '" checked> <b>' + escHtml(w.name) + '</b></span>' +
+        '<span style="display:flex;align-items:center;gap:8px"><input type="checkbox" class="ws-chk" value="' + escHtml(w.id) + '"' + autoCheck + ' onchange="updateWsSelectionUi()"> <b>' + escHtml(w.name) + '</b></span>' +
         '<span class="sku-tag">' + escHtml(w.sku) + '</span></label>';
     }).join("");
+    updateWsSelectionUi();
     if (showBanner) {
-      setBanner("authBanner", "ok", "<span>Refreshed workspace list: <b>" + data.workspaces.length + " workspace(s)</b> available below.</span>");
+      setBanner("authBanner", "ok", "<span>Refreshed workspace list: <b>" + data.workspaces.length + " workspace(s)</b> available.</span>");
     }
     return data.workspaces.length;
   } finally {
-    if (btn) btn.disabled = false;
+    if (btn) btn.disabled = !latestAuthenticated || latestBusy;
   }
 }
 
@@ -724,21 +888,30 @@ function toggleAllWs(val) {
   document.querySelectorAll("#wsList .ws-item").forEach(function(el) {
     if (el.style.display !== "none") el.querySelector(".ws-chk").checked = val;
   });
+  updateWsSelectionUi();
 }
 
 async function runScanAndBuild() {
   var ids = Array.from(document.querySelectorAll(".ws-chk:checked")).map(function(c) { return c.value; });
   if (!ids.length) {
-    setBanner("scanBanner", "err", "<span>Please sign in and select at least one workspace in Step 2 before scanning.</span>");
+    setBanner("scanBanner", "err", "<span>Please select at least one workspace in Step 2 before scanning.</span>");
     return;
   }
+  var cleanRadio = document.getElementById("radScanClean");
+  var modeWrap = document.getElementById("existingCatalogModeWrap");
+  var hasExisting = !!(modeWrap && modeWrap.style.display !== "none");
+  var cleanSlate = !!(hasExisting && cleanRadio && cleanRadio.checked);
   setBanner("scanBanner", "info",
-    "<span style='display:flex;align-items:center;gap:10px'><span class='spin'></span><span>Starting background scan for <b>" + ids.length + " workspace(s)</b>...</span></span>"
+    "<span style='display:flex;align-items:center;gap:10px'><span class='spin'></span><span>Starting " + (cleanSlate ? "clean " : "") + "background scan for <b>" + ids.length + " workspace(s)</b>...</span></span>"
   );
   appendLog("Launching background scan for " + ids.length + " workspace(s)...");
   var res = await apiPost("/api/scan", {
     workspace_ids: ids,
-    refresh: !document.getElementById("chkIncremental").checked,
+    clean_catalog: cleanSlate,
+    refresh: cleanSlate,
+    include_reports: document.getElementById("chkReports") ? document.getElementById("chkReports").checked : true,
+    include_dataflows: document.getElementById("chkDataflows") ? document.getElementById("chkDataflows").checked : true,
+    follow_outside: document.getElementById("chkFollowOutside") ? document.getElementById("chkFollowOutside").checked : false,
     include_access: document.getElementById("chkAccess").checked,
     anonymous: document.getElementById("chkAnon").checked
   });
@@ -750,6 +923,26 @@ async function runScanAndBuild() {
   }
 }
 
+async function resetCatalogFresh() {
+  if (!window.confirm("Reset local catalog? All previously scanned models, reports, and generated HTML portal pages will be cleared.")) {
+    return;
+  }
+  var btn = document.getElementById("btnResetCatalog");
+  if (btn) btn.disabled = true;
+  try {
+    var res = await apiPost("/api/reset-catalog", {});
+    if (res.ok) {
+      appendLog("Catalog reset: all previously scanned models, reports, and portal files cleared.");
+      await refreshStatus();
+      setBanner("scanBanner", "ok", "<span><b>Clean slate ready!</b> Local catalog cache cleared (0 models).</span>");
+    } else {
+      setBanner("scanBanner", "err", "<span><b>Could not reset catalog:</b> " + escHtml(res.error) + "</span>");
+    }
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
 async function rebuildPortalOnly() {
   var btn = document.getElementById("btnRebuildOnly");
   if (btn) btn.disabled = true;
@@ -758,6 +951,7 @@ async function rebuildPortalOnly() {
     var res = await apiPost("/api/portal", { anonymous: document.getElementById("chkAnon").checked });
     appendLog(res.ok ? "Portal regenerated: " + res.index : "Error: " + res.error);
     if (res.ok) {
+      await refreshStatus();
       setBanner("scanBanner", "ok",
         "<span><b>Portal regenerated!</b> Ready to view.</span>" +
         "<a class='btn btn-success' style='padding:6px 14px;font-size:12.5px' href='/portal/index.html'>Open Documentation Portal &rarr;</a>"
@@ -768,6 +962,12 @@ async function rebuildPortalOnly() {
   } finally {
     if (btn) btn.disabled = false;
   }
+}
+
+function triggerSiteExport(fmt) {
+  var anon = (document.getElementById("chkAnon") && document.getElementById("chkAnon").checked) ? "1" : "0";
+  appendLog("Preparing " + (fmt === "zip" ? "Offline Portal Bundle (.zip)" : "SharePoint Single-File (.html)") + " export...");
+  window.location.href = "/api/export-site?format=" + encodeURIComponent(fmt) + "&anonymous=" + anon;
 }
 
 async function handleNativeFiles(fileList) {
@@ -781,7 +981,7 @@ async function handleNativeFiles(fileList) {
   try {
     for (var i = 0; i < files.length; i++) {
       var f = files[i];
-      setBanner("localBanner", "info", "<span style='display:flex;align-items:center;gap:10px'><span class='spin'></span><span>Importing <b>" + escHtml(f.name) + "</b> (" + (i + 1) + "/" + files.length + ") and building v1.0 Portal...</span></span>");
+      setBanner("localBanner", "info", "<span style='display:flex;align-items:center;gap:10px'><span class='spin'></span><span>Importing <b>" + escHtml(f.name) + "</b> (" + (i + 1) + "/" + files.length + ") and building v1.1 Portal...</span></span>");
       appendLog("Importing " + f.name + " ...", "localLogBox");
       var resp = await fetch("/api/upload-local-file?name=" + encodeURIComponent(f.name), {
         method: "POST",
@@ -802,7 +1002,7 @@ async function handleNativeFiles(fileList) {
     }
     await refreshStatus();
     setBanner("localBanner", "ok",
-      "<span><b>Imported " + escHtml(imported.join(", ")) + "!</b> Added to your v1.0 Documentation &amp; Live Lineage Portal.</span>" +
+      "<span><b>Imported " + escHtml(imported.join(", ")) + "!</b> Added to your v1.1 Documentation &amp; Live Lineage Portal.</span>" +
       "<a class='btn btn-success' style='padding:6px 14px;font-size:12.5px' href='/portal/index.html'>Open Documentation Portal &rarr;</a>"
     );
   } catch (err) {
@@ -845,7 +1045,7 @@ async function handleNativeFolder(fileList) {
       await refreshStatus();
       appendLog("Done! Imported '" + res.model_name + "' into Portal.", "localLogBox");
       setBanner("localBanner", "ok",
-        "<span><b>Imported '" + escHtml(res.model_name) + "'!</b> Added to your v1.0 Documentation &amp; Live Lineage Portal.</span>" +
+        "<span><b>Imported '" + escHtml(res.model_name) + "'!</b> Added to your v1.1 Documentation &amp; Live Lineage Portal.</span>" +
         "<a class='btn btn-success' style='padding:6px 14px;font-size:12.5px' href='/portal/index.html'>Open Documentation Portal &rarr;</a>"
       );
     } else {
@@ -884,14 +1084,14 @@ async function importLocalPath() {
   }
   var btn = document.getElementById("btnImportLocal");
   if (btn) btn.disabled = true;
-  setBanner("localBanner", "info", "<span style='display:flex;align-items:center;gap:10px'><span class='spin'></span><span>Extracting metadata and building v1.0 Portal for <b>" + escHtml(p) + "</b>...</span></span>");
-  appendLog("Importing " + p + " into v1.0 Portal ...", "localLogBox");
+  setBanner("localBanner", "info", "<span style='display:flex;align-items:center;gap:10px'><span class='spin'></span><span>Extracting metadata and building v1.1 Portal for <b>" + escHtml(p) + "</b>...</span></span>");
+  appendLog("Importing " + p + " into v1.1 Portal ...", "localLogBox");
   try {
     var res = await apiPost("/api/import-local", { path: p });
     if (res.ok) {
       appendLog("Done! Imported '" + (res.model_name || "") + "' into Portal (" + res.output + ").", "localLogBox");
       setBanner("localBanner", "ok",
-        "<span><b>Imported '" + escHtml(res.model_name || p) + "'!</b> Added to your v1.0 Documentation &amp; Live Lineage Portal.</span>" +
+        "<span><b>Imported '" + escHtml(res.model_name || p) + "'!</b> Added to your v1.1 Documentation &amp; Live Lineage Portal.</span>" +
         "<a class='btn btn-success' style='padding:6px 14px;font-size:12.5px' href='/portal/index.html'>Open Documentation Portal &rarr;</a>"
       );
     } else {
@@ -978,6 +1178,126 @@ def _locate_local_pbip_on_disk(filename: str, raw_bytes: bytes, timeout_sec: flo
     return None
 
 
+class _ExclusiveServer(http.server.ThreadingHTTPServer):
+    allow_reuse_address = sys.platform != "win32"
+
+
+def _render_portal_state_html(busy: bool, logs: list[str], models_count: int, requested_path: str) -> bytes:
+    """Render a clean, themed HTML waiting/empty-state page instead of a naked plain-text 404."""
+    import html as _html
+
+    last_log = _html.escape(logs[-1] if logs else "Ready.")
+    req_esc = _html.escape(requested_path or "/portal/index.html")
+    if busy:
+        title = "Generating Documentation Portal..."
+        badge = '<span class="pill busy"><span class="spin"></span> Scan in progress</span>'
+        body = (
+            "<p>Your Power BI workspace scan and interactive HTML portal build are currently running in the background. "
+            "This page will open your documentation automatically the moment generation finishes.</p>"
+            f'<div class="log-tail" id="liveTail">{last_log}</div>'
+            '<div class="actions">'
+            '<a class="btn sec" href="/">&larr; View Full Progress in 1. Scanner &amp; Setup</a>'
+            "</div>"
+        )
+    elif models_count > 0:
+        title = "Model Page Moved or Replaced"
+        badge = f'<span class="pill ok">{models_count} model(s) ready</span>'
+        body = (
+            f"<p>The requested page (<code>{req_esc}</code>) is not in the current catalog snapshot, "
+            f"but your Documentation Portal has <b>{models_count} documented model(s)</b> ready to explore.</p>"
+            '<div class="actions">'
+            '<a class="btn pri" href="/portal/index.html">Open Documentation Portal Home &rarr;</a>'
+            '<a class="btn sec" href="/">&larr; 1. Scanner &amp; Setup</a>'
+            "</div>"
+        )
+    else:
+        title = "No Documentation Portal Generated Yet"
+        badge = '<span class="pill">Empty catalog (0 models)</span>'
+        body = (
+            "<p>Your local catalog is currently empty (clean slate). Sign in and scan one or more Power BI workspaces, "
+            "or drop a local <code>.pbix</code> / <code>.pbip</code> / <code>.xlsx</code> file to generate your interactive portal.</p>"
+            '<div class="actions">'
+            '<a class="btn pri" href="/">&larr; Go to 1. Scanner &amp; Setup</a>'
+            "</div>"
+        )
+
+    page = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{title} - PBI Doc Generator v1.1</title>
+  <style>
+    :root {{
+      --bg:#f4f7fb; --surface:#ffffff; --fg:#0f172a; --muted:#526077;
+      --border:#dce3ee; --accent:#0b63ce; --accent-soft:#e8f1fd;
+    }}
+    [data-theme="dark"] {{
+      --bg:#0b1120; --surface:#111827; --fg:#e5e7eb; --muted:#9ca3af;
+      --border:#1f2937; --accent:#60a5fa; --accent-soft:rgba(59,130,246,0.16);
+    }}
+    * {{ box-sizing:border-box; }}
+    body {{ margin:0; font-family:"Segoe UI",-apple-system,sans-serif; background:var(--bg); color:var(--fg); min-height:100vh; display:flex; flex-direction:column; }}
+    header {{ background:linear-gradient(125deg,#072854 0%,#0b63ce 100%); color:#fff; padding:18px 28px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; }}
+    header h1 {{ margin:0; font-size:19px; font-weight:750; }}
+    .switcher {{ display:inline-flex; background:rgba(255,255,255,0.14); padding:4px; border-radius:10px; border:1px solid rgba(255,255,255,0.24); gap:4px; }}
+    .switcher a, .switcher span {{ padding:6px 12px; border-radius:7px; font-size:12.5px; font-weight:650; text-decoration:none; color:#fff; }}
+    .switcher .act {{ background:#fff; color:#072854; font-weight:700; }}
+    main {{ flex:1; display:flex; align-items:center; justify-content:center; padding:32px 20px; }}
+    .card {{ max-width:600px; width:100%; background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:28px 30px; box-shadow:0 8px 30px rgba(15,23,42,0.07); }}
+    .card h2 {{ margin:12px 0 8px 0; font-size:21px; }}
+    .card p {{ margin:0 0 18px 0; color:var(--muted); font-size:14px; line-height:1.55; }}
+    .pill {{ display:inline-flex; align-items:center; gap:7px; padding:4px 11px; border-radius:999px; font-size:12px; font-weight:700; background:var(--accent-soft); color:var(--accent); }}
+    .pill.ok {{ background:#dcfce7; color:#15803d; }}
+    .spin {{ width:12px; height:12px; border:2px solid currentColor; border-right-color:transparent; border-radius:50%; display:inline-block; animation:sp .75s linear infinite; }}
+    @keyframes sp {{ to {{ transform:rotate(360deg); }} }}
+    .log-tail {{ font-family:Consolas,monospace; font-size:12px; padding:10px 12px; border-radius:8px; background:#0f172a; color:#e2e8f0; margin-bottom:18px; overflow-wrap:anywhere; }}
+    .actions {{ display:flex; gap:10px; flex-wrap:wrap; }}
+    .btn {{ display:inline-flex; align-items:center; gap:6px; padding:10px 16px; border-radius:9px; font-size:13.5px; font-weight:650; text-decoration:none; }}
+    .btn.pri {{ background:var(--accent); color:#fff; }}
+    .btn.sec {{ background:var(--accent-soft); color:var(--accent); }}
+  </style>
+  <script>
+    (function() {{
+      try {{ var t = localStorage.getItem("pbidoc-v1-theme"); if (t) document.documentElement.setAttribute("data-theme", t); }} catch(e) {{}}
+      var isBusy = {"true" if busy else "false"};
+      if (isBusy) {{
+        setInterval(async function() {{
+          try {{
+            var st = await (await fetch("/api/status")).json();
+            var tail = document.getElementById("liveTail");
+            if (tail && st.logs && st.logs.length) tail.textContent = st.logs[st.logs.length - 1];
+            if (!st.busy && st.models_count > 0) {{
+              window.location.href = "/portal/index.html";
+            }} else if (!st.busy) {{
+              window.location.reload();
+            }}
+          }} catch (e) {{}}
+        }}, 1500);
+      }}
+    }})();
+  </script>
+</head>
+<body>
+  <header>
+    <h1>Power BI Documentation &amp; Live Lineage Portal</h1>
+    <div class="switcher">
+      <a href="/">&larr; 1. Scanner &amp; Setup</a>
+      <span class="act">2. Documentation Portal</span>
+    </div>
+  </header>
+  <main>
+    <div class="card">
+      {badge}
+      <h2>{title}</h2>
+      {body}
+    </div>
+  </main>
+</body>
+</html>"""
+    return page.encode("utf-8")
+
+
 class StudioState:
     def __init__(self, catalog_dir: str | Path):
         self.store = CatalogStore(catalog_dir)
@@ -985,6 +1305,28 @@ class StudioState:
         self.auth = TokenProvider(mode="oauth", log_fn=self.log)
         self.busy = False
         self.last_scan_error = ""
+        self._op_lock = threading.Lock()
+        self._models_mtime: float = -1.0
+        self._models_count_cache: int = 0
+
+    def invalidate_cache(self) -> None:
+        self._models_mtime = -1.0
+        self._models_count_cache = 0
+
+    def get_models_count(self) -> int:
+        try:
+            sf = self.store.state_file
+            if not sf.exists():
+                self._models_count_cache = 0
+                self._models_mtime = -1.0
+                return 0
+            mt = sf.stat().st_mtime
+            if mt != self._models_mtime:
+                self._models_count_cache = len(self.store.load_scoped().get("models", {}))
+                self._models_mtime = mt
+            return self._models_count_cache
+        except Exception:
+            return self._models_count_cache
 
     def log(self, msg: str) -> None:
         stamp = time.strftime("%H:%M:%S")
@@ -995,8 +1337,8 @@ class StudioState:
 
 def create_studio_server(catalog_dir: str | Path, host: str = "127.0.0.1", port: int = 8765) -> tuple[http.server.ThreadingHTTPServer, StudioState]:
     state = StudioState(catalog_dir)
-    # Ensure initial portal exists if store already has models
-    if state.store.state_file.exists():
+    # Ensure initial portal exists ONLY if store already has non-zero models
+    if state.store.state_file.exists() and state.get_models_count() > 0:
         try:
             generate_portal(state.store)
         except Exception:
@@ -1028,6 +1370,7 @@ def create_studio_server(catalog_dir: str | Path, host: str = "127.0.0.1", port:
             try:
                 self.send_response(code)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Cache-Control", "no-store, no-cache, must-revalidate")
                 self.send_header("Content-Length", str(len(raw)))
                 self.end_headers()
                 self.wfile.write(raw)
@@ -1036,46 +1379,135 @@ def create_studio_server(catalog_dir: str | Path, host: str = "127.0.0.1", port:
 
         def do_GET(self) -> None:  # noqa: N802
             parsed = urllib.parse.urlparse(self.path)
+            if parsed.path == "/favicon.ico":
+                svg_ico = (
+                    b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">'
+                    b'<rect width="32" height="32" rx="7" fill="#0b63ce"/>'
+                    b'<rect x="7" y="16" width="4" height="10" rx="1.5" fill="#fff"/>'
+                    b'<rect x="14" y="11" width="4" height="15" rx="1.5" fill="#93c5fd"/>'
+                    b'<rect x="21" y="6" width="4" height="20" rx="1.5" fill="#fff"/>'
+                    b'</svg>'
+                )
+                self.send_response(200)
+                self.send_header("Content-Type", "image/svg+xml")
+                self.send_header("Content-Length", str(len(svg_ico)))
+                self.end_headers()
+                self.wfile.write(svg_ico)
+                return
+
             if parsed.path in ("/", "/index.html"):
                 html = STUDIO_HTML.replace("{{CATALOG_DIR}}", str(state.store.root)).replace("{{MCP_JSON}}", mcp_cfg)
                 raw = html.encode("utf-8")
                 self.send_response(200)
                 self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Cache-Control", "no-store, no-cache, must-revalidate")
+                self.send_header("Content-Length", str(len(raw)))
                 self.end_headers()
                 self.wfile.write(raw)
                 return
 
             if parsed.path == "/api/status":
-                try:
-                    models_cnt = len(state.store.load().get("models", {}))
-                except Exception:
-                    models_cnt = 0
+                m_cnt = state.get_models_count()
+                portal_ready = bool(m_cnt > 0 and (state.store.portal_dir / "index.html").is_file())
                 self._json(
                     {
                         "auth": state.auth.status(),
                         "busy": state.busy,
                         "last_scan_error": state.last_scan_error,
-                        "models_count": models_cnt,
+                        "models_count": m_cnt,
+                        "portal_ready": portal_ready,
                         "logs": state.logs[-80:],
                     }
                 )
                 return
 
-            if parsed.path.startswith("/portal/"):
-                rel = parsed.path[len("/portal/"):].lstrip("/") or "index.html"
+            if parsed.path == "/api/export-site":
+                qs = urllib.parse.parse_qs(parsed.query)
+                fmt = (qs.get("format", ["single"])[0] or "single").strip().lower()
+                model_slug = (qs.get("model", [""])[0] or "").strip()
+                anon = (qs.get("anonymous", ["0"])[0] or "0").strip() in ("1", "true", "yes")
+                inc_aspx = (qs.get("aspx", ["0"])[0] or "0").strip() in ("1", "true", "yes")
+                exports_dir = (state.store.root / "_exports").resolve()
+                exports_dir.mkdir(parents=True, exist_ok=True)
+                stamp = time.strftime("%Y%m%d_%H%M")
+                is_single = fmt != "zip"
+                ext = ".aspx" if (is_single and inc_aspx) else (".html" if is_single else ".zip")
+                if model_slug:
+                    safe_slug = "".join(c if c.isalnum() or c in "-_" else "_" for c in model_slug)[:80]
+                    fname = f"PBI_Model_{safe_slug}_{stamp}{ext}"
+                else:
+                    fname = (
+                        f"PBI_Documentation_Portal_SharePoint_{stamp}{ext}"
+                        if is_single
+                        else f"PBI_Documentation_Portal_Bundle_{stamp}.zip"
+                    )
+                out_file = exports_dir / fname
+                try:
+                    if model_slug:
+                        built = build_single_model_export(
+                            state.store,
+                            model_slug,
+                            out_file,
+                            anonymous=anon,
+                            as_aspx=inc_aspx,
+                            log_fn=state.log,
+                        )
+                    else:
+                        built = build_site_export(
+                            state.store,
+                            out_file,
+                            anonymous=anon,
+                            include_aspx=inc_aspx,
+                            log_fn=state.log,
+                            single_file_only=is_single,
+                        )
+                    payload_bytes = built.read_bytes()
+                    ctype = "text/html; charset=utf-8" if is_single else "application/zip"
+                    self.send_response(200)
+                    self.send_header("Content-Type", ctype)
+                    self.send_header("Content-Disposition", f'attachment; filename="{built.name}"')
+                    self.send_header("Content-Length", str(len(payload_bytes)))
+                    self.end_headers()
+                    self.wfile.write(payload_bytes)
+                except Exception as exc:
+                    state.log(f"Export error: {exc}")
+                    self._json({"ok": False, "error": str(exc)}, code=500)
+                finally:
+                    try:
+                        out_file.unlink(missing_ok=True)
+                    except Exception:
+                        pass
+                return
+
+            if parsed.path == "/portal" or parsed.path.startswith("/portal/"):
+                rel = parsed.path[len("/portal"):].lstrip("/") or "index.html"
                 portal_root = (state.store.root / "portal").resolve()
                 target = (portal_root / rel).resolve()
-                if str(target).startswith(str(portal_root)) and target.is_file():
+                if target.is_relative_to(portal_root) and target.is_file():
                     ctype = mimetypes.guess_type(str(target))[0] or "application/octet-stream"
                     data = target.read_bytes()
                     self.send_response(200)
                     self.send_header("Content-Type", ctype)
+                    self.send_header("Cache-Control", "no-store, no-cache, must-revalidate")
+                    self.send_header("Content-Length", str(len(data)))
                     self.end_headers()
                     self.wfile.write(data)
                     return
+                if rel.endswith(".html") or "." not in Path(rel).name:
+                    raw_state = _render_portal_state_html(
+                        busy=state.busy,
+                        logs=state.logs,
+                        models_count=state.get_models_count(),
+                        requested_path=parsed.path,
+                    )
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/html; charset=utf-8")
+                    self.send_header("Content-Length", str(len(raw_state)))
+                    self.end_headers()
+                    self.wfile.write(raw_state)
+                    return
                 self.send_response(404)
                 self.end_headers()
-                self.wfile.write(b"Portal not generated yet. Run a scan or import a local project first.")
                 return
 
             self.send_response(404)
@@ -1106,6 +1538,7 @@ def create_studio_server(catalog_dir: str | Path, host: str = "127.0.0.1", port:
                         return
                     try:
                         meta = WorkspaceScanner.register_local_any(state.store, str(real_pbip))
+                        state.invalidate_cache()
                         idx = generate_portal(state.store)
                         state.log(f"Imported PBIP '{meta.get('name', safe_name)}' from {real_pbip}: {idx}")
                         self._json({"ok": True, "model_name": meta.get("name", real_pbip.stem), "output": str(idx)})
@@ -1120,8 +1553,9 @@ def create_studio_server(catalog_dir: str | Path, host: str = "127.0.0.1", port:
                 try:
                     staged_file.write_bytes(raw_bytes)
                     meta = WorkspaceScanner.register_local_any(state.store, str(staged_file))
+                    state.invalidate_cache()
                     idx = generate_portal(state.store)
-                    state.log(f"Imported '{meta.get('name', safe_name)}' into v1.0 Portal: {idx}")
+                    state.log(f"Imported '{meta.get('name', safe_name)}' into v1.1 Portal: {idx}")
                     self._json({"ok": True, "model_name": meta.get("name", staged_file.stem), "output": str(idx)})
                 except Exception as exc:
                     state.log(f"File upload import error: {exc}")
@@ -1150,7 +1584,7 @@ def create_studio_server(catalog_dir: str | Path, host: str = "127.0.0.1", port:
                         if not top_folder_name:
                             top_folder_name = rel_str.split("/")[0]
                         dest = (staging_root / rel_str).resolve()
-                        if not str(dest).startswith(str(staging_root)):
+                        if not dest.is_relative_to(staging_root):
                             continue
                         dest.parent.mkdir(parents=True, exist_ok=True)
                         dest.write_text(str(item.get("content") or ""), encoding="utf-8")
@@ -1166,9 +1600,10 @@ def create_studio_server(catalog_dir: str | Path, host: str = "127.0.0.1", port:
                         meta = WorkspaceScanner.register_local_any(state.store, str(target_root))
                         imported_names.append(meta.get("name", target_root.name))
 
+                    state.invalidate_cache()
                     idx = generate_portal(state.store)
                     joined = ", ".join(imported_names)
-                    state.log(f"Imported '{joined}' into v1.0 Portal: {idx}")
+                    state.log(f"Imported '{joined}' into v1.1 Portal: {idx}")
                     self._json({"ok": True, "model_name": joined, "output": str(idx)})
                 except Exception as exc:
                     state.log(f"Folder upload import error: {exc}")
@@ -1177,16 +1612,87 @@ def create_studio_server(catalog_dir: str | Path, host: str = "127.0.0.1", port:
                     shutil.rmtree(staging_root, ignore_errors=True)
                 return
 
-            if self.path == "/api/cancel-auth":
+            if parsed.path == "/api/reset-catalog":
+                with state._op_lock:
+                    if state.busy:
+                        self._json({"ok": False, "error": "Cannot reset catalog while a scan is running."})
+                        return
+                    state.store.clear()
+                    state.invalidate_cache()
+                    state.last_scan_error = ""
+                    state.log("Catalog cleared (clean slate: 0 models).")
+                self._json({"ok": True, "models_count": 0})
+                return
+
+            if parsed.path == "/api/publish-sharepoint":
+                target_url = str(body.get("target_url") or "").strip()
+                scope = str(body.get("scope") or "catalog").strip().lower()
+                model_slug = str(body.get("model_slug") or "").strip()
+                anon = bool(body.get("anonymous"))
+                use_aspx = bool(body.get("aspx"))
+                if not target_url:
+                    self._json({"ok": False, "error": "Please provide a SharePoint Document Library URL."})
+                    return
+                exports_dir = (state.store.root / "_exports").resolve()
+                exports_dir.mkdir(parents=True, exist_ok=True)
+                ext = ".aspx" if use_aspx else ".html"
+                if scope == "model" and model_slug:
+                    safe_slug = "".join(c if c.isalnum() or c in "-_" else "_" for c in model_slug)[:80]
+                    out_file = exports_dir / f"{safe_slug}_Documentation{ext}"
+                else:
+                    out_file = exports_dir / f"PBI_Documentation_Portal{ext}"
+                try:
+                    if scope == "model" and model_slug:
+                        built = build_single_model_export(
+                            state.store,
+                            model_slug,
+                            out_file,
+                            anonymous=anon,
+                            as_aspx=use_aspx,
+                            log_fn=state.log,
+                        )
+                    else:
+                        built = build_site_export(
+                            state.store,
+                            out_file,
+                            anonymous=anon,
+                            include_aspx=use_aspx,
+                            log_fn=state.log,
+                            single_file_only=True,
+                        )
+                        if use_aspx:
+                            aspx_cand = built.with_suffix(".aspx")
+                            if aspx_cand.exists():
+                                built = aspx_cand
+                    res = publish_file_to_sharepoint(built, target_url, log_fn=state.log)
+                    self._json(res)
+                except Exception as exc:
+                    state.log(f"SharePoint publish failed: {exc}")
+                    self._json({"ok": False, "error": str(exc)})
+                finally:
+                    try:
+                        out_file.unlink(missing_ok=True)
+                        out_file.with_suffix(".aspx").unlink(missing_ok=True)
+                    except Exception:
+                        pass
+                return
+
+            if parsed.path == "/api/sign-out":
+                state.auth.sign_out()
+                state.log("Signed out from Power BI session.")
+                self._json({"ok": True})
+                return
+
+            if parsed.path == "/api/cancel-auth":
                 state.auth.cancel_pending()
                 state.log("Sign-in cancelled by user.")
                 self._json({"ok": True})
                 return
 
-            if self.path == "/api/connect":
+            if parsed.path == "/api/connect":
                 try:
-                    state.auth.mode = body.get("mode", "oauth")
-                    state.auth.get_token(force_refresh=True)
+                    req_mode = str(body.get("mode", "oauth") or "oauth").lower()
+                    state.auth.get_token(force_refresh=True, mode_override=req_mode)
                     state.log(f"Connected successfully ({state.auth.status().get('principal') or state.auth.mode}).")
                     self._json({"ok": True, "status": state.auth.status()})
                 except Exception as exc:
@@ -1194,7 +1700,7 @@ def create_studio_server(catalog_dir: str | Path, host: str = "127.0.0.1", port:
                     self._json({"ok": False, "error": str(exc)})
                 return
 
-            if self.path == "/api/workspaces":
+            if parsed.path == "/api/workspaces":
                 try:
                     client = PowerBiReadOnlyClient(state.auth)
                     caps = {}
@@ -1207,10 +1713,10 @@ def create_studio_server(catalog_dir: str | Path, host: str = "127.0.0.1", port:
                     ws = [
                         {
                             "id": g["id"],
-                            "name": g.get("name", ""),
+                            "name": (g.get("name") or ""),
                             "sku": caps.get(g.get("capacityId", ""), "Dedicated" if g.get("isOnDedicatedCapacity") else "Pro"),
                         }
-                        for g in sorted(groups, key=lambda x: x.get("name", "").lower())
+                        for g in sorted(groups, key=lambda x: (x.get("name") or "").lower())
                     ]
                     state.log(f"Loaded {len(ws)} visible workspace(s).")
                     self._json({"ok": True, "workspaces": ws})
@@ -1218,37 +1724,58 @@ def create_studio_server(catalog_dir: str | Path, host: str = "127.0.0.1", port:
                     self._json({"ok": False, "error": str(exc)})
                 return
 
-            if self.path == "/api/scan":
-                if state.busy:
-                    self._json({"ok": False, "error": "A scan is already running."})
-                    return
-
-                def _worker() -> None:
+            if parsed.path == "/api/scan":
+                with state._op_lock:
+                    if state.busy:
+                        self._json({"ok": False, "error": "A scan is already running."})
+                        return
                     state.busy = True
                     state.last_scan_error = ""
+
+                def _worker() -> None:
                     try:
+                        if body.get("clean_catalog"):
+                            state.store.clear()
+                            state.invalidate_cache()
+                            state.log("Cleared previous catalog cache (clean slate enabled).")
                         client = PowerBiReadOnlyClient(state.auth)
                         scanner = WorkspaceScanner(client, state.store, log_fn=state.log)
                         ws_ids = body.get("workspace_ids") or None
+                        refresh_flag = bool(body.get("refresh"))
+                        follow_outside = bool(body.get("follow_outside", False))
                         scanner.scan_inventory(workspace_ids=ws_ids)
                         scanner.scan_model_definitions(
                             workspace_ids=ws_ids,
-                            refresh=bool(body.get("refresh")),
+                            refresh=refresh_flag,
                             include_access=bool(body.get("include_access")),
                         )
+                        if body.get("include_reports", True):
+                            scanner.scan_report_definitions(
+                                workspace_ids=ws_ids,
+                                refresh=refresh_flag,
+                                follow_shared_models=follow_outside,
+                            )
+                        if body.get("include_dataflows", True):
+                            scanner.scan_dataflow_definitions(
+                                workspace_ids=ws_ids,
+                                refresh=refresh_flag,
+                                follow_outside=follow_outside,
+                            )
+                        state.invalidate_cache()
                         idx = generate_portal(state.store, anonymous=bool(body.get("anonymous")))
-                        state.log(f"Portal ready! Click 'Open Generated Portal' ({idx})")
+                        state.log(f"Portal ready! Click 'Open Documentation Portal' ({idx})")
                     except Exception as exc:
                         state.last_scan_error = str(exc)
                         state.log(f"Scan error: {exc}")
                     finally:
+                        state.invalidate_cache()
                         state.busy = False
 
                 threading.Thread(target=_worker, daemon=True).start()
                 self._json({"ok": True})
                 return
 
-            if self.path == "/api/portal":
+            if parsed.path == "/api/portal":
                 try:
                     idx = generate_portal(state.store, anonymous=bool(body.get("anonymous")))
                     self._json({"ok": True, "index": str(idx)})
@@ -1256,22 +1783,32 @@ def create_studio_server(catalog_dir: str | Path, host: str = "127.0.0.1", port:
                     self._json({"ok": False, "error": str(exc)})
                 return
 
-            if self.path == "/api/import-local":
+            if parsed.path == "/api/import-local":
                 p = Path(body.get("path", "")).expanduser()
                 try:
                     meta = WorkspaceScanner.register_local_any(state.store, str(p))
+                    state.invalidate_cache()
                     idx = generate_portal(state.store)
-                    state.log(f"Imported '{meta.get('name', p.name)}' into v1.0 Portal: {idx}")
+                    state.log(f"Imported '{meta.get('name', p.name)}' into v1.1 Portal: {idx}")
                     self._json({"ok": True, "model_name": meta.get("name", p.stem), "output": str(idx)})
                 except Exception as exc:
                     state.log(f"Local import error: {exc}")
                     self._json({"ok": False, "error": str(exc)})
                 return
 
-            self.send_response(404)
-            self.end_headers()
+            self._json({"ok": False, "error": f"Unknown API endpoint: {parsed.path}"}, code=404)
 
-    httpd = http.server.ThreadingHTTPServer((host, port), Handler)
+    httpd: http.server.ThreadingHTTPServer | None = None
+    last_err: Exception | None = None
+    candidates = [0] if port == 0 else [port + i for i in range(16)]
+    for cand in candidates:
+        try:
+            httpd = _ExclusiveServer((host, cand), Handler)
+            break
+        except OSError as exc:
+            last_err = exc
+    if httpd is None:
+        raise last_err or OSError(f"Could not bind Studio server near {host}:{port}")
     return httpd, state
 
 

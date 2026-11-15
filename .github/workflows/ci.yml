@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main, "feat/**"]
+    branches: [main, "v*.*", "feat/**"]
   pull_request:
-    branches: [main]
+    branches: [main, "v*.*"]
 
 permissions:
   contents: read
@@ -40,5 +40,5 @@ jobs:
       - name: Compile all Python modules
         run: python -m compileall -q .
 
-      - name: Run v1.0 test suite
+      - name: Run v1.1 test suite
         run: python tests/test_v1_suite.py

@@ -165,9 +165,8 @@ class PowerBiReadOnlyClient:
             raise RuntimeError(f"HTTP {resp.status} on {relative_path}: {snippet}")
         return resp.json()
 
-    def get_model_tmdl_files(self, workspace_id: str, dataset_id: str) -> dict[str, str]:
-        """Fetch full semantic model definition in TMDL format via Fabric REST API (handles 200 & 202 LRO)."""
-        url = f"{FABRIC_BASE}workspaces/{workspace_id}/semanticModels/{dataset_id}/getDefinition?format=TMDL"
+    def _fetch_fabric_definition_parts(self, url: str, keep: Callable[[str], bool] | None = None) -> dict[str, str]:
+        """Execute a read-only Fabric `getDefinition` POST (supports immediate 200 and async 202 LRO)."""
         resp = self.request("POST", url)
         if resp.status == 200:
             definition = resp.json().get("definition") or {}
@@ -203,6 +202,57 @@ class PowerBiReadOnlyClient:
         for part in sorted(definition.get("parts") or [], key=lambda p: p.get("path", "")):
             path = part.get("path") or ""
             payload = part.get("payload") or ""
-            if path and payload:
+            if path and payload and (keep is None or keep(path)):
                 files[path] = base64.b64decode(payload).decode("utf-8", errors="replace")
         return files
+
+    def get_model_tmdl_files(self, workspace_id: str, dataset_id: str) -> dict[str, str]:
+        """Fetch full semantic model definition in TMDL format via Fabric REST API (handles 200 & 202 LRO)."""
+        url = f"{FABRIC_BASE}workspaces/{workspace_id}/semanticModels/{dataset_id}/getDefinition?format=TMDL"
+        return self._fetch_fabric_definition_parts(url)
+
+    def get_report_definition_files(self, workspace_id: str, report_id: str) -> dict[str, str]:
+        """Fetch Power BI report layout/PBIR definition via Fabric REST API (drops binary static resources)."""
+        url = f"{FABRIC_BASE}workspaces/{workspace_id}/reports/{report_id}/getDefinition"
+
+        def _keep_json(p: str) -> bool:
+            low = p.lower()
+            return low.endswith((".json", ".pbir")) and "resources/" not in low
+
+        return self._fetch_fabric_definition_parts(url, keep=_keep_json)
+
+    # Alias for callers expecting PR #19 method name
+    get_report_definition_parts = get_report_definition_files
+
+    def get_dataflow_definition(self, workspace_id: str, dataflow_id: str) -> dict:
+        """Export a Power BI Dataflow Gen1 `model.json` definition (including the full M section document)."""
+        resp = self.request("GET", f"{PBI_BASE}groups/{workspace_id}/dataflows/{dataflow_id}")
+        if resp.status != 200:
+            snippet = (resp.body or "").replace("\n", " ")[:240]
+            raise RuntimeError(f"HTTP {resp.status} exporting dataflow {dataflow_id}: {snippet}")
+        body = (resp.body or "").lstrip("\ufeff")
+        return json.loads(body) if body.strip() else {}
+
+    def get_fabric_dataflow_definition(self, workspace_id: str, dataflow_id: str) -> dict:
+        """Export a Microsoft Fabric Dataflow Gen2 definition (`mashup.pq` + `queryMetadata.json`)."""
+        url = f"{FABRIC_BASE}workspaces/{workspace_id}/dataflows/{dataflow_id}/getDefinition"
+        parts = self._fetch_fabric_definition_parts(url)
+        return {"format": "Gen2", "parts": parts} if parts else {}
+
+    def get_dataflow_upstream(self, workspace_id: str, dataflow_id: str) -> list[dict]:
+        """List upstream dataflows this dataflow reads from (linked / computed entities)."""
+        return self.pbi_get_list(f"groups/{workspace_id}/dataflows/{dataflow_id}/upstreamDataflows")
+
+    def get_dataflow_datasources(self, workspace_id: str, dataflow_id: str) -> list[dict]:
+        return self.pbi_get_list(f"groups/{workspace_id}/dataflows/{dataflow_id}/datasources")
+
+    def get_dataset_dataflow_links(self, workspace_id: str) -> list[dict]:
+        """Dataset -> dataflow links for one workspace (`datasetObjectId`, `dataflowObjectId`, `workspaceObjectId`)."""
+        return self.pbi_get_list(f"groups/{workspace_id}/datasets/upstreamDataflows")
+
+    def get_fabric_workspace_items(self, workspace_id: str) -> list[dict]:
+        """Fetch Microsoft Fabric items (Lakehouses, Warehouses, Dataflow Gen2, Notebooks) when workspace is on Fabric."""
+        resp = self.request("GET", f"{FABRIC_BASE}workspaces/{workspace_id}/items")
+        if resp.status == 200:
+            return list(resp.json().get("value") or [])
+        return []

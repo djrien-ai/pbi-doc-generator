@@ -20,7 +20,22 @@ import types
 import urllib.request
 from pathlib import Path
 
-import pandas as pd
+try:
+    import pandas as pd  # type: ignore
+except ImportError:
+    class _MiniDF:
+        def __init__(self, rows=None, columns=None):
+            self._rows = list(rows or [])
+            self.columns = list(columns or (list(self._rows[0].keys()) if self._rows else []))
+            self.empty = len(self._rows) == 0
+
+        def iterrows(self):
+            return enumerate(self._rows)
+
+    class _MiniPd:
+        DataFrame = _MiniDF
+
+    pd = _MiniPd()  # type: ignore
 
 ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
@@ -30,10 +45,26 @@ from pbi_catalog.analyzer import analyze_model
 from pbi_catalog.api import PowerBiReadOnlyClient
 from pbi_catalog.auth import TokenProvider
 from pbi_catalog.cli import main as cli_main
+from pbi_catalog.dataflows import parse_dataflow_definition, strip_data_locations
+from pbi_catalog.e2e_lineage import build_e2e_graph, render_measure_doc_markdown, resolve_field_node_id
+from pbi_catalog.export_bundle import (
+    build_single_file,
+    build_single_model_export,
+    build_site_export,
+    pack_single_model_from_portal,
+)
 from pbi_catalog.mcp_server import CatalogMcpEngine, handle_jsonrpc_message
 from pbi_catalog.portal import extract_m_steps, format_dax_pretty, generate_portal
+from pbi_catalog.pq_steps import interpret_query
+from pbi_catalog.report_parser import (
+    parse_dataflow_model_json,
+    parse_report_definition_files,
+    redact_report_layout_literals,
+)
 from pbi_catalog.scanner import WorkspaceScanner
 from pbi_catalog.security import mask_secrets
+from pbi_catalog.sharepoint_publisher import parse_sharepoint_target
+from pbi_catalog.sql_format import format_sql
 from pbi_catalog.store import CatalogStore
 from pbi_catalog.web_ui import create_studio_server
 from tmdl_parser import TmdlModel
@@ -231,7 +262,7 @@ def test_end_to_end_portal_and_mcp() -> None:
         assert init_resp and init_resp["result"]["serverInfo"]["name"] == "pbi-doc-generator-mcp"
 
         list_resp = handle_jsonrpc_message(engine, {"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
-        assert list_resp and len(list_resp["result"]["tools"]) == 8
+        assert list_resp and len(list_resp["result"]["tools"]) == 10
 
         impact_resp = handle_jsonrpc_message(
             engine,
@@ -239,6 +270,13 @@ def test_end_to_end_portal_and_mcp() -> None:
         )
         assert impact_resp and not impact_resp["result"]["isError"]
         assert "Global OTIF Scorecard" in impact_resp["result"]["content"][0]["text"]
+
+        trace_resp = handle_jsonrpc_message(
+            engine,
+            {"jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": {"name": "pbi_trace_measure_end_to_end", "arguments": {"measure": "OTIF %", "format": "markdown"}}},
+        )
+        assert trace_resp and not trace_resp["result"]["isError"]
+        assert "CV_SHIPMENT_OTIF" in trace_resp["result"]["content"][0]["text"]
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
@@ -421,6 +459,521 @@ def test_web_studio_http_endpoints() -> None:
             with urllib.request.urlopen(f"{base}/portal/index.html") as r:
                 portal_html = r.read().decode("utf-8")
                 assert r.status == 200 and "HttpModel" in portal_html
+
+            with urllib.request.urlopen(f"{base}/api/export-site?format=single") as r:
+                sp_html = r.read().decode("utf-8")
+                assert r.status == 200 and "pbidoc-vfs" in sp_html and "DecompressionStream" in sp_html
+
+            with urllib.request.urlopen(f"{base}/api/export-site?format=zip&aspx=1") as r:
+                zip_bytes = r.read()
+                assert r.status == 200 and zip_bytes[:2] == b"PK"
+        finally:
+            httpd.shutdown()
+            httpd.server_close()
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def test_v11_report_xray_star_schema_dataflow_and_dax() -> None:
+    # 1. Verify short multi-argument DAX expressions (< 68 chars) format across indented lines
+    short_div = "DIVIDE([OTIF Lines], [Delivery Lines], 0)"
+    pretty_div = format_dax_pretty(short_div)
+    assert "\n    [OTIF Lines]," in pretty_div and "\n    [Delivery Lines]," in pretty_div, f"Expected multi-line DIVIDE, got:\n{pretty_div}"
+
+    short_calc = "calculate([Total Sales], 'Dim Region'[Country] = \"BE\")"
+    pretty_calc = format_dax_pretty(short_calc)
+    assert pretty_calc.startswith("CALCULATE(\n    [Total Sales],"), f"Expected uppercase multi-line CALCULATE, got:\n{pretty_calc}"
+
+    # 2. Verify Fabric getDefinition guard allows Reports, Dataflows & Workspace Items read-only calls
+    client = PowerBiReadOnlyClient(TokenProvider(mode="token", manual_token="dummy"))
+    client._assert_readonly("POST", "https://api.fabric.microsoft.com/v1/workspaces/w1/reports/r1/getDefinition")
+    client._assert_readonly("POST", "https://api.fabric.microsoft.com/v1/workspaces/w1/dataflows/d1/getDefinition")
+    client._assert_readonly("GET", "https://api.fabric.microsoft.com/v1/workspaces/w1/items")
+
+    # 3. Verify PBIR report definition + reportExtensions.json + Dataflow model.json parsers
+    pbir_files = {
+        "definition/pages/pages.json": json.dumps({"pageOrder": ["PageExec"]}),
+        "definition/pages/PageExec/page.json": json.dumps(
+            {"name": "PageExec", "displayName": "Executive Summary", "width": 1280, "height": 720}
+        ),
+        "definition/pages/PageExec/visuals/v1/visual.json": json.dumps(
+            {
+                "name": "v1",
+                "position": {"x": 20, "y": 30, "width": 300, "height": 120},
+                "visual": {
+                    "visualType": "card",
+                    "query": {
+                        "queryState": {
+                            "Values": {
+                                "projections": [
+                                    {"field": {"Measure": {"Expression": {"SourceRef": {"Entity": "Fact Sales"}}, "Property": "Margin %"}}},
+                                    {"field": {"Column": {"Expression": {"SourceRef": {"Entity": "Fact Sales"}}, "Property": "MissingCol"}}},
+                                ]
+                            }
+                        }
+                    },
+                },
+            }
+        ),
+        "definition/reportExtensions.json": json.dumps(
+            {
+                "entities": [
+                    {
+                        "name": "Fact Sales",
+                        "measures": [
+                            {"name": "Local Target KPI", "expression": "DIVIDE([Net Sales], 100, 0)", "formatString": "0.0%"}
+                        ],
+                    }
+                ]
+            }
+        ),
+    }
+    parsed_rep = parse_report_definition_files(pbir_files)
+    assert parsed_rep["format"] == "PBIR"
+    assert len(parsed_rep["pages"]) == 1
+    assert len(parsed_rep["report_measures"]) == 1
+    assert parsed_rep["report_measures"][0]["name"] == "Local Target KPI"
+
+    df_parsed = parse_dataflow_model_json(
+        {
+            "name": "Harmonized MDM",
+            "description": "Shared vendor & material dataflow",
+            "entities": [{"name": "HarmonizedMaterials", "attributes": [{"name": "MatKey"}, {"name": "MatDesc"}]}],
+            "pbi:mashup": {
+                "document": 'section Section1;\nshared HarmonizedMaterials = let\n    Source = Sql.Database("dw-prod", "MDM"),\n    Tbl = Source{[Schema="dbo",Item="MAT"]}[Data]\nin\n    Tbl;\n'
+            },
+        }
+    )
+    assert len(df_parsed["entities"]) == 1
+    assert df_parsed["entities"][0]["columns_count"] == 2
+    assert df_parsed["entities"][0]["pq_steps"] == 2
+
+    # 4. Verify Direct Lake + Dataflow Lineage + Broken Ref + Transitive Measure Usage + v1.1 Portal Widgets
+    from scripts.build_demo_portal import build_demo
+
+    tmp = Path(tempfile.mkdtemp(prefix="pbidoc_v11_demo_"))
+    try:
+        idx = build_demo(tmp)
+        idx_txt = idx.read_text(encoding="utf-8")
+        assert "xrayRegistryData" in idx_txt
+        assert "Dataflows &amp; Upstream Fabric Items" in idx_txt
+        assert "Inspect Dataflow" in idx_txt
+
+        otif_html = (tmp / "portal" / "models" / "enterprise-core-semantic-models-global-supply-chain-otif-core.html").read_text(encoding="utf-8")
+        assert 'class="doc-topbar"' in otif_html
+        assert 'class="model-switcher-select"' in otif_html
+        assert 'class="star-shell"' in otif_html
+        assert "Fact Inventory Snapshots" in otif_html
+        assert "Direct Lake OneLake Binding" in otif_html
+        assert "Upstream Power BI Dataflows Feeding This Model" in otif_html
+        assert 'class="dax-folder-details" open' in otif_html
+        assert 'data-dax-usage="unused"' in otif_html
+        assert "principals-details" in otif_html
+
+        legacy_html = (tmp / "portal" / "models" / "supply-chain-procurement-analytics-regional-vendor-spend-tracker.html").read_text(encoding="utf-8")
+        assert "broken visual field reference" in legacy_html
+
+        for html_file in (tmp / "portal").rglob("*.html"):
+            content = html_file.read_text(encoding="utf-8")
+            assert "\u2014" not in content and "\u2013" not in content, f"Forbidden dash in {html_file}"
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def test_v11_unified_backend_e2e_sharepoint_and_privacy() -> None:
+    import re
+    import zipfile
+    from scripts.build_demo_portal import build_demo
+
+    # 1. SQL pretty-formatter + comment preservation + placeholder safety
+    sql_one_liner = "SELECT MANDT, MATNR AS MaterialKey FROM sapsr3.MARA WHERE MANDT = '{{SapClient}}' AND LVORM IS NULL ORDER BY MATNR"
+    formatted_sql = format_sql(sql_one_liner)
+    assert "SELECT" in formatted_sql and "\nFROM" in formatted_sql and "{{SapClient}}" in formatted_sql
+    hand_indented = "-- Keep author layout\nSELECT\n    a,\n    b\nFROM dbo.T"
+    assert format_sql(hand_indented) == hand_indented
+
+    # 2. PQ Step-by-step interpreter UTF-16 code-unit span accuracy (including surrogate pairs)
+    m_with_emoji = 'let\n    Tag = "\U0001f680 Launch",\n    Cleaned = Table.SelectRows(Src, each [Tag] <> Tag)\nin\n    Cleaned'
+    pq_steps = interpret_query(m_with_emoji)
+    utf16_units = m_with_emoji.encode("utf-16-le")
+    assert len(pq_steps) == 2
+    st2 = pq_steps[1]
+    sliced = utf16_units[st2["start"] * 2 : st2["end"] * 2].decode("utf-16-le")
+    assert "Cleaned" in sliced and "Table.SelectRows" in sliced, f"UTF-16 slice mismatch: {sliced!r}"
+
+    # 3. Dataflow Gen1 strip_data_locations + Gen2 Lakehouse destination parsing
+    raw_df_model = {
+        "name": "Secure DF",
+        "pbi:dataLocations": [{"path": "https://adls.dfs.core.windows.net/secret?sig=SUPERSECRET"}],
+        "entities": [
+            {
+                "name": "Orders",
+                "partitions": [{"name": "Part1", "location": "https://blob.core.windows.net/p1?sv=2024&sig=SECRET2"}],
+                "attributes": [{"name": "OrderId", "dataType": "int64"}],
+            }
+        ],
+        "pbi:mashup": {"document": 'section Section1;\nshared Orders = let Source = Sql.Database("srv", "db") in Source;\n'},
+    }
+    stripped = strip_data_locations(raw_df_model)
+    dumped_stripped = json.dumps(stripped)
+    assert "SUPERSECRET" not in dumped_stripped and "SECRET2" not in dumped_stripped
+    assert "pbi:mashup" in stripped
+
+    gen2_parsed = parse_dataflow_definition(
+        {"id": "df-g2", "name": "Gen2 Sales"},
+        {
+            "format": "FabricDataflowGen2",
+            "mashup_pq": 'section Section1;\nshared fact_sales = let Source = Sql.Database("sql-prod", "ERP") in Source;\n',
+            "query_metadata": {
+                "queriesMetadata": {
+                    "fact_sales": {
+                        "loadEnabled": True,
+                        "destinationSettings": {
+                            "kind": "Lakehouse",
+                            "itemName": "lh_gold",
+                            "schemaName": "dbo",
+                            "tableName": "fact_sales",
+                        },
+                    }
+                }
+            },
+        },
+    )
+    assert gen2_parsed["generation"] == "Gen2"
+    assert gen2_parsed["queries"][0]["destination"]["table"] == "fact_sales"
+    assert gen2_parsed["queries"][0]["destination"]["item_name"] == "lh_gold"
+
+    # 4. Full Demo Catalog: 4-tab UI invariant, L2->L1 Dataflows, E2E Measure Doc, CLI, SharePoint Export & Anonymous Scrubbing
+    tmp = Path(tempfile.mkdtemp(prefix="pbidoc_v11_unified_"))
+    try:
+        idx = build_demo(tmp)
+        idx_html = idx.read_text(encoding="utf-8")
+
+        # Strict 4-Tab Calm UI invariant & zero iframes on index.html
+        tab_ids = re.findall(r'class="top-tab[^"]*"\s+data-tab="([^"]+)"', idx_html)
+        assert tab_ids == ["tab-portfolio", "tab-workspaces", "tab-lineage", "tab-health"], f"Unexpected tabs: {tab_ids}"
+        assert "<iframe" not in idx_html.lower(), "Forbidden <iframe> found in portal index.html"
+        assert "Fabric Dataflow Gen2" in idx_html
+
+        # Multi-hop L1 + L2 Dataflow lineage on OTIF model page
+        otif_html = (tmp / "portal" / "models" / "enterprise-core-semantic-models-global-supply-chain-otif-core.html").read_text(encoding="utf-8")
+        assert "Layer L1 Direct" in otif_html
+        assert "Layer L2 Upstream" in otif_html
+        assert "Measure Doc (.md)" in otif_html
+        assert "Trace to SQL" in otif_html
+
+        # Broken visual column must NOT falsely resolve to table node in E2E graph
+        store = CatalogStore(tmp)
+        mcp_engine = CatalogMcpEngine(store)
+        analyses = mcp_engine._load_analyses()
+        graph = build_e2e_graph(store, analyses)
+        assert resolve_field_node_id(graph, "ds-legacy", "Fact Spend", "DeletedRebateColumn", "column") is None
+        assert resolve_field_node_id(graph, "ds-otif", "Dim Material", "MaterialKey", "column") is not None
+
+        # CLI `measure-doc` & `export-site`
+        md_path = tmp / "DimMaterial_MeasureDoc.md"
+        rc_md = cli_main(["measure-doc", "OTIF %", "--catalog", str(tmp), "-o", str(md_path)])
+        assert rc_md == 0 and md_path.is_file()
+        md_txt = md_path.read_text(encoding="utf-8")
+        assert "OTIF %" in md_txt and "CV_SD_DELIVERY_OTIF" in md_txt
+        assert "\u2014" not in md_txt and "\u2013" not in md_txt
+
+        sp_single = tmp / "SharePoint_Single.html"
+        rc_sp = cli_main(["export-site", "--catalog", str(tmp), "--format", "single", "-o", str(sp_single)])
+        assert rc_sp == 0 and sp_single.is_file()
+        sp_txt = sp_single.read_text(encoding="utf-8")
+        assert "PBIDOC_SHELL" in sp_txt and "e2e_graph.js" in sp_txt
+
+        zip_out = tmp / "Portal_Bundle.zip"
+        build_site_export(store, zip_out, anonymous=True, include_aspx=True, single_file_only=False)
+        with zipfile.ZipFile(zip_out, "r") as zf:
+            names = zf.namelist()
+            assert any(n.endswith("/index.html") for n in names)
+            assert any(n.endswith("/index.aspx") for n in names)
+            assert any(n.endswith("/PBI_Documentation_Portal_SharePoint.html") for n in names)
+
+        # Anonymous report literal scrubbing check
+        dirty_layout = {
+            "format": "PBIR",
+            "report_filters": ["Customer[Name] = 'TopSecretClient'"],
+            "filter_items": [{"target": "Customer[Name]", "type": "Categorical", "condition": "= 'TopSecretClient'"}],
+            "pages": [
+                {
+                    "id": "p1",
+                    "name": "Secret Page",
+                    "filters": ["Region[Code] = 'CONFIDENTIAL_REGION'"],
+                    "filter_items": [{"target": "Region[Code]", "type": "Categorical", "condition": "= 'CONFIDENTIAL_REGION'"}],
+                    "visuals": [
+                        {
+                            "id": "v1",
+                            "type": "slicer",
+                            "title": "Client Filter",
+                            "selection": ["TopSecretClient"],
+                            "text": "Private board commentary",
+                            "filters": ["Customer[Tier] = 'VIPOnly'"],
+                            "filter_items": [{"target": "Customer[Tier]", "type": "Categorical", "condition": "= 'VIPOnly'"}],
+                            "fields": [],
+                        }
+                    ],
+                }
+            ],
+        }
+        clean_layout = redact_report_layout_literals(dirty_layout)
+        clean_blob = json.dumps(clean_layout)
+        assert "TopSecretClient" not in clean_blob
+        assert "CONFIDENTIAL_REGION" not in clean_blob
+        assert "Private board commentary" not in clean_blob
+        assert "VIPOnly" not in clean_blob
+
+        # Deleted upstream dataflow governance warning check
+        del_analysis = analyze_model(
+            {"id": "ds-del", "name": "Broken DF Model", "workspace": "WS", "workspace_id": "ws-1"},
+            {
+                "definition/model.tmdl": "model Model\n",
+                "definition/tables/T1.tmdl": (
+                    "table T1\n\tcolumn Id\n\t\tdataType: int64\n\t\tsourceColumn: Id\n"
+                    "\tpartition T1 = m\n\t\tmode: import\n\t\tsource =\n"
+                    "\t\t\tlet\n"
+                    "\t\t\t\tSource = PowerPlatform.Dataflows(null),\n"
+                    "\t\t\t\tWs = Source{[workspaceId=\"ws-1\"]}[Data],\n"
+                    "\t\t\t\tDf = Ws{[dataflowId=\"df-missing-ghost\"]}[Data],\n"
+                    "\t\t\t\tEnt = Df{[entity=\"GhostEntity\"]}[Data]\n"
+                    "\t\t\tin\n"
+                    "\t\t\t\tEnt\n"
+                ),
+            },
+            dataflows={
+                "df-missing-ghost": {
+                    "id": "df-missing-ghost",
+                    "name": "df-missing-ghost",
+                    "workspace": "WS",
+                    "definition_status": "missing: HTTP 404 deleted in service",
+                }
+            },
+        )
+        assert any("df-missing-ghost" in f["detail"] for f in del_analysis["findings"]), f"Expected missing DF warning, got: {del_analysis['findings']}"
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def test_v11_clean_slate_single_model_export_and_sharepoint_publisher() -> None:
+    from scripts.build_demo_portal import build_demo
+
+    # 1. Verify SharePoint Document Library URL parser (direct folder, AllItems.aspx?id=..., .aspx file, non-SP rejection)
+    sp1_site, sp1_folder, sp1_file = parse_sharepoint_target(
+        "https://contoso.sharepoint.com/sites/BI_Hub/Shared%20Documents/Architecture"
+    )
+    assert sp1_site == "https://contoso.sharepoint.com/sites/BI_Hub"
+    assert sp1_folder == "/sites/BI_Hub/Shared Documents/Architecture"
+    assert sp1_file is None
+
+    sp2_site, sp2_folder, sp2_file = parse_sharepoint_target(
+        "https://contoso.sharepoint.com/sites/100200/Shared%20Documents/Forms/AllItems.aspx?id=%2Fsites%2F100200%2FShared%20Documents%2FDocs&viewid=abc"
+    )
+    assert sp2_site == "https://contoso.sharepoint.com/sites/100200"
+    assert sp2_folder == "/sites/100200/Shared Documents/Docs"
+    assert sp2_file is None
+
+    sp3_site, sp3_folder, sp3_file = parse_sharepoint_target(
+        "https://contoso.sharepoint.com/teams/DataOps/Shared%20Documents/MyPortal.html"
+    )
+    assert sp3_site == "https://contoso.sharepoint.com/teams/DataOps"
+    assert sp3_folder == "/teams/DataOps/Shared Documents"
+    assert sp3_file == "MyPortal.html"
+
+    rejected = False
+    try:
+        parse_sharepoint_target("https://example.com/not-sharepoint/folder")
+    except ValueError:
+        rejected = True
+    assert rejected, "Expected non-SharePoint URL to raise ValueError"
+
+    # 2. Verify Single-Model Standalone Export (zero external assets + zero sibling model leakage) & CatalogStore.clear()
+    tmp = Path(tempfile.mkdtemp(prefix="pbidoc_v11_single_model_"))
+    try:
+        idx = build_demo(tmp)
+        assert idx.is_file()
+        store = CatalogStore(tmp)
+
+        slug = "enterprise-core-semantic-models-global-supply-chain-otif-core"
+        out_single = tmp / "OTIF_Standalone.html"
+        build_single_model_export(store, slug, out_single, anonymous=True)
+        assert out_single.is_file()
+        txt = out_single.read_text(encoding="utf-8")
+        assert 'data-standalone-model="1"' in txt
+        assert "../assets/portal.css" not in txt
+        assert "../assets/e2e_graph.js" not in txt
+        assert "Global Supply Chain &amp; OTIF Core" in txt or "Global Supply Chain & OTIF Core" in txt
+        # Sibling models must NOT leak into scoped PBI_E2E_GRAPH
+        assert "Group Working Capital & Margin" not in txt
+        assert "clara.vance@northwind-global.example" not in txt, "Anonymous single-model export leaked owner email!"
+
+        # Verify Store.clear() resets everything cleanly
+        store.clear()
+        cleared = store.load()
+        assert len(cleared.get("models", {})) == 0
+        assert len(cleared.get("reports", {})) == 0
+        assert not (tmp / "portal" / "index.html").exists()
+
+        # 3. Verify Studio HTTP Empty State (themed HTML, never plain text), Single-Model HTTP Export & Reset API
+        httpd, _ = create_studio_server(tmp, host="127.0.0.1", port=0)
+        port = httpd.server_address[1]
+        t = threading.Thread(target=httpd.serve_forever, daemon=True)
+        t.start()
+        try:
+            base = f"http://127.0.0.1:{port}"
+            with urllib.request.urlopen(f"{base}/portal/index.html") as r:
+                empty_html = r.read().decode("utf-8")
+                ctype = r.headers.get("Content-Type", "")
+                assert r.status == 200 and "text/html" in ctype
+                assert "No Documentation Portal Generated Yet" in empty_html
+                assert "<!DOCTYPE html>" in empty_html
+
+            # Re-populate demo into tmp and test single-model HTTP export + reset-catalog endpoint
+            build_demo(tmp)
+            with urllib.request.urlopen(f"{base}/api/export-site?format=single&model={slug}") as r:
+                http_single = r.read().decode("utf-8")
+                assert r.status == 200 and 'data-standalone-model="1"' in http_single
+
+            req_reset = urllib.request.Request(
+                f"{base}/api/reset-catalog",
+                data=b"{}",
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(req_reset) as r:
+                res_reset = json.loads(r.read().decode("utf-8"))
+                assert res_reset["ok"] is True
+
+            with urllib.request.urlopen(f"{base}/api/status") as r:
+                st_after = json.loads(r.read().decode("utf-8"))
+                assert st_after["models_count"] == 0
+        finally:
+            httpd.shutdown()
+            httpd.server_close()
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def test_v11_studio_oauth_signin_cancel_and_error_resilience() -> None:
+    """Verify Studio OAuth PKCE sign-in, non-blocking /api/status, instant Cancel, and clean Entra HTTP 400 error surfacing."""
+    import base64
+    import io
+    import tempfile
+    import threading
+    import time
+    import urllib.error
+    import urllib.parse
+    import urllib.request
+    from unittest.mock import patch
+
+    import pbi_catalog.auth as auth_mod
+    from pbi_catalog.web_ui import create_studio_server
+
+    header = base64.urlsafe_b64encode(b'{"alg":"none","typ":"JWT"}').decode("ascii").rstrip("=")
+    payload = base64.urlsafe_b64encode(
+        json.dumps({"upn": "architect@contoso.com", "exp": int(time.time()) + 3600}).encode("utf-8")
+    ).decode("ascii").rstrip("=")
+    fake_jwt = f"{header}.{payload}.sig"
+
+    tmp = Path(tempfile.mkdtemp(prefix="pbi_v11_auth_"))
+    try:
+        httpd, _ = create_studio_server(tmp, host="127.0.0.1", port=0)
+        port = httpd.server_address[1]
+        threading.Thread(target=httpd.serve_forever, daemon=True).start()
+        base = f"http://127.0.0.1:{port}"
+        try:
+            opened_urls: list[str] = []
+
+            # 1. Start OAuth via /api/connect on a worker thread, verify /api/status never blocks, then Cancel
+            connect_res: dict = {}
+
+            def _call_connect() -> None:
+                req = urllib.request.Request(
+                    f"{base}/api/connect",
+                    data=b'{"mode":"oauth"}',
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with urllib.request.urlopen(req, timeout=10) as r:
+                    connect_res.update(json.loads(r.read().decode("utf-8")))
+
+            with patch.object(auth_mod.webbrowser, "open", side_effect=lambda u: (opened_urls.append(u), True)[1]):
+                t_conn = threading.Thread(target=_call_connect, daemon=True)
+                t_conn.start()
+                deadline = time.time() + 5.0
+                st = {}
+                while time.time() < deadline:
+                    with urllib.request.urlopen(f"{base}/api/status", timeout=2) as r:
+                        st = json.loads(r.read().decode("utf-8"))
+                    if st.get("auth", {}).get("pending_auth_url"):
+                        break
+                    time.sleep(0.05)
+
+                assert st["auth"]["auth_in_progress"] is True
+                assert "login.microsoftonline.com" in st["auth"]["pending_auth_url"]
+                assert len(opened_urls) == 1
+
+                # Click Cancel -> /api/connect must terminate cleanly within < 1s and clear auth_in_progress
+                req_cancel = urllib.request.Request(
+                    f"{base}/api/cancel-auth",
+                    data=b"{}",
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with urllib.request.urlopen(req_cancel, timeout=2) as r:
+                    assert json.loads(r.read().decode("utf-8"))["ok"] is True
+
+                t_conn.join(timeout=3.0)
+                assert not t_conn.is_alive()
+                assert connect_res.get("ok") is False
+
+                with urllib.request.urlopen(f"{base}/api/status", timeout=2) as r:
+                    st_cancelled = json.loads(r.read().decode("utf-8"))
+                assert st_cancelled["auth"]["auth_in_progress"] is False
+                assert st_cancelled["auth"]["authenticated"] is False
+
+            # 2. Complete full loopback OAuth redirect -> verify token exchange & principal
+            opened_urls.clear()
+            connect_res.clear()
+            with (
+                patch.object(auth_mod.webbrowser, "open", side_effect=lambda u: (opened_urls.append(u), True)[1]),
+                patch.object(auth_mod, "_post_token_endpoint", return_value={"access_token": fake_jwt, "refresh_token": "ref123"}),
+            ):
+                t_conn2 = threading.Thread(target=_call_connect, daemon=True)
+                t_conn2.start()
+                deadline = time.time() + 5.0
+                pending_url = ""
+                while time.time() < deadline:
+                    with urllib.request.urlopen(f"{base}/api/status", timeout=2) as r:
+                        pending_url = json.loads(r.read().decode("utf-8")).get("auth", {}).get("pending_auth_url", "")
+                    if pending_url:
+                        break
+                    time.sleep(0.05)
+
+                assert pending_url
+                qs = urllib.parse.parse_qs(urllib.parse.urlparse(pending_url).query)
+                redir = qs["redirect_uri"][0]
+                state_nonce = qs["state"][0]
+                with urllib.request.urlopen(f"{redir}/?code=mock_auth_code&state={urllib.parse.quote(state_nonce)}", timeout=5) as cb:
+                    assert cb.status == 200
+                    assert "Signed in with Microsoft" in cb.read().decode("utf-8")
+
+                t_conn2.join(timeout=3.0)
+                assert connect_res.get("ok") is True
+                assert connect_res["status"]["authenticated"] is True
+                assert connect_res["status"]["principal"] == "architect@contoso.com"
+
+            # 3. Verify _post_token_endpoint surfaces human-readable Entra JSON error_description on HTTP 400
+            err_payload = json.dumps({"error": "invalid_grant", "error_description": "AADSTS500200: User account is a personal Microsoft account.\r\nTrace ID: 123"}).encode("utf-8")
+            http_400 = urllib.error.HTTPError("https://login.microsoftonline.com/organizations/oauth2/v2.0/token", 400, "Bad Request", {}, io.BytesIO(err_payload))
+            with patch.object(auth_mod.urllib.request, "urlopen", side_effect=http_400):
+                try:
+                    auth_mod._post_token_endpoint("https://login.microsoftonline.com/organizations/oauth2/v2.0/token", b"grant_type=authorization_code")
+                    raise AssertionError("Expected RuntimeError on HTTP 400")
+                except RuntimeError as exc:
+                    assert "AADSTS500200" in str(exc)
+                    assert "HTTP Error 400: Bad Request" not in str(exc)
         finally:
             httpd.shutdown()
             httpd.server_close()
@@ -435,4 +988,8 @@ if __name__ == "__main__":
     test_end_to_end_portal_and_mcp()
     test_local_pbix_and_pbip_import_and_cli_file()
     test_web_studio_http_endpoints()
-    print("ALL 6 V1.0 TEST SUITES PASSED SUCCESSFULLY!")
+    test_v11_report_xray_star_schema_dataflow_and_dax()
+    test_v11_unified_backend_e2e_sharepoint_and_privacy()
+    test_v11_clean_slate_single_model_export_and_sharepoint_publisher()
+    test_v11_studio_oauth_signin_cancel_and_error_resilience()
+    print("ALL 10 V1.1 TEST SUITES PASSED SUCCESSFULLY!")

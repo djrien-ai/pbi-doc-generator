@@ -9,7 +9,7 @@ import html
 import re
 
 SECRET_KV_RE = re.compile(
-    r'(?i)\b((?:api[_-]?)?key|token|access_token|refresh_token|apikey|password|passwd|pwd|secret|client_secret|sig|signature|accountkey)'
+    r'(?i)\b((?:api[_-]?)?key|token|access_token|refresh_token|apikey|password|passwd|pwd|secret|client_secret|sig|signature|accountkey|fedauth|rtfa|spoidcrl|x-requestdigest)'
     r'(\s*[=:]\s*["\']?)([^&"\'\s;,)\]]+)'
 )
 BEARER_RE = re.compile(r'(?i)(bearer\s+)[A-Za-z0-9._~+/=-]{12,}')

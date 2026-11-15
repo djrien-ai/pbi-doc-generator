@@ -582,7 +582,7 @@ def _extract_hana_info(m_code):
 
 
 # ---------------------------------------------------------------------------
-# Section builders — each returns (section_html, sidebar_html)
+# Section builders - each returns (section_html, sidebar_html)
 # ---------------------------------------------------------------------------
 # Role labels for semantic visual rendering (ENGLISH)
 # ---------------------------------------------------------------------------
@@ -808,7 +808,7 @@ def build_report_pages(pages, sec_num):
             label_raw = (v.get("title") or vtype)
             label = None if outline_only else _fit_label(label_raw, vw)
             
-            tip = f'{vtype} — {int(vw)}×{int(vh)} @ ({int(x)},{int(y)})'
+            tip = f'{vtype} - {int(vw)}×{int(vh)} @ ({int(x)},{int(y)})'
             badge_off = offsets[n - 1]
             
             layer_name = "backgrounds" if outline_only else ("ui-controls" if _is_control(vtype) else "data-visuals")
