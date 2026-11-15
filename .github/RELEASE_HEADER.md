@@ -1,4 +1,4 @@
-![pbi-doc-generator v1.1 Interactive Portal, Report X-Ray & Live Lineage Walkthrough](https://raw.githubusercontent.com/djrien-ai/pbi-doc-generator/v1.1/docs/media/v1_1_showcase_walkthrough.gif)
+![pbi-doc-generator v1.1 Interactive Portal, Report X-Ray & Live Lineage Walkthrough](https://raw.githubusercontent.com/djrien-ai/pbi-doc-generator/main/docs/media/v1_1_showcase_walkthrough.gif)
 
 ## Download & Start in 30 Seconds (Windows - No Python Required)
 
@@ -9,6 +9,8 @@
    - *Power BI Service workspace note:* Documenting workspaces in the Power BI Service requires at least **Contributor** (or **Member** / **Admin**) access in the target workspace. Documenting local `.pbix`, `.pbip`, and `.xlsx` files works 100% offline.
    - *Upgrading from v1.0.0?* Version 1.1 automatically detects any existing local `v1.0` scan cache on your PC and gives you a 1-click **Start Clean for v1.1** prompt (automatically backing up `catalog_state.v1_0.bak.json`) so new Report X-Ray layouts, thin-report DAX, and Dataflow Gen1/Gen2 M-lineage are captured from a clean state.
 
+> **Try in Browser First:** [**Explore the Live Interactive `v1.1` Demo Portal**](https://djrien-ai.github.io/pbi-doc-generator/)
+>
 > **Prefer Python / macOS / Linux?** Run `pip install --upgrade "git+https://github.com/djrien-ai/pbi-doc-generator.git"` and start with `pbi-doc-generator`.
 >
 > **Saves your team time?** Consider [**supporting ongoing open-source development on Ko-fi**](https://ko-fi.com/rienscheerlinck) or starring the repository!

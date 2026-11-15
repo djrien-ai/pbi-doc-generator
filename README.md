@@ -1,19 +1,20 @@
 # Power BI Documentation, Report X-Ray & Live Lineage Studio (`pbi-doc-generator` v1.1)
 
-[![CI](https://github.com/djrien-ai/pbi-doc-generator/actions/workflows/ci.yml/badge.svg?branch=v1.1)](https://github.com/djrien-ai/pbi-doc-generator/actions/workflows/ci.yml)
+[![CI](https://github.com/djrien-ai/pbi-doc-generator/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/djrien-ai/pbi-doc-generator/actions/workflows/ci.yml)
+[![Latest Release](https://img.shields.io/github/v/release/djrien-ai/pbi-doc-generator?label=Latest%20Release&color=0284c7)](https://github.com/djrien-ai/pbi-doc-generator/releases/latest)
+[![Live Demo](https://img.shields.io/badge/Live_Demo-Explore_v1.1_Portal-2563eb)](https://djrien-ai.github.io/pbi-doc-generator/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-3776AB.svg)](https://www.python.org/)
 [![100% Local & Read-Only](https://img.shields.io/badge/Privacy-100%25_Local_%26_Read--Only-0f766e.svg)](SECURITY.md)
 [![LinkedIn](https://img.shields.io/badge/LinkedIn-Rien_Scheerlinck-0A66C2?logo=linkedin&logoColor=white)](https://www.linkedin.com/in/rienscheerlinck/)
 [![Support on Ko-fi](https://img.shields.io/badge/Support_on_Ko--fi-Buy_me_a_coffee-FF5E5B?logo=ko-fi&logoColor=white)](https://ko-fi.com/rienscheerlinck)
 
-> [!IMPORTANT]
-> **`v1.1.0-rc.1` Public Preview (Early Access)**
-> You are viewing the active **`v1.1` preview branch**, open for early testing ahead of next week's official `v1.1.0` release.
-> - **Windows Portable (No Python required):** [**Download `PBI_Doc_Generator_Windows_Portable.zip` (`v1.1.0-rc.1`)**](https://github.com/djrien-ai/pbi-doc-generator/releases/download/v1.1.0-rc.1/PBI_Doc_Generator_Windows_Portable.zip) -> Extract All -> run `PBI_Doc_Generator.exe`
-> - **Via `pip`:** `pip install --upgrade "git+https://github.com/djrien-ai/pbi-doc-generator.git@v1.1"` -> run `pbi-doc-generator`
-> - **Share feedback & get credited in `v1.1.0`:** Drop a quick test note in [**Early Access Hub (#20)**](https://github.com/djrien-ai/pbi-doc-generator/issues/20).
-> - **Looking for the current stable release (`v1.0.0`)?** Switch to [`main`](https://github.com/djrien-ai/pbi-doc-generator/tree/main) or [Latest Stable Release](https://github.com/djrien-ai/pbi-doc-generator/releases/latest).
+> [!TIP]
+> **Try `v1.1.0` Latest Stable Release in 30 Seconds**
+> - **Interactive Browser Demo (Zero Install):** [**Explore the Live `v1.1` Architecture Portal**](https://djrien-ai.github.io/pbi-doc-generator/)
+> - **Windows Portable (No Python required):** [**Download `PBI_Doc_Generator_Windows_Portable.zip`**](https://github.com/djrien-ai/pbi-doc-generator/releases/latest/download/PBI_Doc_Generator_Windows_Portable.zip) -> Extract All -> run `PBI_Doc_Generator.exe` *(or view the [Latest Release page](https://github.com/djrien-ai/pbi-doc-generator/releases/latest))*
+> - **Via `pip` (Windows / macOS / Linux):** `pip install --upgrade "git+https://github.com/djrien-ai/pbi-doc-generator.git"` -> run `pbi-doc-generator`
+> - **Upgrading from `v1.0.0`?** `v1.1` automatically detects any existing `v1.0` local scan cache and offers a 1-click **Start Clean for v1.1** reset (safely backing up `catalog_state.v1_0.bak.json`) so new Report X-Ray layouts, thin-report DAX, and Dataflow Gen1/Gen2 lineage are captured cleanly.
 
 Turn **Power BI Service / Microsoft Fabric Workspaces** and local **`.pbix` / `.pbip` / `.xlsx`** files into an interactive, searchable architecture portal. Trace any number on a report page from **Visual -> Report-Level DAX -> Semantic Model -> Power Query & Native SQL -> Dataflow Gen1 / Fabric Gen2 -> OneLake / Source Database**, 100% locally and read-only.
 
@@ -38,35 +39,35 @@ Most Power BI documentation tools stop at a single `.pbix` file, while Power BI'
    - Pretty-prints single-line DAX into clean **SQLBI-style formatting**, grouped by `Table -> Display Folder -> Dependency Tier`, with instant filter pills (`All`, `Used in Reports`, `Unused`) and end-to-end upstream/downstream trace links.
 4. **Scoped Export & 1-Click SharePoint Online Publishing**
    - Click **Export / Publish** from the catalog or from any individual semantic model page and choose your scope (**This Semantic Model** or **Entire Catalog**):
-     - **Print / Save as PDF** (clean A4 portrait executive layout)
+     - **Print / Save as PDF** (clean A4 portrait executive layout with stacked full-width vector **Star-Schema** diagrams)
      - **Standalone HTML** or **Offline Portal `.zip`**
      - **Data Dictionary** (`Word .doc`, `Markdown`, or `CSV`)
      - **SharePoint Online:** either upload directly in 1 click to a SharePoint Document Library URL or download a compressed `srcdoc`-safe single-file HTML portal (`export-site`).
-5. **Guided 3-Step Local Web Studio (`http://127.0.0.1:8765`)**
-   - **Zero Azure Admin Setup:** Sign in with your normal Microsoft work account (`Sign in with Microsoft` OAuth PKCE in your default browser, corporate `Power BI Web Window` SSO fallback, Azure CLI, or Service Principal).
-   - **Safe & Fast at Scale:** Progressive `1. Connect -> 2. Choose Workspaces -> 3. Scan & Build` workflow, parallel extraction (4 models / 8 reports concurrently), optional `--follow-outside` cross-workspace resolution, and explicit `Update Catalog` vs. `Clean Slate` scan modes.
-   - **100% Offline Local Mode:** Drag and drop local `.pbix`, `.pbip` / `.SemanticModel`, and Excel PowerPivot `.xlsx` files without signing in.
+5. **Guided 3-Step Local Web Studio & High-Speed Parallel Scanner (`http://127.0.0.1:8765`)**
+   - **Zero Azure Admin Setup:** Sign in with your normal Microsoft work account (`Sign in with Microsoft` OAuth PKCE with instant popup & auto-refresh, corporate `Power BI Web Window` SSO fallback, Azure CLI, or Service Principal).
+   - **10x-15x Faster Enterprise Scanning with Live ETA:** Progressive `1. Connect -> 2. Choose Workspaces -> 3. Scan & Build` workflow, 8-worker parallel inventory, 6-worker model TMDL and 8-worker report extraction, progressive `1s` Fabric LRO polling, persistent HTTP/1.1 TLS keep-alive pooling, and a **5-stage live progress bar with percentage and ETA** built for workspaces with hundreds of models and reports.
+   - **Safe Catalog Management & Offline Local Mode:** Automatic `v1.0 -> v1.1` upgrade detection with safe backup, `--follow-outside` cross-workspace resolution, explicit `Update Catalog` vs. `Clean Slate` modes, and 100% offline drag-and-drop for `.pbix`, `.pbip` / `.SemanticModel`, and Excel PowerPivot `.xlsx` files.
 6. **10-Tool Local Model Context Protocol (MCP) Server for AI Assistants**
    - Connect **VS Code GitHub Copilot**, **Claude Desktop**, **Cursor**, or **Antigravity** to your local catalog (`pbi-doc-generator mcp`) for instant visual-to-SQL impact analysis, DAX explanations, report layout inspection, and governance audits with automatic secret masking.
 
 ---
 
-## Quick Start (`v1.1.0-rc.1` Preview)
+## Quick Start
 
 ### Option 1: Portable Windows Download (No Python Required)
 
-1. [**Download `PBI_Doc_Generator_Windows_Portable.zip` (`v1.1.0-rc.1` Pre-release)**](https://github.com/djrien-ai/pbi-doc-generator/releases/download/v1.1.0-rc.1/PBI_Doc_Generator_Windows_Portable.zip) *(or view the [v1.1.0-rc.1 Pre-release page](https://github.com/djrien-ai/pbi-doc-generator/releases/tag/v1.1.0-rc.1))*.
+1. [**Download `PBI_Doc_Generator_Windows_Portable.zip` (Latest Stable Release)**](https://github.com/djrien-ai/pbi-doc-generator/releases/latest/download/PBI_Doc_Generator_Windows_Portable.zip) *(or view the [Latest Release page](https://github.com/djrien-ai/pbi-doc-generator/releases/latest))*.
 2. Right-click the downloaded ZIP file and choose **Extract All...**
 3. Open the extracted folder and double-click **`PBI_Doc_Generator.exe`** -> your browser opens **`http://127.0.0.1:8765`** automatically.
 
 ### Option 2: Install via `pip` (Python 3.10+ on Windows, macOS & Linux)
 
 ```bash
-pip install --upgrade "git+https://github.com/djrien-ai/pbi-doc-generator.git@v1.1"
+pip install --upgrade "git+https://github.com/djrien-ai/pbi-doc-generator.git"
 pbi-doc-generator
 ```
 
-*(Or on Windows with Python installed: `git clone -b v1.1 https://github.com/djrien-ai/pbi-doc-generator.git` and double-click **`Start_Studio.cmd`**.)*
+*(Or on Windows with Python installed: `git clone https://github.com/djrien-ai/pbi-doc-generator.git` and double-click **`Start_Studio.cmd`**.)*
 
 > [!NOTE]
 > **Power BI Service Workspace Role Prerequisite (`Contributor` or higher)**
