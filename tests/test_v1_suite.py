@@ -1794,6 +1794,73 @@ def test_v11_column_usage_and_broken_reference_recovery() -> None:
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+def test_start_studio_cmd_batch_launcher() -> None:
+    import os
+    import re
+    import subprocess
+    from unittest.mock import patch
+
+    # Verify zero-arg `pbi-doc-generator` dispatches to Web Studio on 127.0.0.1:8765
+    captured_studio: dict = {}
+    with patch("pbi_catalog.cli.run_web_studio", side_effect=lambda cat, **kw: captured_studio.update({"cat": cat, **kw})):
+        assert cli_main([]) == 0
+    assert captured_studio.get("host") == "127.0.0.1" and captured_studio.get("port") == 8765 and captured_studio.get("open_browser") is True
+
+    # Verify `python -m pbi_catalog --version` works when Scripts folder is not on PATH
+    res_mod = subprocess.run([sys.executable, "-m", "pbi_catalog", "--version"], cwd=str(ROOT), capture_output=True, text=True, timeout=15)
+    assert res_mod.returncode == 0 and "1.1.0" in (res_mod.stdout or ""), f"`python -m pbi_catalog --version` failed: {res_mod.stdout} {res_mod.stderr}"
+
+    cmd_file = ROOT / "Start_Studio.cmd"
+    assert cmd_file.is_file(), "Missing Start_Studio.cmd in repository root"
+    raw = cmd_file.read_text(encoding="utf-8")
+
+    # Static guard (runs on Linux & Windows): every & and parenthesis on echo/title lines must be ^-escaped
+    for lineno, line in enumerate(raw.splitlines(), start=1):
+        stripped = line.strip()
+        low = stripped.lower()
+        if low.startswith(("echo ", "title ")):
+            assert not re.search(r"(?<!\^)&", stripped), f"Unescaped '&' on line {lineno} of Start_Studio.cmd: {line!r}"
+            assert not re.search(r"(?<!\^)[()]", stripped), f"Unescaped '(' or ')' on line {lineno} of Start_Studio.cmd: {line!r}"
+
+    # Live cmd.exe execution guard on Windows (both with Python and simulated clean PC without Python)
+    if os.name == "nt":
+        res_ok = subprocess.run(
+            ["cmd.exe", "/c", str(cmd_file), "--help"],
+            cwd=str(ROOT),
+            capture_output=True,
+            text=True,
+            timeout=20,
+        )
+        combined_ok = (res_ok.stdout or "") + "\n" + (res_ok.stderr or "")
+        assert res_ok.returncode == 0, f"Start_Studio.cmd --help failed (rc={res_ok.returncode}):\n{combined_ok}"
+        assert "usage: pbi-doc-generator studio" in combined_ok, f"Unexpected Start_Studio.cmd output:\n{combined_ok}"
+        assert "is not recognized" not in combined_ok and "was unexpected at this time" not in combined_ok, combined_ok
+
+        tmp = Path(tempfile.mkdtemp(prefix="pbidoc_cmd_nopy_"))
+        try:
+            isolated_cmd = tmp / "Start_Studio.cmd"
+            shutil.copy2(cmd_file, isolated_cmd)
+            clean_env = dict(os.environ)
+            sys_root = os.environ.get("SystemRoot", r"C:\Windows")
+            clean_env["PATH"] = f"{sys_root}\\System32;{sys_root}"
+            res_nopy = subprocess.run(
+                ["cmd.exe", "/c", str(isolated_cmd)],
+                cwd=str(tmp),
+                env=clean_env,
+                input="\n",
+                capture_output=True,
+                text=True,
+                timeout=15,
+            )
+            combined_nopy = (res_nopy.stdout or "") + "\n" + (res_nopy.stderr or "")
+            assert res_nopy.returncode == 1, f"Expected rc=1 without Python, got {res_nopy.returncode}:\n{combined_nopy}"
+            assert "Python 3.10+ was not found" in combined_nopy, combined_nopy
+            assert "(no Python needed)" in combined_nopy, combined_nopy
+            assert "is not recognized" not in combined_nopy and "was unexpected at this time" not in combined_nopy, combined_nopy
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+
 if __name__ == "__main__":
     test_issue_12_tmdl_table_doc_comment()
     test_secret_masking_and_readonly_guard()
@@ -1809,4 +1876,5 @@ if __name__ == "__main__":
     test_v11_legacy_v10_cache_detection_and_clean_upgrade()
     test_v11_parallel_scanner_lro_and_progress_telemetry()
     test_v11_column_usage_and_broken_reference_recovery()
-    print("ALL 14 V1.1 TEST SUITES PASSED SUCCESSFULLY!")
+    test_start_studio_cmd_batch_launcher()
+    print("ALL 15 V1.1 TEST SUITES PASSED SUCCESSFULLY!")

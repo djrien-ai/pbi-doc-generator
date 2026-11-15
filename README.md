@@ -72,7 +72,7 @@ pip install --upgrade "git+https://github.com/djrien-ai/pbi-doc-generator.git"
 pbi-doc-generator
 ```
 
-*(Or on Windows with Python installed: `git clone https://github.com/djrien-ai/pbi-doc-generator.git` and double-click **`Start_Studio.cmd`**.)*
+*(Tip on Windows if `pip` or Python's `Scripts` folder is not on `PATH`: run `py -m pip install --upgrade "git+https://github.com/djrien-ai/pbi-doc-generator.git"` and start with `py -m pbi_catalog`. Or clone the repo and double-click **`Start_Studio.cmd`**.)*
 
 > [!NOTE]
 > **Power BI Service Workspace Role Prerequisite (`Contributor` or higher)**
