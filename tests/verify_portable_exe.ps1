@@ -38,7 +38,7 @@ try {
 
     # 1. Version check
     $verOut = & $exePath --version 2>&1 | Out-String
-    if ($LASTEXITCODE -ne 0 -or $verOut -notmatch "1\.0\.0") {
+    if ($LASTEXITCODE -ne 0 -or $verOut -notmatch "1\.\d+\.\d+") {
         throw "Version check failed (exit $LASTEXITCODE): $verOut"
     }
     Write-Host "[PASS] Clean-PATH --version check: $($verOut.Trim())"
@@ -78,7 +78,7 @@ try {
 
     # 3. Verify Studio UI HTML
     $uiResp = Invoke-WebRequest -Uri "$baseUrl/" -UseBasicParsing -TimeoutSec 5
-    if ($uiResp.Content -notmatch "Sign in with Microsoft" -or $uiResp.Content -notmatch "Select Project Folder") {
+    if ($uiResp.Content -notmatch "Sign in with Microsoft" -or $uiResp.Content -notmatch "Select Power BI File") {
         throw "Studio home page missing expected UI controls!"
     }
     Write-Host "[PASS] Studio Web UI HTML rendered (200 OK)"
@@ -140,24 +140,20 @@ table 'Dim Customer'
     }
     Write-Host "[PASS] Local .SemanticModel uploaded & Portal generated: $($impResp.model_name)"
 
-    # 5. Verify Portal Index, embedded Mermaid asset, and generated Semantic Model HTML page
+    # 5. Verify Portal Index and generated Semantic Model HTML page (native SVG Star-Schema + DAX catalog + Export modal)
     $portalHome = Invoke-WebRequest -Uri "$baseUrl/portal/index.html" -UseBasicParsing -TimeoutSec 5
     if ($portalHome.Content -notmatch "RetailAnalytics" -or $portalHome.Content -notmatch "sql-prod\.contoso\.local") {
         throw "Generated Portal index.html missing imported model or lineage source!"
-    }
-    $mermaidResp = Invoke-WebRequest -Uri "$baseUrl/portal/assets/mermaid.min.js" -UseBasicParsing -TimeoutSec 5
-    if ($mermaidResp.RawContentLength -lt 100000) {
-        throw "Embedded mermaid.min.js too small ($($mermaidResp.RawContentLength) bytes)!"
     }
     $modelHtmlFiles = Get-ChildItem -Path (Join-Path $catalogDir "portal\models") -Filter "*.html"
     if ($modelHtmlFiles.Count -lt 1) {
         throw "No model HTML page generated in portal/models!"
     }
     $modelPageResp = Invoke-WebRequest -Uri "$baseUrl/portal/models/$($modelHtmlFiles[0].Name)" -UseBasicParsing -TimeoutSec 5
-    if ($modelPageResp.Content -notmatch "Total Revenue" -or $modelPageResp.Content -notmatch "Avg Revenue per Customer") {
-        throw "Model HTML page missing expected DAX measures!"
+    if ($modelPageResp.Content -notmatch "Total Revenue" -or $modelPageResp.Content -notmatch "Avg Revenue per Customer" -or $modelPageResp.Content -notmatch "star-shell") {
+        throw "Model HTML page missing expected DAX measures or native Star-Schema diagram!"
     }
-    Write-Host "[PASS] Generated Portal HTML + Star-Schema + DAX catalog + embedded Mermaid JS ($($mermaidResp.RawContentLength) bytes) verified"
+    Write-Host "[PASS] Generated Portal HTML + native Star-Schema + DAX catalog verified"
 
     # 6. Verify pbixray native C-extension fails gracefully on invalid .pbix (proving pbixray DLLs imported cleanly without ImportError)
     $dummyBytes = [System.Text.Encoding]::ASCII.GetBytes("NOT_A_REAL_PBIX")

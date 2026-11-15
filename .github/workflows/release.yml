@@ -24,7 +24,7 @@ jobs:
       - name: Checkout E2E verification script
         uses: actions/checkout@v4
 
-      - name: Download exact v1.0.0 Portable ZIP artifact from release build
+      - name: Download Portable ZIP artifact from build run
         uses: actions/download-artifact@v4
         with:
           name: PBI_Doc_Generator_Windows_Portable
@@ -63,6 +63,7 @@ jobs:
         run: |
           pyinstaller --noconfirm --clean --onedir --noupx `
             --name PBI_Doc_Generator `
+            --collect-submodules pbi_catalog `
             --collect-all pbixray `
             --collect-all playwright `
             --hidden-import mermaid_js `
@@ -77,9 +78,10 @@ jobs:
       - name: Add START_HERE.txt & smoke-test compiled executable
         shell: pwsh
         run: |
-          & "dist/PBI_Doc_Generator/PBI_Doc_Generator.exe" --version
+          $ver = (& "dist/PBI_Doc_Generator/PBI_Doc_Generator.exe" --version | Out-String).Trim()
+          Write-Host "Built version: $ver"
           @(
-            "PBI Doc Generator v1.0 - Quick Start"
+            "$ver - Quick Start"
             "===================================="
             ""
             "1. Double-click PBI_Doc_Generator.exe in this folder."

@@ -3,6 +3,25 @@
 All notable changes to `pbi-doc-generator` are documented in this file.
 This project follows [Semantic Versioning](https://semver.org/).
 
+## [1.1.0] - Unreleased (Public Preview on branch `v1.1`)
+
+### Added
+- **Multi-Layer Dataflow Gen1 & Fabric Dataflow Gen2 Lineage:**
+  - Full **Dataflow Gen1** (`model.json`) extraction with `L1` / `L2+` chained dataflow and `ReferenceEntity` linked-entity resolution across workspaces, query role classification, and automatic privacy scrubbing of internal storage locations (contributed by `@andreasfelder` in PR #19).
+  - Native **Fabric Dataflow Gen2** (`mashup.pq` + `queryMetadata.json`) extraction with OneLake **Lakehouse** and **Warehouse** destination mapping, plus **Direct Lake** semantic model entity binding.
+- **Native SQL Formatter & Clickable Power Query Step Interpreter:** Pretty-prints embedded SQL queries (`Value.NativeQuery`, `Sql.Database`, `Snowflake`, `SapHana`, etc.) and explains M transformation steps in plain English with expandable raw M expressions (contributed by `@andreasfelder` in PR #19).
+- **Cloud Thin-Report Definitions & Slide-Over Report X-Ray Inspector:**
+  - Extracts cloud report definitions (`PBIR` and legacy `report.json`), report-local DAX measures bound to shared semantic models, page/visual filters, slicer selections, and broken visual field bindings (contributed by `@andreasfelder` in PR #19).
+  - New **Slide-Over Report & Dataflow X-Ray Drawer** keeping a calm 4-tab portal architecture (`Semantic Models`, `Workspaces & Reports`, `Live Lineage`, `Governance & Health`) with interactive **16:9 SVG page wireframes**, chart type glyphs, visual-group containers, and a 1-click broken-binding stepper.
+- **End-to-End Measure Lineage (`Visual -> DAX -> Power Query -> Dataflow -> SQL`):**
+  - Deep multi-hop lineage engine (`e2e_lineage.py`) and `pbi-doc-generator measure-doc` CLI export (contributed by `@andreasfelder` in PR #19).
+  - Expanded MCP server from 8 to **10 read-only tools**, adding `pbi_trace_measure_end_to_end` and `pbi_report_layout`.
+- **Unified `Export / Publish` Modal & SharePoint Online Publishing:**
+  - Scope exports to either **This Semantic Model** or the **Entire Catalog**: A4 Print / PDF, self-contained HTML, offline `.zip` archive, Data Dictionary (`Word` / `Markdown` / `CSV`), compressed `srcdoc`-safe single-file SharePoint HTML (`export-site`, contributed by `@andreasfelder`), and **direct 1-click upload to a SharePoint Online Document Library URL**.
+- **Enterprise Scale & Studio UX Overhaul:**
+  - Parallel workspace scanning (4 concurrent models, 8 concurrent reports), `--follow-outside` workspace boundary control, and thread-safe `catalog_state.json` persistence fixing Windows `WinError 5` file-locking collisions (contributed by `@andreasfelder` in PR #19).
+  - Progressive 3-step Web Studio workflow (`1. Connect -> 2. Choose Workspaces -> 3. Scan & Build`), deliberate workspace selection on tenants with `> 5` workspaces, `Sign Out / Switch Account`, and zero-dependency native HTML+SVG Star-Schema Explorer.
+
 ## [1.0.0] - 2026-11-12
 
 ### Added
@@ -12,7 +31,7 @@ This project follows [Semantic Versioning](https://semver.org/).
 - **Interactive 3-Panel Live Lineage Explorer:** End-to-end interactive SVG impact tracing from upstream data sources (28+ enterprise connectors including SAP HANA, SAP BW, Snowflake, Databricks, Fabric, SQL Server, SharePoint, BigQuery) through tables and columns to DAX measures and downstream reports.
 - **Structured DAX & Visual Power Query Catalog:** Auto-pretty-prints single-line DAX formulas, groups measures by `Table -> Display Folder -> Dependency Tier`, defaults to a fast `Compact Table` view with instant toggle to `Formatted Cards`, and renders step-by-step Power Query M transformation ribbons on crisp light-themed code blocks.
 - **Flexible Catalog Views:** Switch between `Grid`, sortable `List`, and `By Workspace` views with synchronized Light/Dark mode.
-- **Model Context Protocol (MCP) Server (`pbi-doc-generator mcp`):** Local read-only stdio MCP server with 7 tools (`list_catalog_overview`, `search_catalog`, `get_model_blueprint`, `trace_lineage`, `find_unused_and_health_risks`, `compare_models`, `get_workspace_report_map`) and automatic secret redaction.
+- **Model Context Protocol (MCP) Server (`pbi-doc-generator mcp`):** Local read-only stdio MCP server with automatic secret redaction.
 - **Interactive Star-Schema Mermaid Viewer:** Zoom, pan, fullscreen, hover preview, and click-to-pin relationship highlighting (contributed by `@jakubpokusa` in PR #10).
 - **Automated CI/CD & Portable Packaging:** GitHub Actions workflows for multi-version test matrices and automated zero-install `Windows_Portable.zip` + Python wheel builds on release tags.
 
