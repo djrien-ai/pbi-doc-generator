@@ -133,7 +133,7 @@ jobs:
         run: ./tests/verify_portable_exe.ps1 -ZipPath "dist/PBI_Doc_Generator_Windows_Portable.zip"
 
       - name: Upload Portable ZIP to workflow artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: PBI_Doc_Generator_Windows_Portable
           path: dist/PBI_Doc_Generator_Windows_Portable.zip
