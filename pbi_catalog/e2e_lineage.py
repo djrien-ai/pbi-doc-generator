@@ -735,6 +735,52 @@ def build_e2e_graph(store: CatalogStore, analyses: list[dict] | None = None) -> 
     }
 
 
+_RESOLVE_INDEX_CACHE: dict[tuple[int, int], tuple[dict, dict]] = {}
+
+
+def _get_resolve_index(nodes: dict) -> dict:
+    cache_key = (id(nodes), len(nodes))
+    hit = _RESOLVE_INDEX_CACHE.get(cache_key)
+    if hit is not None and hit[0] is nodes:
+        return hit[1]
+
+    rpt_measures: dict[tuple[str, str], str] = {}
+    ds_measures_tbl: dict[tuple[str, str, str], str] = {}
+    ds_measures_model: dict[tuple[str, str], str] = {}
+    ds_measures_any: dict[tuple[str, str], str] = {}
+    ds_tables: dict[str, list[tuple[str, dict]]] = collections.defaultdict(list)
+
+    for nid, n in nodes.items():
+        k = n.get("kind")
+        mid = n.get("model_id") or ""
+        if k == "measure":
+            nm_low = (n.get("name") or "").lower()
+            rid = n.get("report_id") or ""
+            if rid:
+                rpt_measures.setdefault((rid, nm_low), nid)
+                if mid:
+                    ds_measures_any.setdefault((mid, nm_low), nid)
+            elif mid:
+                tbl_low = (n.get("table") or "").lower()
+                ds_measures_tbl.setdefault((mid, tbl_low, nm_low), nid)
+                ds_measures_model.setdefault((mid, nm_low), nid)
+                ds_measures_any[(mid, nm_low)] = nid
+        elif k in ("table", "calc_table") and mid:
+            ds_tables[mid].append((nid, n))
+
+    idx = {
+        "rpt_measures": rpt_measures,
+        "ds_measures_tbl": ds_measures_tbl,
+        "ds_measures_model": ds_measures_model,
+        "ds_measures_any": ds_measures_any,
+        "ds_tables": ds_tables,
+    }
+    if len(_RESOLVE_INDEX_CACHE) >= 4:
+        _RESOLVE_INDEX_CACHE.clear()
+    _RESOLVE_INDEX_CACHE[cache_key] = (nodes, idx)
+    return idx
+
+
 def resolve_field_node_id(
     graph: dict,
     arg1: dict | str,
@@ -767,46 +813,49 @@ def resolve_field_node_id(
     if not prop or not dataset_id:
         return None
 
-    # 1. Thin-report measure check first
+    prop_low = prop.lower()
+    tname_low = tname.lower()
+    idx = _get_resolve_index(nodes)
+
+    # 1. Thin-report measure check first (O(1))
     if report_id:
         rpt_cand = f"m:{dataset_id}:rpt:{report_id}:{tname}[{prop}]"
         if rpt_cand in nodes:
             return rpt_cand
-        for nid, n in nodes.items():
-            if n.get("kind") == "measure" and n.get("report_id") == report_id and (n.get("name") or "").lower() == prop.lower():
-                return nid
+        rpt_hit = idx["rpt_measures"].get((report_id, prop_low))
+        if rpt_hit:
+            return rpt_hit
 
-    # 2. Model measure check (exact table first, then bare measure name in same dataset)
+    # 2. Model measure check (O(1) exact table first, then bare measure name in same dataset)
     if tname:
         m_exact = f"m:{dataset_id}:{tname}[{prop}]"
         if m_exact in nodes:
             return m_exact
-    for nid, n in nodes.items():
-        if n.get("kind") == "measure" and n.get("model_id") == dataset_id and not n.get("report_id"):
-            if (n.get("name") or "").lower() == prop.lower() and (not tname or (n.get("table") or "").lower() == tname.lower()):
-                return nid
-    if kind == "measure":
-        for nid, n in nodes.items():
-            if n.get("kind") == "measure" and n.get("model_id") == dataset_id and (n.get("name") or "").lower() == prop.lower():
-                return nid
-        return None
+        tbl_hit = idx["ds_measures_tbl"].get((dataset_id, tname_low, prop_low))
+        if tbl_hit:
+            return tbl_hit
+    else:
+        mdl_hit = idx["ds_measures_model"].get((dataset_id, prop_low))
+        if mdl_hit:
+            return mdl_hit
 
-    # 3. Calculated column or verified physical column / hierarchy on model table
-    for nid, n in nodes.items():
-        if n.get("model_id") != dataset_id or n.get("kind") not in ("table", "calc_table"):
-            continue
-        if tname and (n.get("name") or "").lower() != tname.lower():
+    if kind == "measure":
+        return idx["ds_measures_any"].get((dataset_id, prop_low))
+
+    # 3. Calculated column or verified physical column / hierarchy on model table (scoped to dataset_id tables only)
+    for nid, n in idx["ds_tables"].get(dataset_id, ()):
+        if tname and (n.get("name") or "").lower() != tname_low:
             continue
         real_t = n.get("name") or ""
         cc_id = f"c:{dataset_id}:{real_t}[{prop}]"
         if cc_id in nodes:
             return cc_id
         for c in n.get("columns") or []:
-            if (c.get("name") or "").lower() == prop.lower():
+            if (c.get("name") or "").lower() == prop_low:
                 c_exact = f"c:{dataset_id}:{real_t}[{c['name']}]"
                 return c_exact if c_exact in nodes else nid
-        if kind == "hierarchy" or prop.lower() in {"year", "quarter", "month", "day", "date"}:
-            if any(h.lower() == prop.lower() for h in (n.get("hierarchies") or [])) or prop.lower() in {
+        if kind == "hierarchy" or prop_low in {"year", "quarter", "month", "day", "date"}:
+            if any(h.lower() == prop_low for h in (n.get("hierarchies") or [])) or prop_low in {
                 "year",
                 "quarter",
                 "month",

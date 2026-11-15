@@ -1279,6 +1279,130 @@ def test_v11_legacy_v10_cache_detection_and_clean_upgrade() -> None:
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+def test_v11_parallel_scanner_lro_and_progress_telemetry() -> None:
+    """Verify persistent HTTP/1.1 connection reuse, progressive LRO polling, parallel scanner, and Studio 5-stage progress bar."""
+    import base64
+    import http.server
+    import time
+    from unittest.mock import patch
+    from pbi_catalog.web_ui import StudioState
+
+    # 1. Persistent HTTP/1.1 socket reuse + Retry-After: 20 progressive LRO polling (< 3.5s instead of 20s)
+    client_ports: set[int] = set()
+    tmdl_b64 = base64.b64encode(b"model Model\n\tculture: en-US\n").decode("ascii")
+
+    class _LroSrv(http.server.ThreadingHTTPServer):
+        daemon_threads = True
+
+    class _LroHandler(http.server.BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.1"
+
+        def log_message(self, fmt: str, *args) -> None:
+            return
+
+        def _reply(self, code: int, body_obj: dict, hdrs: dict | None = None) -> None:
+            raw = json.dumps(body_obj).encode("utf-8")
+            self.send_response(code)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(raw)))
+            self.send_header("Connection", "keep-alive")
+            for k, v in (hdrs or {}).items():
+                self.send_header(k, v)
+            self.end_headers()
+            self.wfile.write(raw)
+
+        def do_POST(self) -> None:
+            client_ports.add(self.client_address[1])
+            n = int(self.headers.get("Content-Length") or "0")
+            if n:
+                self.rfile.read(n)
+            p = self.server.server_address[1]
+            self._reply(202, {}, {"Location": f"http://127.0.0.1:{p}/v1/operations/op1", "Retry-After": "20"})
+
+        def do_GET(self) -> None:
+            client_ports.add(self.client_address[1])
+            if self.path.endswith("/result"):
+                self._reply(200, {"definition": {"parts": [{"path": "definition/model.tmdl", "payload": tmdl_b64}]}})
+            else:
+                self._reply(200, {"status": "Succeeded"})
+
+    srv = _LroSrv(("127.0.0.1", 0), _LroHandler)
+    srv_port = srv.server_address[1]
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        hdr_b = base64.urlsafe_b64encode(b'{"alg":"none"}').decode().rstrip("=")
+        pay_b = base64.urlsafe_b64encode(json.dumps({"upn": "u@contoso.com", "exp": int(time.time()) + 3600}).encode()).decode().rstrip("=")
+        tp = TokenProvider(mode="token", manual_token=f"{hdr_b}.{pay_b}.sig")
+        tp.set_manual_token(f"{hdr_b}.{pay_b}.sig")
+        ro = PowerBiReadOnlyClient(tp)
+        ro._proxies = {}
+        t0 = time.perf_counter()
+        with patch("pbi_catalog.api.FABRIC_BASE", f"http://127.0.0.1:{srv_port}/v1/"):
+            res_files = ro.get_model_tmdl_files("ws-1", "ds-1")
+        assert "definition/model.tmdl" in res_files
+        assert (time.perf_counter() - t0) < 4.0, "Progressive LRO should not sleep 20s!"
+        assert len(client_ports) == 1, f"Expected single persistent TCP client port across POST + LRO GETs, got {client_ports}"
+    finally:
+        srv.shutdown()
+        srv.server_close()
+
+    # 2. Parallel WorkspaceScanner + StudioState monotonic 5-stage progress telemetry
+    tmp = Path(tempfile.mkdtemp(prefix="pbi_v11_prog_"))
+    try:
+        st_state = StudioState(tmp)
+        st_state.start_scan_progress(workspaces_count=1, include_reports=True, include_dataflows=True)
+        pct_history: list[float] = []
+
+        def _track(evt: dict) -> None:
+            st_state.update_scan_progress(evt)
+            snap = st_state.get_scan_progress_snapshot()
+            pct_history.append(float(snap["percent"]))
+
+        tp2 = TokenProvider(mode="token", manual_token="dummy")
+        ro2 = PowerBiReadOnlyClient(tp2)
+        scanner = WorkspaceScanner(ro2, st_state.store, log_fn=st_state.log, progress_fn=_track)
+
+        with (
+            patch.object(
+                ro2,
+                "pbi_get_list",
+                side_effect=lambda p: (
+                    [{"id": "ws-1", "name": "Portfolio WS", "isOnDedicatedCapacity": True}]
+                    if p.startswith("groups?")
+                    else [{"id": f"ds-{i}", "name": f"Model {i}"} for i in range(1, 16)]
+                    if p.endswith("/datasets")
+                    else [{"id": f"rep-{i}", "name": f"Report {i}", "datasetId": "ds-1"} for i in range(1, 21)]
+                    if p.endswith("/reports")
+                    else [{"objectId": "df-1", "name": "DF 1", "generation": 1}]
+                    if p.endswith("/dataflows")
+                    else []
+                ),
+            ),
+            patch.object(ro2, "get_fabric_workspace_items", return_value=[]),
+            patch.object(ro2, "get_model_tmdl_files", return_value={"definition/model.tmdl": "model Model\n", "definition/tables/T.tmdl": "table T\n\tcolumn C\n\t\tdataType: string\n"}),
+            patch.object(ro2, "get_report_definition_files", return_value={"definition/pages/P1/page.json": '{"name":"P1","displayName":"Overview"}'}),
+            patch.object(ro2, "get_dataflow_definition", return_value={"name": "DF 1", "entities": [{"name": "E1"}]}),
+        ):
+            scanner.scan_inventory(workspace_ids=["ws-1"])
+            scanner.scan_model_definitions(workspace_ids=["ws-1"], refresh=True, include_access=False)
+            scanner.scan_report_definitions(workspace_ids=["ws-1"], refresh=True)
+            scanner.scan_dataflow_definitions(workspace_ids=["ws-1"], refresh=True)
+            generate_portal(
+                st_state.store,
+                progress_fn=lambda dn, tot, itm: _track({"phase": "portal", "done": dn, "total": tot, "item": itm}),
+            )
+            st_state.finish_scan_progress(ok=True)
+            final_snap = st_state.get_scan_progress_snapshot()
+            pct_history.append(float(final_snap["percent"]))
+
+        assert pct_history == sorted(pct_history), f"Progress % was not monotonic: {pct_history}"
+        assert final_snap["percent"] == 100.0
+        assert final_snap["counts"] == {"workspaces": 1, "models": 15, "reports": 20, "dataflows": 1}
+        assert all(sg["status"] == "done" for sg in final_snap["stages"])
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 if __name__ == "__main__":
     test_issue_12_tmdl_table_doc_comment()
     test_secret_masking_and_readonly_guard()
@@ -1292,4 +1416,5 @@ if __name__ == "__main__":
     test_v11_studio_oauth_signin_cancel_and_error_resilience()
     test_v11_crash_resilience_and_fault_isolation()
     test_v11_legacy_v10_cache_detection_and_clean_upgrade()
-    print("ALL 12 V1.1 TEST SUITES PASSED SUCCESSFULLY!")
+    test_v11_parallel_scanner_lro_and_progress_telemetry()
+    print("ALL 13 V1.1 TEST SUITES PASSED SUCCESSFULLY!")

@@ -13,7 +13,7 @@ import json
 import re
 import urllib.parse
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from .analyzer import analyze_model
 from .dataflows import parse_dataflow_definition
@@ -4326,13 +4326,25 @@ def _atomic_write_text(dest: Path, content: str) -> None:
     tmp.replace(dest)
 
 
-def generate_portal(store: CatalogStore, output_dir: str | Path | None = None, anonymous: bool = False) -> Path:
+def generate_portal(
+    store: CatalogStore,
+    output_dir: str | Path | None = None,
+    anonymous: bool = False,
+    progress_fn: Callable[[int, int, str], None] | None = None,
+) -> Path:
     """Generate the complete 4-tab Power BI Workspace, Report, Semantic Model & Lineage Portal."""
     out_root = Path(output_dir) if output_dir else (store.root / "portal")
     assets_dir = out_root / "assets"
     models_dir = out_root / "models"
     assets_dir.mkdir(parents=True, exist_ok=True)
     models_dir.mkdir(parents=True, exist_ok=True)
+
+    def _report_portal_prog(done_n: int, total_n: int, item_lbl: str) -> None:
+        if progress_fn is not None:
+            try:
+                progress_fn(done_n, max(1, total_n), item_lbl)
+            except Exception:
+                pass
 
     _atomic_write_text(assets_dir / "portal.css", PORTAL_CSS + "\n" + V11_WIDGETS_CSS)
     _atomic_write_text(assets_dir / "star_schema_widget.js", STAR_SCHEMA_WIDGET_JS)
@@ -4370,12 +4382,17 @@ def generate_portal(store: CatalogStore, output_dir: str | Path | None = None, a
     slug_by_ds_id: dict[str, str] = {}
     used_slugs: set[str] = set()
 
-    for ds_id, m_meta in sorted(
+    sorted_models = sorted(
         state["models"].items(),
         key=lambda kv: ((kv[1].get("workspace") or "").lower(), (kv[1].get("name") or "").lower()),
-    ):
+    )
+    portal_total_steps = max(1, len(sorted_models) * 2)
+    _report_portal_prog(0, portal_total_steps, "Analyzing semantic models & DAX lineage...")
+
+    for m_step_idx, (ds_id, m_meta) in enumerate(sorted_models, 1):
         bundle = store.read_tmdl_bundle(m_meta.get("name") or "", ds_id)
         if not bundle:
+            _report_portal_prog(m_step_idx, portal_total_steps, m_meta.get("name") or ds_id)
             continue
         base_slug = slugify(f"{m_meta.get('workspace') or ''}-{m_meta.get('name') or ''}") if len(state["workspaces"]) > 1 else slugify(m_meta.get("name") or "")
         slug = base_slug
@@ -4394,10 +4411,12 @@ def generate_portal(store: CatalogStore, output_dir: str | Path | None = None, a
             )
         except Exception as exc:
             portal_warnings.append(f"[ERR_MODEL_ANALYZE] Semantic model '{m_meta.get('name') or ds_id}': {mask_secrets(str(exc))}")
+            _report_portal_prog(m_step_idx, portal_total_steps, m_meta.get("name") or ds_id)
             continue
         used_slugs.add(slug)
         slug_by_ds_id[ds_id] = slug
         analyses.append((slug, analysis))
+        _report_portal_prog(m_step_idx, portal_total_steps, m_meta.get("name") or slug)
 
     try:
         e2e_graph = build_e2e_graph(store, [a for _, a in analyses])
@@ -4413,7 +4432,8 @@ def generate_portal(store: CatalogStore, output_dir: str | Path | None = None, a
     all_models_nav = [(s, a["workspace"], a["name"]) for s, a in analyses]
     written_model_files: set[str] = set()
     rendered_analyses: list[tuple[str, dict]] = []
-    for slug, analysis in analyses:
+    base_render_offset = len(sorted_models)
+    for r_step_idx, (slug, analysis) in enumerate(analyses, 1):
         try:
             model_html = render_model_html(
                 analysis,
@@ -4428,6 +4448,7 @@ def generate_portal(store: CatalogStore, output_dir: str | Path | None = None, a
             rendered_analyses.append((slug, analysis))
         except Exception as exc:
             portal_warnings.append(f"[ERR_MODEL_RENDER] Semantic model '{analysis.get('name') or slug}': {mask_secrets(str(exc))}")
+        _report_portal_prog(min(portal_total_steps, base_render_offset + r_step_idx), portal_total_steps, analysis.get("name") or slug)
     analyses = rendered_analyses
     state["errors"] = portal_warnings
 

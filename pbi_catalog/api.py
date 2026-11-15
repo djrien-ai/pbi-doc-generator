@@ -12,12 +12,16 @@ Features:
 from __future__ import annotations
 
 import base64
+import http.client
 import json
 import shutil
+import ssl
 import subprocess
 import tempfile
+import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
@@ -47,6 +51,9 @@ class PowerBiReadOnlyClient:
         self.prefer_curl = prefer_curl
         self.log_fn = log_fn
         self._curl_bin = shutil.which("curl.exe") or shutil.which("curl")
+        self._ssl_ctx = ssl.create_default_context()
+        self._proxies = urllib.request.getproxies()
+        self._tls = threading.local()
 
     def _assert_readonly(self, method: str, url: str) -> None:
         m = method.upper()
@@ -56,15 +63,72 @@ class PowerBiReadOnlyClient:
             return
         raise PermissionError(f"Blocked non-read-only HTTP call: {method} {url}")
 
+    def _get_persistent_conn(self, scheme: str, host: str, port: int) -> http.client.HTTPConnection:
+        conns: dict[tuple[str, str, int], http.client.HTTPConnection] = getattr(self._tls, "conns", None)
+        if conns is None:
+            conns = {}
+            self._tls.conns = conns
+        key = (scheme, host, port)
+        conn = conns.get(key)
+        if conn is None:
+            if scheme == "https":
+                conn = http.client.HTTPSConnection(host, port=port, timeout=120, context=self._ssl_ctx)
+            else:
+                conn = http.client.HTTPConnection(host, port=port, timeout=120)
+            conns[key] = conn
+        return conn
+
+    def _drop_persistent_conn(self, scheme: str, host: str, port: int) -> None:
+        conns: dict[tuple[str, str, int], http.client.HTTPConnection] | None = getattr(self._tls, "conns", None)
+        if conns:
+            old = conns.pop((scheme, host, port), None)
+            if old is not None:
+                try:
+                    old.close()
+                except Exception:
+                    pass
+
     def _request_urllib(self, method: str, url: str, token: str) -> HttpResponse:
-        headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
-        data = None
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/json",
+            "Connection": "keep-alive",
+        }
+        body_bytes: bytes | None = None
         if method.upper() == "POST":
             headers["Content-Type"] = "application/json"
-            data = b""
-        req = urllib.request.Request(url, data=data, headers=headers, method=method.upper())
+            headers["Content-Length"] = "0"
+            body_bytes = b""
+
+        if not self._proxies:
+            parsed = urllib.parse.urlsplit(url)
+            scheme = (parsed.scheme or "https").lower()
+            host = parsed.hostname or ""
+            port = parsed.port or (443 if scheme == "https" else 80)
+            target = (parsed.path or "/") + (f"?{parsed.query}" if parsed.query else "")
+            if host and scheme in ("https", "http"):
+                for conn_try in range(2):
+                    conn = self._get_persistent_conn(scheme, host, port)
+                    try:
+                        conn.request(method.upper(), target, body=body_bytes, headers=headers)
+                        resp = conn.getresponse()
+                        raw = resp.read()
+                        hdrs = {k.lower(): v for k, v in resp.getheaders()}
+                        if hdrs.get("connection", "").lower() == "close":
+                            self._drop_persistent_conn(scheme, host, port)
+                        return HttpResponse(
+                            status=resp.status,
+                            headers=hdrs,
+                            body=raw.decode("utf-8", errors="replace"),
+                        )
+                    except (http.client.HTTPException, OSError, EOFError) as exc:
+                        self._drop_persistent_conn(scheme, host, port)
+                        if conn_try == 1:
+                            raise urllib.error.URLError(exc) from exc
+
+        req = urllib.request.Request(url, data=body_bytes, headers=headers, method=method.upper())
         try:
-            with urllib.request.urlopen(req, timeout=120) as resp:
+            with urllib.request.urlopen(req, timeout=120, context=self._ssl_ctx) as resp:
                 hdrs = {k.lower(): v for k, v in resp.headers.items()}
                 body = resp.read().decode("utf-8", errors="replace")
                 return HttpResponse(status=resp.status, headers=hdrs, body=body)
@@ -119,7 +183,7 @@ class PowerBiReadOnlyClient:
         finally:
             hdr_path.unlink(missing_ok=True)
 
-    def request(self, method: str, url: str, max_retries: int = 4) -> HttpResponse:
+    def request(self, method: str, url: str, max_retries: int = 6) -> HttpResponse:
         self._assert_readonly(method, url)
         for attempt in range(1, max_retries + 1):
             token = self.token_provider.get_token()
@@ -183,10 +247,20 @@ class PowerBiReadOnlyClient:
             location = resp.headers.get("location") or ""
             if not location:
                 raise RuntimeError("HTTP 202 without Location header on getDefinition.")
-            wait_sec = max(2, int(resp.headers.get("retry-after") or 2))
+            # Fabric returns a static Retry-After: 20 header on 202 Accepted even when definitions
+            # finish in < 1s. Progressive polling (1s -> 2s -> 4s -> 8s -> server hint) cuts LRO latency ~10x
+            # with zero extra API calls on fast definitions while backing off politely on huge models.
+            try:
+                server_hint = max(1.0, float(resp.headers.get("retry-after") or 2.0))
+            except ValueError:
+                server_hint = 5.0
+            poll_schedule = (1.0, 2.0, 4.0, 8.0)
+            poll_idx = 0
             deadline = time.time() + 300
             definition = {}
             while time.time() < deadline:
+                wait_sec = poll_schedule[poll_idx] if poll_idx < len(poll_schedule) else min(server_hint, 12.0)
+                poll_idx += 1
                 time.sleep(wait_sec)
                 poll = self.request("GET", location)
                 state = poll.json()
@@ -199,8 +273,6 @@ class PowerBiReadOnlyClient:
                     break
                 if st == "Failed":
                     raise RuntimeError(f"Fabric getDefinition failed: {json.dumps(state.get('error') or {})}")
-                if poll.headers.get("retry-after"):
-                    wait_sec = max(1, int(poll.headers["retry-after"]))
             else:
                 raise TimeoutError("Fabric getDefinition timed out after 5 minutes.")
         else:

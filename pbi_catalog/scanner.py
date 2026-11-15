@@ -7,7 +7,7 @@ from __future__ import annotations
 import hashlib
 import re
 import time
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Callable
 
@@ -37,18 +37,34 @@ from .store import (
 class WorkspaceScanner:
     """Orchestrates incremental read-only scanning of Power BI workspaces, models, reports, and dataflows."""
 
-    def __init__(self, client: PowerBiReadOnlyClient, store: CatalogStore, log_fn: Callable[[str], None] | None = None):
+    def __init__(
+        self,
+        client: PowerBiReadOnlyClient,
+        store: CatalogStore,
+        log_fn: Callable[[str], None] | None = None,
+        progress_fn: Callable[[dict], None] | None = None,
+    ):
         self.client = client
         self.store = store
-        self.definition_workers = 4
+        self.inventory_workers = 8
+        self.definition_workers = 6
         self.report_workers = 8
         self.follow_outside = False
         self.log = log_fn or (lambda msg: print(msg))
+        self.progress = progress_fn
+
+    def _emit(self, **payload) -> None:
+        if self.progress is not None:
+            try:
+                self.progress(payload)
+            except Exception:
+                pass
 
     def scan_inventory(self, workspace_filter: str = "", workspace_ids: list[str] | None = None) -> dict:
         """Step 1: List visible workspaces and collect reports, semantic models, dataflows (Gen1/Gen2), and links."""
         state = self.store.load()
         self.log("Fetching visible Power BI workspaces...")
+        self._emit(phase="inventory", done=0, total=1, item="Listing Power BI workspaces...")
 
         capacities: dict[str, str] = {}
         try:
@@ -85,9 +101,15 @@ class WorkspaceScanner:
         set_scan_scope(state, [w["id"] for w in chosen], follow_outside=bool(self.follow_outside))
         self.log(f"Scanning inventory for {len(chosen)} workspace(s)...")
 
+        datasource_jobs: list[tuple[str, str, str, str]] = []
+        total_m_discovered = 0
+        total_r_discovered = 0
+        total_df_discovered = 0
+
         for idx, ws in enumerate(chosen, 1):
             ws_id = ws["id"]
             ws_name = ws["name"]
+            self._emit(phase="inventory", done=idx - 1, total=max(1, len(chosen)), item=f"Listing items in {ws_name}...")
             prev_reports = {rid: r for rid, r in state["reports"].items() if r.get("workspace_id") == ws_id}
             prev_dfs = {did: d for did, d in state["dataflows"].items() if d.get("workspace_id") == ws_id}
             state["reports"] = {rid: r for rid, r in state["reports"].items() if r.get("workspace_id") != ws_id}
@@ -131,29 +153,26 @@ class WorkspaceScanner:
                 for d in self.client.pbi_get_list(f"groups/{ws_id}/datasets"):
                     m_count += 1
                     ds_id = d["id"]
+                    ds_name = d.get("name") or ""
                     ws_ds_ids.add(ds_id)
                     prev_m = state["models"].get(ds_id) or {}
-                    sources = prev_m.get("datasources", [])
-                    try:
-                        sources = self.client.pbi_get_list(f"groups/{ws_id}/datasets/{ds_id}/datasources")
-                    except Exception:
-                        pass
                     state["models"][ds_id] = {
                         "id": ds_id,
-                        "name": d.get("name") or "",
+                        "name": ds_name,
                         "workspace_id": ws_id,
                         "workspace": ws_name,
                         "configured_by": d.get("configuredBy") or "",
                         "created_date": d.get("createdDate") or "",
                         "target_storage_mode": d.get("targetStorageMode") or "",
                         "is_refreshable": bool(d.get("isRefreshable")),
-                        "datasources": sources,
+                        "datasources": prev_m.get("datasources", []),
                         "last_refresh": prev_m.get("last_refresh", {}),
                         "permissions": prev_m.get("permissions", []),
                         "workspace_users": prev_m.get("workspace_users", []),
                         "definition_status": prev_m.get("definition_status", "pending"),
                         "definition_read_at": prev_m.get("definition_read_at", ""),
                     }
+                    datasource_jobs.append((ws_id, ws_name, ds_id, ds_name))
                 for old_id in [
                     mid for mid, m in state["models"].items() if m.get("workspace_id") == ws_id and mid not in ws_ds_ids
                 ]:
@@ -251,9 +270,49 @@ class WorkspaceScanner:
                 pass
 
             ws["last_scanned"] = utc_now_iso()
-            self.store.save(state)
+            total_m_discovered += m_count
+            total_r_discovered += r_count
+            total_df_discovered += df_count
             self.log(f"  [{idx}/{len(chosen)}] {ws_name}: {m_count} models, {r_count} reports, {df_count} dataflows")
 
+        self._emit(
+            phase="inventory",
+            event="counts",
+            workspaces_total=len(chosen),
+            models_total=total_m_discovered,
+            reports_total=total_r_discovered,
+            dataflows_total=total_df_discovered,
+            done=0,
+            total=max(1, len(datasource_jobs)),
+            item="Reading gateway & datasource bindings...",
+        )
+
+        if datasource_jobs:
+            total_ds = len(datasource_jobs)
+            if total_ds > 10:
+                self.log(f"Reading gateway & datasource bindings for {total_ds} semantic model(s) in parallel...")
+
+            def _fetch_ds_sources(job: tuple[str, str, str, str]) -> tuple[str, str, str, list[dict] | None]:
+                w_id, w_nm, d_id, d_nm = job
+                try:
+                    return d_id, w_nm, d_nm, self.client.pbi_get_list(f"groups/{w_id}/datasets/{d_id}/datasources")
+                except Exception:
+                    return d_id, w_nm, d_nm, None
+
+            pool = ThreadPoolExecutor(max_workers=max(1, self.inventory_workers))
+            try:
+                futs = [pool.submit(_fetch_ds_sources, j) for j in datasource_jobs]
+                for done_i, fut in enumerate(as_completed(futs), 1):
+                    d_id, w_nm, d_nm, srcs = fut.result()
+                    if srcs is not None and d_id in state["models"]:
+                        state["models"][d_id]["datasources"] = srcs
+                    self._emit(phase="inventory", done=done_i, total=total_ds, item=d_nm)
+                    if total_ds > 10 and (done_i % 40 == 0 or done_i == total_ds):
+                        self.log(f"  Datasource bindings: [{done_i}/{total_ds}] ({w_nm} / {d_nm})")
+            finally:
+                pool.shutdown(wait=False, cancel_futures=True)
+
+        self.store.save(state)
         return state
 
     def scan_model_definitions(
@@ -283,26 +342,65 @@ class WorkspaceScanner:
         if limit > 0:
             models = models[:limit]
         if not models:
+            self._emit(phase="models", done=0, total=0, item="All semantic models up to date")
             return state
 
-        self.log(f"Reading full TMDL definitions for {len(models)} semantic model(s)...")
+        total_models = len(models)
+        self.log(f"Reading full TMDL definitions for {total_models} semantic model(s) ({self.definition_workers} parallel workers)...")
+        self._emit(phase="models", done=0, total=total_models, item=models[0].get("name", ""))
+
         ws_users_cache: dict[str, list[dict]] = {}
-        pool = ThreadPoolExecutor(max_workers=max(1, self.definition_workers))
-        futures = {m["id"]: pool.submit(self.client.get_model_tmdl_files, m["workspace_id"], m["id"]) for m in models}
-
-        try:
-            for idx, m in enumerate(models, 1):
-                ws_id = m["workspace_id"]
-                ds_id = m["id"]
-                self.log(f"  [{idx}/{len(models)}] {m['workspace']} / {m['name']}")
-
+        if include_access:
+            for ws_id in {m["workspace_id"] for m in models}:
                 try:
-                    files = futures[ds_id].result()
-                    self.store.write_tmdl_bundle(m["name"], ds_id, files)
+                    ws_users_cache[ws_id] = self.client.pbi_get_list(f"groups/{ws_id}/users")
+                    if ws_id in state["workspaces"]:
+                        state["workspaces"][ws_id]["users"] = ws_users_cache[ws_id]
+                except Exception:
+                    ws_users_cache[ws_id] = []
+
+        def _fetch_one_model(m_item: dict) -> tuple[dict, str | None, dict | None, list[dict] | None]:
+            w_id = m_item["workspace_id"]
+            d_id = m_item["id"]
+            err_msg: str | None = None
+            try:
+                files = self.client.get_model_tmdl_files(w_id, d_id)
+                self.store.write_tmdl_bundle(m_item["name"], d_id, files)
+            except Exception as exc:
+                err_msg = str(exc)
+
+            last_ref: dict | None = None
+            perms: list[dict] | None = None
+            if include_access:
+                try:
+                    refs = self.client.pbi_get_list(f"groups/{w_id}/datasets/{d_id}/refreshes?$top=1")
+                    if refs:
+                        r0 = refs[0]
+                        last_ref = {
+                            "status": r0.get("status", ""),
+                            "end_time": r0.get("endTime", ""),
+                            "refresh_type": r0.get("refreshType", ""),
+                        }
+                except Exception:
+                    pass
+                try:
+                    perms = self.client.pbi_get_list(f"groups/{w_id}/datasets/{d_id}/users")
+                except Exception:
+                    pass
+            return m_item, err_msg, last_ref, perms
+
+        pool = ThreadPoolExecutor(max_workers=max(1, self.definition_workers))
+        last_save = time.monotonic()
+        try:
+            futs = [pool.submit(_fetch_one_model, m) for m in models]
+            for done_idx, fut in enumerate(as_completed(futs), 1):
+                m, err_txt, last_ref, perms = fut.result()
+                ws_id = m["workspace_id"]
+                self.log(f"  [{done_idx}/{total_models}] {m['workspace']} / {m['name']}")
+                if err_txt is None:
                     m["definition_status"] = "ok"
                     m["definition_read_at"] = utc_now_iso()
-                except Exception as exc:
-                    err_txt = str(exc)
+                else:
                     low_err = err_txt.lower()
                     if any(tok in low_err for tok in ("403", "401", "forbidden", "insufficientprivileges", "unauthorized")):
                         hint = "Requires at least Contributor workspace role (Viewer role cannot extract TMDL definitions)"
@@ -312,36 +410,20 @@ class WorkspaceScanner:
                     state["errors"].append({"step": "getDefinition", "workspace": m["workspace"], "model": m["name"], "error": err_txt})
 
                 if include_access:
-                    if ws_id not in ws_users_cache:
-                        try:
-                            ws_users_cache[ws_id] = self.client.pbi_get_list(f"groups/{ws_id}/users")
-                            if ws_id in state["workspaces"]:
-                                state["workspaces"][ws_id]["users"] = ws_users_cache[ws_id]
-                        except Exception:
-                            ws_users_cache[ws_id] = []
-                    m["workspace_users"] = ws_users_cache[ws_id]
+                    m["workspace_users"] = ws_users_cache.get(ws_id, [])
+                    if last_ref is not None:
+                        m["last_refresh"] = last_ref
+                    if perms is not None:
+                        m["permissions"] = perms
 
-                    try:
-                        refs = self.client.pbi_get_list(f"groups/{ws_id}/datasets/{ds_id}/refreshes?$top=1")
-                        if refs:
-                            r0 = refs[0]
-                            m["last_refresh"] = {
-                                "status": r0.get("status", ""),
-                                "end_time": r0.get("endTime", ""),
-                                "refresh_type": r0.get("refreshType", ""),
-                            }
-                    except Exception:
-                        pass
-
-                    try:
-                        m["permissions"] = self.client.pbi_get_list(f"groups/{ws_id}/datasets/{ds_id}/users")
-                    except Exception:
-                        pass
-
-                self.store.save(state)
+                self._emit(phase="models", done=done_idx, total=total_models, item=m["name"])
+                if time.monotonic() - last_save > 3.5:
+                    self.store.save(state)
+                    last_save = time.monotonic()
         finally:
             pool.shutdown(wait=False, cancel_futures=True)
 
+        self.store.save(state)
         return state
 
     def scan_report_definitions(
@@ -378,24 +460,34 @@ class WorkspaceScanner:
             todo = todo[:limit]
 
         if todo:
-            self.log(f"Reading visual layouts & thin-report DAX for {len(todo)} Power BI report(s)...")
+            total_reps = len(todo)
+            self.log(f"Reading visual layouts & thin-report DAX for {total_reps} Power BI report(s) ({self.report_workers} parallel workers)...")
+            self._emit(phase="reports", done=0, total=total_reps, item=todo[0].get("name", ""))
+
+            def _fetch_one_report(r_item: dict) -> tuple[dict, dict | None, str | None]:
+                r_id = r_item["id"]
+                try:
+                    parts = self.client.get_report_definition_files(r_item["workspace_id"], r_id)
+                    layout = parse_report_definition_files(parts)
+                    ds_id = r_item.get("dataset_id") or layout.get("dataset_ref") or ""
+                    layout["report_id"] = r_id
+                    layout["dataset_id"] = ds_id
+                    self.store.write_report_layout(r_id, layout)
+                    return r_item, layout, None
+                except Exception as exc:
+                    return r_item, None, str(exc)
+
             pool = ThreadPoolExecutor(max_workers=max(1, self.report_workers))
-            futures = {r["id"]: pool.submit(self.client.get_report_definition_files, r["workspace_id"], r["id"]) for r in todo}
             found_measures = 0
             last_save = time.monotonic()
             try:
-                for idx, rep in enumerate(todo, 1):
-                    rep_id = rep["id"]
-                    try:
-                        parts = futures[rep_id].result()
-                        layout = parse_report_definition_files(parts)
+                futs = [pool.submit(_fetch_one_report, r) for r in todo]
+                for done_idx, fut in enumerate(as_completed(futs), 1):
+                    rep, layout, err_raw = fut.result()
+                    if err_raw is None and layout is not None:
                         ds_id = rep.get("dataset_id") or layout.get("dataset_ref") or ""
                         if ds_id and not rep.get("dataset_id"):
                             rep["dataset_id"] = ds_id
-                        layout["report_id"] = rep_id
-                        layout["dataset_id"] = ds_id
-                        self.store.write_report_layout(rep_id, layout)
-
                         p_cnt = len(layout.get("pages", []))
                         v_cnt = sum(len(p.get("visuals", [])) for p in layout.get("pages", []))
                         rm_cnt = len(layout.get("report_measures", []))
@@ -407,13 +499,13 @@ class WorkspaceScanner:
                         rep["visuals_count"] = rep["visual_count"] = v_cnt
                         rep["report_measures_count"] = rep["report_measure_count"] = rm_cnt
                         found_measures += rm_cnt
-                        if rm_cnt:
-                            self.log(
-                                f"  [{idx}/{len(todo)}] {rep.get('workspace')} / {rep.get('name')}: "
-                                f"{p_cnt} page(s), {v_cnt} visual(s), {rm_cnt} report-level measure(s)"
-                            )
-                    except Exception as exc:
-                        err = str(exc)
+                        extra_m = f", {rm_cnt} report-level measure(s)" if rm_cnt else ""
+                        self.log(
+                            f"  [{done_idx}/{total_reps}] {rep.get('workspace')} / {rep.get('name')}: "
+                            f"{p_cnt} page(s), {v_cnt} visual(s){extra_m}"
+                        )
+                    else:
+                        err = err_raw or "Unknown report definition error"
                         if any(t in err.lower() for t in ("403", "401", "forbidden", "unauthorized")):
                             err = f"No access to report definition (requires Contributor role or higher) - {err}"
                         rep["layout_status"] = "unavailable"
@@ -421,7 +513,10 @@ class WorkspaceScanner:
                         state["errors"].append(
                             {"step": "reportDefinition", "workspace": rep.get("workspace", ""), "report": rep.get("name", ""), "error": err}
                         )
-                    if time.monotonic() - last_save > 5:
+                        self.log(f"  [{done_idx}/{total_reps}] {rep.get('workspace')} / {rep.get('name')} (layout unavailable)")
+
+                    self._emit(phase="reports", done=done_idx, total=total_reps, item=rep.get("name", ""))
+                    if time.monotonic() - last_save > 4.0:
                         self.store.save(state)
                         last_save = time.monotonic()
             finally:
@@ -432,6 +527,8 @@ class WorkspaceScanner:
                 f"Report definitions read: {sum(r.get('pages_count', 0) for r in todo)} page(s), "
                 f"{sum(r.get('visuals_count', 0) for r in todo)} visual(s), {found_measures} report-level measure(s)."
             )
+        else:
+            self._emit(phase="reports", done=0, total=0, item="All report layouts up to date")
 
         if follow_shared_models:
             self.follow_shared_models(reps)
@@ -537,6 +634,9 @@ class WorkspaceScanner:
                 f"Reading Dataflow Gen1/Gen2 definitions ({len(dfs)} in selected workspaces, following upstream chains"
                 + (" across workspaces)..." if follow_outside else " within selection)...")
             )
+            self._emit(phase="dataflows", done=0, total=max(1, len(dfs)), item="Reading Dataflow definitions...")
+        else:
+            self._emit(phase="dataflows", done=0, total=0, item="No dataflows in selection")
 
         while queue:
             ws_id, df_id, depth = queue.pop(0)
@@ -655,6 +755,12 @@ class WorkspaceScanner:
             if time.monotonic() - last_save > 5:
                 self.store.save(state)
                 last_save = time.monotonic()
+            self._emit(
+                phase="dataflows",
+                done=len(done),
+                total=max(len(done), len(done) + len({(q[1] or '').lower() for q in queue if q[1]} - done)),
+                item=meta.get("name", df_id),
+            )
 
         if done:
             self.log(

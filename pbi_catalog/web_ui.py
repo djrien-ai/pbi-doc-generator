@@ -294,6 +294,112 @@ STUDIO_HTML = r"""<!DOCTYPE html>
       overflow-wrap: anywhere;
       margin-top: 14px;
     }
+    .scan-prog-card {
+      background: var(--surface-alt);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px 16px;
+      margin-bottom: 14px;
+    }
+    .scan-prog-hdr {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 9px;
+    }
+    .scan-prog-pct {
+      display: inline-block;
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-weight: 750;
+      font-size: 12.5px;
+      padding: 2px 9px;
+      border-radius: 999px;
+      font-variant-numeric: tabular-nums;
+    }
+    .scan-prog-time {
+      font-size: 12px;
+      color: var(--fg-muted);
+      font-variant-numeric: tabular-nums;
+    }
+    .scan-prog-track {
+      height: 10px;
+      background: var(--border);
+      border-radius: 999px;
+      overflow: hidden;
+      margin-bottom: 9px;
+    }
+    .scan-prog-fill {
+      height: 100%;
+      width: 1%;
+      background: linear-gradient(90deg, #0b63ce, #2563eb, #38bdf8);
+      border-radius: 999px;
+      transition: width 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+      position: relative;
+      overflow: hidden;
+    }
+    .scan-prog-fill::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.35), transparent);
+      animation: progShimmer 1.5s linear infinite;
+    }
+    @keyframes progShimmer {
+      0% { transform: translateX(-100%); }
+      100% { transform: translateX(100%); }
+    }
+    .scan-prog-sub {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+      font-size: 12px;
+      color: var(--fg-muted);
+      margin-bottom: 10px;
+    }
+    .scan-prog-item {
+      max-width: 460px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-variant-numeric: tabular-nums;
+    }
+    .scan-stage-strip {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .scan-stage-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 9px;
+      border-radius: 999px;
+      font-size: 11.5px;
+      font-weight: 600;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--fg-muted);
+      font-variant-numeric: tabular-nums;
+    }
+    .scan-stage-pill.active {
+      background: var(--accent-soft);
+      color: var(--accent);
+      border-color: var(--accent);
+      font-weight: 700;
+    }
+    .scan-stage-pill.done {
+      background: rgba(22, 163, 74, 0.12);
+      color: #15803d;
+      border-color: rgba(22, 163, 74, 0.32);
+    }
+    [data-theme="dark"] .scan-stage-pill.done {
+      color: #4ade80;
+    }
     details.subtle {
       margin-top: 12px;
       font-size: 12.5px;
@@ -452,6 +558,25 @@ STUDIO_HTML = r"""<!DOCTYPE html>
           </label>
         </div>
       </details>
+
+      <div id="scanProgressCard" class="scan-prog-card" style="display:none">
+        <div class="scan-prog-hdr">
+          <span style="display:flex;align-items:center;gap:9px;font-size:13px;font-weight:700;color:var(--fg)">
+            <span class="spin"></span>
+            <span id="spPhaseTitle">Stage 1: Discovering workspace inventory...</span>
+          </span>
+          <span style="display:flex;align-items:center;gap:9px">
+            <span id="spPctBadge" class="scan-prog-pct">1%</span>
+            <span id="spTiming" class="scan-prog-time">Elapsed 00:00</span>
+          </span>
+        </div>
+        <div class="scan-prog-track"><div id="spBarFill" class="scan-prog-fill" style="width:1%"></div></div>
+        <div class="scan-prog-sub">
+          <span id="spCurrentItem" class="scan-prog-item">Connecting to Power BI Service...</span>
+          <span id="spTotalsChip" style="font-weight:600"></span>
+        </div>
+        <div id="spStageStrip" class="scan-stage-strip"></div>
+      </div>
 
       <div id="scanBanner" class="inline-banner info" style="display:none;margin-top:0;margin-bottom:14px"></div>
 
@@ -822,23 +947,78 @@ async function refreshStatus() {
 
     updateWsSelectionUi();
 
+    var progCard = document.getElementById("scanProgressCard");
     if (st.busy) {
       wasBusy = true;
-      var lastLine = (st.logs && st.logs.length) ? st.logs[st.logs.length - 1] : "Scanning workspaces...";
-      setBanner("scanBanner", "info",
-        "<span style='display:flex;align-items:center;gap:10px'><span class='spin'></span><span><b>Scan in progress:</b> " + escHtml(lastLine) + "</span></span>"
-      );
+      setBanner("scanBanner", "", "");
+      if (progCard) {
+        progCard.style.display = "block";
+        var sp = st.scan_progress || {};
+        var pctVal = (typeof sp.percent === "number") ? sp.percent : 1;
+        var pctDisp = (pctVal >= 10 ? Math.round(pctVal) : pctVal.toFixed(1)) + "%";
+        var pIdx = sp.phase_index || 1;
+        var pTot = sp.phase_total || 5;
+        var pTitle = sp.phase_title || "Scanning workspaces...";
+        document.getElementById("spPhaseTitle").textContent = "Stage " + pIdx + " of " + pTot + ": " + pTitle;
+        document.getElementById("spPctBadge").textContent = pctDisp;
+        document.getElementById("spBarFill").style.width = Math.max(1, Math.min(100, pctVal)) + "%";
+
+        var elSec = Math.max(0, Math.floor(sp.elapsed_sec || 0));
+        var fmtClock = function(sec) {
+          var m = Math.floor(sec / 60), s = sec % 60;
+          return (m < 10 ? "0" : "") + m + ":" + (s < 10 ? "0" : "") + s;
+        };
+        var timeStr = "Elapsed " + fmtClock(elSec);
+        if (typeof sp.eta_sec === "number" && sp.eta_sec > 0) {
+          var etaS = Math.max(1, Math.round(sp.eta_sec));
+          var etaTxt = etaS >= 60
+            ? ("~" + Math.floor(etaS / 60) + "m " + (etaS % 60 < 10 ? "0" : "") + (etaS % 60) + "s remaining")
+            : ("~" + etaS + "s remaining");
+          timeStr += " \u2022 " + etaTxt;
+        }
+        document.getElementById("spTiming").textContent = timeStr;
+
+        var pDone = sp.phase_done || 0;
+        var pCnt = sp.phase_count || 0;
+        var curIt = sp.current_item || ((st.logs && st.logs.length) ? st.logs[st.logs.length - 1] : "Working...");
+        var subLeft = (pCnt > 0 ? ("[" + pDone + " / " + pCnt + "] ") : "") + curIt;
+        document.getElementById("spCurrentItem").textContent = subLeft;
+
+        var cts = sp.counts || {};
+        var chipParts = [];
+        if (cts.models > 0) chipParts.push(cts.models + " model" + (cts.models === 1 ? "" : "s"));
+        if (cts.reports > 0) chipParts.push(cts.reports + " report" + (cts.reports === 1 ? "" : "s"));
+        if (cts.dataflows > 0) chipParts.push(cts.dataflows + " dataflow" + (cts.dataflows === 1 ? "" : "s"));
+        document.getElementById("spTotalsChip").textContent = chipParts.join(" \u2022 ");
+
+        var stages = sp.stages || [];
+        var stripEl = document.getElementById("spStageStrip");
+        if (stripEl && stages.length) {
+          stripEl.innerHTML = stages.map(function(sg) {
+            var stCls = sg.status === "done" ? "done" : (sg.status === "active" ? "active" : "pending");
+            var ico = sg.status === "done" ? "&#10003;" : (sg.status === "active" ? "&#9679;" : "&#9675;");
+            var det = sg.detail ? (" (" + escHtml(sg.detail) + ")") : "";
+            return "<span class='scan-stage-pill " + stCls + "'><span>" + ico + "</span><span>" + escHtml(sg.label) + det + "</span></span>";
+          }).join("");
+        }
+      }
     } else if (wasBusy) {
       wasBusy = false;
+      if (progCard) progCard.style.display = "none";
       updateWsSelectionUi();
+      var doneElapsed = (st.scan_progress && st.scan_progress.elapsed_sec)
+        ? (" in " + Math.max(1, Math.round(st.scan_progress.elapsed_sec)) + "s")
+        : "";
       if (st.last_scan_error) {
         setBanner("scanBanner", "err", "<span><b>Scan failed:</b> " + escHtml(st.last_scan_error) + "</span>");
       } else {
         setBanner("scanBanner", "ok",
-          "<span><b>Portal ready!</b> All selected workspaces and models have been documented.</span>" +
+          "<span><b>Portal ready!</b> Documented " + st.models_count + " model(s)" + escHtml(doneElapsed) + ".</span>" +
           "<a class='btn btn-success' style='padding:6px 14px;font-size:12.5px' href='/portal/index.html'>Open Documentation Portal &rarr;</a>"
         );
       }
+    } else if (progCard) {
+      progCard.style.display = "none";
     }
   } catch (e) {}
 }
@@ -1034,9 +1214,18 @@ async function runScanAndBuild() {
   var modeWrap = document.getElementById("existingCatalogModeWrap");
   var hasExisting = !!(modeWrap && modeWrap.style.display !== "none");
   var cleanSlate = !!(hasExisting && cleanRadio && cleanRadio.checked);
-  setBanner("scanBanner", "info",
-    "<span style='display:flex;align-items:center;gap:10px'><span class='spin'></span><span>Starting " + (cleanSlate ? "clean " : "") + "background scan for <b>" + ids.length + " workspace(s)</b>...</span></span>"
-  );
+  setBanner("scanBanner", "", "");
+  var progCard = document.getElementById("scanProgressCard");
+  if (progCard) {
+    progCard.style.display = "block";
+    document.getElementById("spPhaseTitle").textContent = "Stage 1: Discovering workspace inventory...";
+    document.getElementById("spPctBadge").textContent = "1%";
+    document.getElementById("spBarFill").style.width = "1%";
+    document.getElementById("spTiming").textContent = "Elapsed 00:00";
+    document.getElementById("spCurrentItem").textContent = "Starting " + (cleanSlate ? "clean " : "") + "scan for " + ids.length + " workspace(s)...";
+    document.getElementById("spTotalsChip").textContent = "";
+    document.getElementById("spStageStrip").innerHTML = "";
+  }
   appendLog("Launching background scan for " + ids.length + " workspace(s)...");
   var res = await apiPost("/api/scan", {
     workspace_ids: ids,
@@ -1049,6 +1238,7 @@ async function runScanAndBuild() {
     anonymous: document.getElementById("chkAnon").checked
   });
   if (!res.ok) {
+    if (progCard) progCard.style.display = "none";
     setBanner("scanBanner", "err", "<span><b>Could not start scan:</b> " + escHtml(res.error) + "</span>");
   } else {
     wasBusy = true;
@@ -1265,8 +1455,10 @@ async function importLocalPath() {
   }
 }
 
-setInterval(refreshStatus, 1500);
-refreshStatus();
+(async function studioPollLoop() {
+  await refreshStatus();
+  setTimeout(studioPollLoop, (latestBusy || uiConnecting) ? 800 : 2000);
+})();
 </script>
 </body>
 </html>
@@ -1471,6 +1663,15 @@ def _render_portal_state_html(busy: bool, logs: list[str], models_count: int, re
     return page.encode("utf-8")
 
 
+_PHASE_META = {
+    "inventory": ("Inventory", "Reading Workspace Inventory & Datasource Bindings", 0.15),
+    "models": ("Semantic Models", "Reading Semantic Model Definitions (TMDL)", 1.50),
+    "reports": ("Report Layouts", "Reading Report Visual Layouts & Thin-Report DAX", 1.00),
+    "dataflows": ("Dataflows", "Reading Dataflow Gen1/Gen2 M Definitions", 1.00),
+    "portal": ("Build Portal", "Building Interactive Documentation & Lineage Portal", 0.08),
+}
+
+
 class StudioState:
     def __init__(self, catalog_dir: str | Path):
         self.store = CatalogStore(catalog_dir)
@@ -1479,8 +1680,164 @@ class StudioState:
         self.busy = False
         self.last_scan_error = ""
         self._op_lock = threading.Lock()
+        self._prog_lock = threading.Lock()
         self._models_mtime: float = -1.0
         self._models_count_cache: int = 0
+        self._prog: dict = {}
+
+    def start_scan_progress(self, workspaces_count: int, include_reports: bool, include_dataflows: bool) -> None:
+        order = ["inventory", "models"]
+        if include_reports:
+            order.append("reports")
+        if include_dataflows:
+            order.append("dataflows")
+        order.append("portal")
+        with self._prog_lock:
+            self._prog = {
+                "started_at": time.time(),
+                "finished_at": 0.0,
+                "order": order,
+                "current_phase": "inventory",
+                "current_item": "Listing Power BI workspaces...",
+                "counts_known": False,
+                "max_pct": 1.0,
+                "counts": {
+                    "workspaces": max(1, workspaces_count),
+                    "models": 0,
+                    "reports": 0,
+                    "dataflows": 0,
+                },
+                "phases": {
+                    k: {"done": 0, "total": 1 if k in ("inventory", "portal") else 0, "status": "active" if k == "inventory" else "pending"}
+                    for k in order
+                },
+            }
+
+    def update_scan_progress(self, evt: dict) -> None:
+        with self._prog_lock:
+            if not self._prog:
+                return
+            phase = str(evt.get("phase") or self._prog["current_phase"])
+            order: list[str] = self._prog["order"]
+            phases: dict[str, dict] = self._prog["phases"]
+
+            if evt.get("event") == "counts":
+                m_tot = int(evt.get("models_total") or 0)
+                r_tot = int(evt.get("reports_total") or 0)
+                df_tot = int(evt.get("dataflows_total") or 0)
+                ws_tot = int(evt.get("workspaces_total") or self._prog["counts"]["workspaces"])
+                self._prog["counts"] = {"workspaces": ws_tot, "models": m_tot, "reports": r_tot, "dataflows": df_tot}
+                self._prog["counts_known"] = True
+                if "models" in phases and phases["models"]["status"] == "pending":
+                    phases["models"]["total"] = m_tot
+                if "reports" in phases and phases["reports"]["status"] == "pending":
+                    phases["reports"]["total"] = r_tot
+                if "dataflows" in phases and phases["dataflows"]["status"] == "pending":
+                    phases["dataflows"]["total"] = df_tot
+                if "portal" in phases and phases["portal"]["status"] == "pending":
+                    phases["portal"]["total"] = max(1, m_tot * 2)
+
+            if phase in phases:
+                p_idx = order.index(phase)
+                for prev_k in order[:p_idx]:
+                    prev_p = phases[prev_k]
+                    prev_p["status"] = "done"
+                    prev_p["done"] = prev_p["total"]
+                cur_p = phases[phase]
+                cur_p["status"] = "active"
+                if "total" in evt and evt["total"] is not None:
+                    cur_p["total"] = int(evt["total"])
+                if "done" in evt and evt["done"] is not None:
+                    cur_p["done"] = min(max(0, int(evt["done"])), max(int(evt["done"]), cur_p["total"]))
+                self._prog["current_phase"] = phase
+
+            if evt.get("item"):
+                self._prog["current_item"] = str(evt["item"])
+
+    def finish_scan_progress(self, ok: bool = True) -> None:
+        with self._prog_lock:
+            if not self._prog:
+                return
+            self._prog["finished_at"] = time.time()
+            if ok:
+                self._prog["max_pct"] = 100.0
+                for p in self._prog["phases"].values():
+                    p["status"] = "done"
+                    p["done"] = p["total"]
+
+    def get_scan_progress_snapshot(self) -> dict:
+        with self._prog_lock:
+            if not self._prog:
+                return {}
+            pr = self._prog
+            now = pr["finished_at"] or time.time()
+            elapsed = max(0.0, now - pr["started_at"])
+            order: list[str] = pr["order"]
+            phases: dict[str, dict] = pr["phases"]
+            cur_k = pr["current_phase"]
+            p_idx = (order.index(cur_k) + 1) if cur_k in order else 1
+            _, p_title, _ = _PHASE_META.get(cur_k, ("Scan", "Scanning...", 1.0))
+
+            w_total = 0.0
+            w_done = 0.0
+            for k in order:
+                w = _PHASE_META[k][2]
+                tot = max(0, int(phases[k]["total"]))
+                dn = max(0, min(tot, int(phases[k]["done"]))) if tot > 0 else 0
+                w_total += tot * w
+                w_done += dn * w
+
+            eta_sec: int | None = None
+            if pr["finished_at"] and pr["max_pct"] >= 100.0:
+                pct = 100.0
+            elif not pr["counts_known"] or w_total <= 0.0:
+                pct = pr["max_pct"]
+            else:
+                raw_pct = min(99.4, max(1.0, (w_done / w_total) * 100.0))
+                pr["max_pct"] = max(pr["max_pct"], round(raw_pct, 1))
+                pct = pr["max_pct"]
+                if elapsed >= 3.0 and w_done >= 1.2 and w_done < w_total:
+                    rate = w_done / elapsed
+                    if rate > 0.01:
+                        eta_sec = max(1, int(round((w_total - w_done) / rate)))
+
+            stages_out = []
+            for k in order:
+                lbl = _PHASE_META[k][0]
+                ph = phases[k]
+                st_s = ph["status"]
+                tot_s = ph["total"]
+                dn_s = ph["done"]
+                if k == "portal":
+                    # Portal total is 2x models (analyze + HTML); display model count cleanly
+                    disp_tot = max(0, pr["counts"].get("models", 0))
+                    disp_dn = min(disp_tot, dn_s // 2) if disp_tot else 0
+                    det = f"{disp_dn}/{disp_tot}" if st_s == "active" and disp_tot else (str(disp_tot) if st_s == "done" and disp_tot else "")
+                else:
+                    det = f"{dn_s}/{tot_s}" if st_s == "active" and tot_s > 0 else (str(tot_s) if tot_s > 0 else "")
+                stages_out.append({"key": k, "label": lbl, "status": st_s, "detail": det})
+
+            cur_ph = phases.get(cur_k, {"done": 0, "total": 0})
+            p_done = cur_ph["done"]
+            p_cnt = cur_ph["total"]
+            if cur_k == "portal" and pr["counts"].get("models", 0) > 0:
+                p_cnt = pr["counts"]["models"]
+                p_done = min(p_cnt, max(1, (cur_ph["done"] + 1) // 2)) if cur_ph["done"] > 0 else 0
+
+            return {
+                "percent": pct,
+                "elapsed_sec": round(elapsed, 1),
+                "eta_sec": eta_sec,
+                "phase_index": p_idx,
+                "phase_total": len(order),
+                "phase_key": cur_k,
+                "phase_title": p_title,
+                "phase_done": p_done,
+                "phase_count": p_cnt,
+                "current_item": pr["current_item"],
+                "counts": dict(pr["counts"]),
+                "stages": stages_out,
+            }
 
     def invalidate_cache(self) -> None:
         self._models_mtime = -1.0
@@ -1653,6 +2010,7 @@ def create_studio_server(catalog_dir: str | Path, host: str = "127.0.0.1", port:
                     {
                         "auth": state.auth.status(),
                         "busy": state.busy,
+                        "scan_progress": state.get_scan_progress_snapshot(),
                         "last_scan_error": state.last_scan_error,
                         "models_count": m_cnt,
                         "portal_ready": portal_ready,
@@ -2011,14 +2369,23 @@ def create_studio_server(catalog_dir: str | Path, host: str = "127.0.0.1", port:
                 return
 
             if parsed.path == "/api/scan":
+                ws_ids = body.get("workspace_ids") or None
+                inc_rep = bool(body.get("include_reports", True))
+                inc_df = bool(body.get("include_dataflows", True))
                 with state._op_lock:
                     if state.busy:
                         self._json({"ok": False, "error": "A scan is already running."})
                         return
                     state.busy = True
                     state.last_scan_error = ""
+                    state.start_scan_progress(
+                        workspaces_count=len(ws_ids) if ws_ids else 1,
+                        include_reports=inc_rep,
+                        include_dataflows=inc_df,
+                    )
 
                 def _worker() -> None:
+                    scan_ok = False
                     try:
                         if state.store.legacy_schema_info()["is_legacy"]:
                             _ensure_clean_if_legacy()
@@ -2026,9 +2393,13 @@ def create_studio_server(catalog_dir: str | Path, host: str = "127.0.0.1", port:
                             state.store.clear()
                             state.invalidate_cache()
                             state.log("Cleared previous catalog cache (clean slate enabled).")
-                        client = PowerBiReadOnlyClient(state.auth)
-                        scanner = WorkspaceScanner(client, state.store, log_fn=state.log)
-                        ws_ids = body.get("workspace_ids") or None
+                        client = PowerBiReadOnlyClient(state.auth, log_fn=state.log)
+                        scanner = WorkspaceScanner(
+                            client,
+                            state.store,
+                            log_fn=state.log,
+                            progress_fn=state.update_scan_progress,
+                        )
                         refresh_flag = bool(body.get("refresh"))
                         follow_outside = bool(body.get("follow_outside", False))
                         scanner.scan_inventory(workspace_ids=ws_ids)
@@ -2037,25 +2408,35 @@ def create_studio_server(catalog_dir: str | Path, host: str = "127.0.0.1", port:
                             refresh=refresh_flag,
                             include_access=bool(body.get("include_access")),
                         )
-                        if body.get("include_reports", True):
+                        if inc_rep:
                             scanner.scan_report_definitions(
                                 workspace_ids=ws_ids,
                                 refresh=refresh_flag,
                                 follow_shared_models=follow_outside,
                             )
-                        if body.get("include_dataflows", True):
+                        if inc_df:
                             scanner.scan_dataflow_definitions(
                                 workspace_ids=ws_ids,
                                 refresh=refresh_flag,
                                 follow_outside=follow_outside,
                             )
                         state.invalidate_cache()
-                        idx = generate_portal(state.store, anonymous=bool(body.get("anonymous")))
+                        state.log("Building interactive HTML documentation & lineage portal...")
+                        state.update_scan_progress({"phase": "portal", "done": 0, "item": "Analyzing semantic models..."})
+                        idx = generate_portal(
+                            state.store,
+                            anonymous=bool(body.get("anonymous")),
+                            progress_fn=lambda dn, tot, itm: state.update_scan_progress(
+                                {"phase": "portal", "done": dn, "total": tot, "item": itm}
+                            ),
+                        )
+                        scan_ok = True
                         state.log(f"Portal ready! Click 'Open Documentation Portal' ({idx})")
                     except Exception as exc:
                         state.last_scan_error = str(exc)
                         state.log(f"Scan error: {exc}")
                     finally:
+                        state.finish_scan_progress(ok=scan_ok)
                         state.invalidate_cache()
                         state.busy = False
 
