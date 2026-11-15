@@ -522,8 +522,10 @@ class CatalogMcpEngine:
         raise ValueError(f"Unknown MCP tool: {name}")
 
 
-def handle_jsonrpc_message(engine: CatalogMcpEngine, msg: dict[str, Any]) -> dict[str, Any] | None:
-    method = msg.get("method", "")
+def handle_jsonrpc_message(engine: CatalogMcpEngine, msg: Any) -> dict[str, Any] | None:
+    if not isinstance(msg, dict):
+        return {"jsonrpc": "2.0", "id": None, "error": {"code": -32600, "message": "Invalid JSON-RPC request object"}}
+    method = str(msg.get("method") or "")
     req_id = msg.get("id")
 
     if method.startswith("notifications/"):
@@ -588,25 +590,39 @@ def run_mcp_stdio(catalog_dir: str | Path) -> None:
         use_framing = False
         if stripped.lower().startswith(b"content-length:"):
             use_framing = True
-            length = int(stripped.split(b":", 1)[1].strip())
+            try:
+                length = int(stripped.split(b":", 1)[1].strip())
+            except ValueError:
+                continue
             while True:
                 hdr = stdin.readline()
                 if not hdr or hdr in (b"\r\n", b"\n"):
                     break
-            raw_body = stdin.read(length)
+            raw_body = stdin.read(max(0, length))
         else:
             raw_body = stripped
 
         try:
-            msg = json.loads(raw_body.decode("utf-8"))
+            msg = json.loads(raw_body.decode("utf-8", errors="replace"))
         except Exception:
             continue
 
-        resp = handle_jsonrpc_message(engine, msg)
+        try:
+            resp = handle_jsonrpc_message(engine, msg)
+        except Exception as exc:
+            req_id = msg.get("id") if isinstance(msg, dict) else None
+            resp = {
+                "jsonrpc": "2.0",
+                "id": req_id,
+                "error": {"code": -32603, "message": mask_secrets(f"Internal MCP server error: {exc}")},
+            }
         if resp is not None:
             encoded = json.dumps(resp, ensure_ascii=False).encode("utf-8")
-            if use_framing:
-                stdout.write(f"Content-Length: {len(encoded)}\r\n\r\n".encode("ascii") + encoded)
-            else:
-                stdout.write(encoded + b"\n")
-            stdout.flush()
+            try:
+                if use_framing:
+                    stdout.write(f"Content-Length: {len(encoded)}\r\n\r\n".encode("ascii") + encoded)
+                else:
+                    stdout.write(encoded + b"\n")
+                stdout.flush()
+            except BrokenPipeError:
+                break

@@ -25,6 +25,7 @@ from .auth import TokenProvider
 from .export_bundle import build_single_model_export, build_site_export
 from .portal import generate_portal
 from .scanner import WorkspaceScanner
+from .security import mask_secrets
 from .sharepoint_publisher import publish_file_to_sharepoint
 from .store import CatalogStore
 
@@ -1366,7 +1367,12 @@ def create_studio_server(catalog_dir: str | Path, host: str = "127.0.0.1", port:
             return
 
         def _json(self, payload: dict, code: int = 200) -> None:
-            raw = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+            safe_payload = dict(payload)
+            if safe_payload.get("ok") is False:
+                safe_payload.setdefault("error_code", "ERR_OPERATION")
+                if "error" in safe_payload:
+                    safe_payload["error"] = mask_secrets(str(safe_payload["error"]))
+            raw = json.dumps(safe_payload, ensure_ascii=False).encode("utf-8")
             try:
                 self.send_response(code)
                 self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -1377,7 +1383,53 @@ def create_studio_server(catalog_dir: str | Path, host: str = "127.0.0.1", port:
             except (ConnectionAbortedError, BrokenPipeError, ConnectionResetError):
                 pass
 
+        def _send_html_error(self, err_code: str, message: str, status: int = 500) -> None:
+            safe_msg = (
+                mask_secrets(message)
+                .replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+            )
+            page = (
+                "<!DOCTYPE html><html lang='en'><head><meta charset='utf-8'>"
+                "<title>Studio Error</title>"
+                "<style>body{font-family:system-ui,-apple-system,sans-serif;background:#f8fafc;color:#0f172a;"
+                "display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:24px}"
+                ".card{max-width:560px;background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:28px;"
+                "box-shadow:0 10px 25px rgba(15,23,42,0.06)}"
+                ".code{display:inline-block;background:#fee2e2;color:#991b1b;font-weight:700;font-size:12px;"
+                "padding:3px 9px;border-radius:999px;margin-bottom:10px}"
+                "a.btn{display:inline-block;margin-top:16px;padding:9px 16px;background:#0b63ce;color:#fff;"
+                "text-decoration:none;border-radius:8px;font-weight:600;font-size:13.5px}</style></head>"
+                f"<body><div class='card'><span class='code'>{err_code}</span>"
+                "<h2 style='margin:0 0 8px 0;font-size:18px'>Something went wrong, but Studio is still running</h2>"
+                f"<p style='margin:0;color:#475569;font-size:13.5px;line-height:1.5'>{safe_msg}</p>"
+                "<a class='btn' href='/'>&larr; Return to Studio</a></div></body></html>"
+            ).encode("utf-8")
+            try:
+                self.send_response(status)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Content-Length", str(len(page)))
+                self.end_headers()
+                self.wfile.write(page)
+            except (ConnectionAbortedError, BrokenPipeError, ConnectionResetError):
+                pass
+
         def do_GET(self) -> None:  # noqa: N802
+            try:
+                self._handle_get()
+            except (ConnectionAbortedError, BrokenPipeError, ConnectionResetError):
+                pass
+            except Exception as exc:
+                err_code = f"ERR_{type(exc).__name__.upper()}"
+                state.log(f"Handled GET error [{err_code}] on {self.path}: {mask_secrets(str(exc))}")
+                if self.path.startswith("/api/"):
+                    self._json({"ok": False, "error_code": err_code, "error": f"[{err_code}] {exc}"}, code=500)
+                else:
+                    self._send_html_error(err_code, str(exc), status=500)
+
+        def _handle_get(self) -> None:
             parsed = urllib.parse.urlparse(self.path)
             if parsed.path == "/favicon.ico":
                 svg_ico = (
@@ -1514,8 +1566,22 @@ def create_studio_server(catalog_dir: str | Path, host: str = "127.0.0.1", port:
             self.end_headers()
 
         def do_POST(self) -> None:  # noqa: N802
+            try:
+                self._handle_post()
+            except (ConnectionAbortedError, BrokenPipeError, ConnectionResetError):
+                pass
+            except Exception as exc:
+                err_code = f"ERR_{type(exc).__name__.upper()}"
+                state.log(f"Handled POST error [{err_code}] on {self.path}: {mask_secrets(str(exc))}")
+                self._json({"ok": False, "error_code": err_code, "error": f"[{err_code}] {exc}"}, code=500)
+
+        def _handle_post(self) -> None:
             parsed = urllib.parse.urlparse(self.path)
-            length = int(self.headers.get("Content-Length") or "0")
+            try:
+                length = max(0, int(self.headers.get("Content-Length") or "0"))
+            except ValueError:
+                self._json({"ok": False, "error_code": "ERR_BAD_CONTENT_LENGTH", "error": "Invalid Content-Length header."}, code=400)
+                return
 
             if parsed.path == "/api/upload-local-file":
                 raw_bytes = self.rfile.read(length) if length else b""
@@ -1567,7 +1633,14 @@ def create_studio_server(catalog_dir: str | Path, host: str = "127.0.0.1", port:
                         pass
                 return
 
-            body = json.loads(self.rfile.read(length).decode("utf-8") or "{}") if length else {}
+            try:
+                raw_post = self.rfile.read(length) if length else b""
+                body = json.loads(raw_post.decode("utf-8") or "{}") if raw_post else {}
+                if not isinstance(body, dict):
+                    raise ValueError("JSON body must be an object")
+            except (UnicodeDecodeError, ValueError) as exc:
+                self._json({"ok": False, "error_code": "ERR_BAD_JSON", "error": f"Invalid JSON request payload: {exc}"}, code=400)
+                return
 
             if parsed.path == "/api/upload-local-folder":
                 files_list = body.get("files") or []

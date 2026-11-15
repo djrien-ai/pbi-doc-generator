@@ -42,3 +42,36 @@ jobs:
 
       - name: Run v1.1 test suite
         run: python tests/test_v1_suite.py
+
+      - name: Verify clean-room wheel build, requirements.txt & non-editable pip install from empty folder
+        if: matrix.python-version == '3.12'
+        shell: pwsh
+        run: |
+          python -m pip install -r requirements.txt build twine
+          python -m pip uninstall -y pbi-doc-generator
+          python -m build
+          twine check dist/*
+          $whl = (Get-ChildItem dist/*.whl | Select-Object -First 1).FullName
+          python -m pip install $whl
+          $cleanDir = Join-Path ([System.IO.Path]::GetTempPath()) ("pbidoc_clean_pip_" + [guid]::NewGuid().ToString("N").Substring(0,8))
+          New-Item -ItemType Directory -Force -Path $cleanDir | Out-Null
+          Push-Location $cleanDir
+          try {
+            $v = pbi-doc-generator --version
+            if ($LASTEXITCODE -ne 0 -or $v -notmatch "1\.1\.0") { throw "Wheel CLI --version failed: $v" }
+            $smDir = Join-Path $cleanDir "TestModel.SemanticModel/definition/tables"
+            New-Item -ItemType Directory -Force -Path $smDir | Out-Null
+            Set-Content -Path (Join-Path $cleanDir "TestModel.SemanticModel/definition/model.tmdl") -Value "model Model`n`tculture: en-US`n"
+            Set-Content -Path (Join-Path $smDir "Sales.tmdl") -Value "table Sales`n`tmeasure Rev = SUM(Sales[Amt])`n`tcolumn Amt`n`t`tdataType: double`n`t`tsourceColumn: Amt`n`tpartition Sales = m`n`t`tmode: import`n`t`tsource =`n`t`t`tlet Source = Sql.Database(`"srv`", `"db`") in Source`n"
+            $cat = Join-Path $cleanDir "cat"
+            pbi-doc-generator import-local (Join-Path $cleanDir "TestModel.SemanticModel") --catalog $cat
+            if ($LASTEXITCODE -ne 0) { throw "import-local from installed wheel failed!" }
+            pbi-doc-generator export-site --catalog $cat --format single -o (Join-Path $cleanDir "sp.html")
+            if ($LASTEXITCODE -ne 0 -or -not (Test-Path (Join-Path $cleanDir "sp.html"))) { throw "export-site from installed wheel failed!" }
+            pbi-doc-generator measure-doc "Rev" --catalog $cat -o (Join-Path $cleanDir "rev.md")
+            if ($LASTEXITCODE -ne 0 -or -not (Test-Path (Join-Path $cleanDir "rev.md"))) { throw "measure-doc from installed wheel failed!" }
+            Write-Host "[PASS] Clean-room non-editable wheel install verified outside repo directory!"
+          } finally {
+            Pop-Location
+            Remove-Item -Recurse -Force $cleanDir -ErrorAction SilentlyContinue
+          }

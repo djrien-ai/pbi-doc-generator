@@ -124,19 +124,38 @@ class CatalogStore:
     def load(self) -> dict:
         if not self.state_file.exists():
             return self._default_state()
-        last_exc: Exception | None = None
+        last_perm_exc: PermissionError | None = None
         for attempt in range(8):
             try:
                 with _STATE_LOCK:
-                    data = json.loads(self.state_file.read_text(encoding="utf-8-sig"))
+                    raw_txt = self.state_file.read_text(encoding="utf-8-sig")
+                    data = json.loads(raw_txt) if raw_txt.strip() else {}
+                if not isinstance(data, dict):
+                    raise ValueError("Catalog state root must be a JSON object")
                 for k, default in self._default_state().items():
-                    if k not in data:
+                    if k not in data or not isinstance(data[k], type(default)):
                         data[k] = default
                 return data
-            except (PermissionError, ValueError) as exc:
-                last_exc = exc
+            except PermissionError as exc:
+                last_perm_exc = exc
                 time.sleep(0.08 * (attempt + 1))
-        raise last_exc  # type: ignore[misc]
+            except (OSError, ValueError):
+                if attempt < 3:
+                    time.sleep(0.06 * (attempt + 1))
+                    continue
+                # Recover gracefully from a truncated/corrupted state file instead of crashing Studio
+                with _STATE_LOCK:
+                    try:
+                        backup = self.state_file.with_suffix(".corrupt.json")
+                        shutil.copy2(self.state_file, backup)
+                    except OSError:
+                        pass
+                recovered = self._default_state()
+                recovered["errors"] = ["Recovered from a corrupted local catalog_state.json (backed up to catalog_state.corrupt.json)."]
+                return recovered
+        if last_perm_exc is not None:
+            return self._default_state()
+        return self._default_state()
 
     def load_scoped(self) -> dict:
         """Catalog limited to the workspaces selected for the last scan."""

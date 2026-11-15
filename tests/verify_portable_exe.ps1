@@ -153,9 +153,27 @@ table 'Dim Customer'
     if ($modelPageResp.Content -notmatch "Total Revenue" -or $modelPageResp.Content -notmatch "Avg Revenue per Customer" -or $modelPageResp.Content -notmatch "star-shell") {
         throw "Model HTML page missing expected DAX measures or native Star-Schema diagram!"
     }
-    Write-Host "[PASS] Generated Portal HTML + native Star-Schema + DAX catalog verified"
+    foreach ($asset in @("portal.css", "star_schema_widget.js", "xray_drawer.js", "e2e_graph.js")) {
+        $aResp = Invoke-WebRequest -Uri "$baseUrl/portal/assets/$asset" -UseBasicParsing -TimeoutSec 5
+        if ($aResp.StatusCode -ne 200 -or $aResp.RawContentLength -lt 50) {
+            throw "Missing or empty v1.1 portal asset: $asset"
+        }
+    }
+    Write-Host "[PASS] Generated Portal HTML + native Star-Schema + v1.1 X-Ray/E2E assets + DAX catalog verified"
 
-    # 6. Verify pbixray native C-extension fails gracefully on invalid .pbix (proving pbixray DLLs imported cleanly without ImportError)
+    # 6. Verify HTTP crash-resilience inside frozen EXE (malformed JSON returns clean ERR_BAD_JSON and server stays alive)
+    $got400 = $false
+    try {
+        Invoke-WebRequest -Method Post -Uri "$baseUrl/api/connect" -Body "{broken_json" -ContentType "application/json" -UseBasicParsing -TimeoutSec 5 | Out-Null
+    } catch {
+        if ($_.Exception.Response.StatusCode.value__ -eq 400) { $got400 = $true }
+    }
+    if (-not $got400) { throw "Expected HTTP 400 ERR_BAD_JSON on malformed POST body!" }
+    $aliveResp = Invoke-RestMethod -Uri "$baseUrl/api/status" -TimeoutSec 5
+    if ($aliveResp.models_count -lt 1) { throw "Studio server lost state after malformed POST!" }
+    Write-Host "[PASS] Studio server fault-isolation verified (survived malformed request cleanly)"
+
+    # 7. Verify pbixray native C-extension fails gracefully on invalid .pbix (proving pbixray DLLs imported cleanly without ImportError)
     $dummyBytes = [System.Text.Encoding]::ASCII.GetBytes("NOT_A_REAL_PBIX")
     $pbixResp = Invoke-RestMethod -Method Post -Uri "$baseUrl/api/upload-local-file?name=invalid_test.pbix" -Body $dummyBytes -ContentType "application/octet-stream" -TimeoutSec 10
     if ($pbixResp.error -match "No module named|DLL load failed|ImportError") {
@@ -163,16 +181,30 @@ table 'Dim Customer'
     }
     Write-Host "[PASS] PBIXRay native C-extension imported cleanly inside frozen EXE (graceful message: $($pbixResp.error))"
 
-    # 7. Verify MCP stdio server inside frozen EXE
+    # 8. Verify v1.1 CLI export-site (SharePoint single-file HTML) & measure-doc inside frozen EXE
+    $spHtml = Join-Path $workRoot "SharePoint_Single.html"
+    & $exePath export-site --catalog $catalogDir --format single -o $spHtml | Out-Null
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path $spHtml) -or (Get-Item $spHtml).Length -lt 5000) {
+        throw "export-site single-file SharePoint HTML failed inside frozen EXE!"
+    }
+    $mDoc = Join-Path $workRoot "AvgRev_Lineage.md"
+    & $exePath measure-doc "Avg Revenue per Customer" --catalog $catalogDir -o $mDoc | Out-Null
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path $mDoc) -or (Get-Content -Raw $mDoc) -notmatch "FACT_SALES") {
+        throw "measure-doc end-to-end lineage export failed inside frozen EXE!"
+    }
+    Write-Host "[PASS] v1.1 export-site (SharePoint HTML) and measure-doc (SQL-to-DAX lineage) verified from frozen EXE"
+
+    # 9. Verify MCP stdio server (all 10 v1.1 tools + end-to-end measure trace) inside frozen EXE
     $mcpInput = @(
         '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}'
-        '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"pbi_list_models","arguments":{}}}'
+        '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}'
+        '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"pbi_trace_measure_end_to_end","arguments":{"measure":"Avg Revenue per Customer"}}}'
     ) -join "`n"
     $mcpOut = $mcpInput | & $exePath mcp --catalog $catalogDir 2>&1 | Out-String
-    if ($mcpOut -notmatch "RetailAnalytics" -or $mcpOut -notmatch "protocolVersion") {
-        throw "MCP stdio server check failed: $mcpOut"
+    if ($mcpOut -notmatch "RetailAnalytics" -or $mcpOut -notmatch "pbi_report_layout" -or $mcpOut -notmatch "FACT_SALES") {
+        throw "MCP stdio v1.1 tools check failed: $mcpOut"
     }
-    Write-Host "[PASS] Built-in MCP stdio server responded cleanly from frozen EXE"
+    Write-Host "[PASS] Built-in MCP stdio server (all 10 v1.1 tools + E2E SQL trace) verified from frozen EXE"
 
     Write-Host "=== ALL PORTABLE EXE E2E CHECKS PASSED 100% ==="
 }

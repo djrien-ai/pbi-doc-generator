@@ -4318,15 +4318,19 @@ def generate_portal(store: CatalogStore, output_dir: str | Path | None = None, a
     _atomic_write_text(assets_dir / "xray_drawer.js", XRAY_DRAWER_JS)
 
     state = store.load_scoped()
+    portal_warnings: list[str] = list(state.get("errors") or [])
     enriched_dataflows: dict[str, dict] = {}
     for df_id, df_meta in (state.get("dataflows") or {}).items():
         df_copy = dict(df_meta)
-        raw_def = store.read_dataflow_definition(df_id)
-        if raw_def:
-            parsed_df = parse_dataflow_definition(df_copy, raw_def)
-            for k in ("queries", "entities", "description", "generation", "source_types"):
-                if parsed_df.get(k) or k not in df_copy:
-                    df_copy[k] = parsed_df.get(k)
+        try:
+            raw_def = store.read_dataflow_definition(df_id)
+            if raw_def:
+                parsed_df = parse_dataflow_definition(df_copy, raw_def)
+                for k in ("queries", "entities", "description", "generation", "source_types"):
+                    if parsed_df.get(k) or k not in df_copy:
+                        df_copy[k] = parsed_df.get(k)
+        except Exception as exc:
+            portal_warnings.append(f"[ERR_DATAFLOW_PARSE] Dataflow '{df_meta.get('name') or df_id}': {mask_secrets(str(exc))}")
         enriched_dataflows[df_id] = df_copy
 
     reports_by_ds: dict[str, list[dict]] = collections.defaultdict(list)
@@ -4356,20 +4360,27 @@ def generate_portal(store: CatalogStore, output_dir: str | Path | None = None, a
         while slug in used_slugs:
             slug = f"{base_slug}-{idx}"
             idx += 1
+        try:
+            analysis = analyze_model(
+                m_meta,
+                bundle,
+                reports=reports_by_ds.get(ds_id, []),
+                dataflows=enriched_dataflows,
+                fabric_items=state.get("fabric_items"),
+                dataset_dataflow_links=(state.get("dataset_dataflow_links") or {}).get(ds_id, []),
+            )
+        except Exception as exc:
+            portal_warnings.append(f"[ERR_MODEL_ANALYZE] Semantic model '{m_meta.get('name') or ds_id}': {mask_secrets(str(exc))}")
+            continue
         used_slugs.add(slug)
         slug_by_ds_id[ds_id] = slug
-
-        analysis = analyze_model(
-            m_meta,
-            bundle,
-            reports=reports_by_ds.get(ds_id, []),
-            dataflows=enriched_dataflows,
-            fabric_items=state.get("fabric_items"),
-            dataset_dataflow_links=(state.get("dataset_dataflow_links") or {}).get(ds_id, []),
-        )
         analyses.append((slug, analysis))
 
-    e2e_graph = build_e2e_graph(store, [a for _, a in analyses])
+    try:
+        e2e_graph = build_e2e_graph(store, [a for _, a in analyses])
+    except Exception as exc:
+        portal_warnings.append(f"[ERR_E2E_GRAPH] End-to-end lineage graph fallback triggered: {mask_secrets(str(exc))}")
+        e2e_graph = {"nodes": [], "edges": [], "models": []}
     for m_entry in e2e_graph.get("models") or []:
         if isinstance(m_entry, dict) and m_entry.get("id") in slug_by_ds_id:
             m_entry["slug"] = slug_by_ds_id[m_entry["id"]]
@@ -4378,17 +4389,24 @@ def generate_portal(store: CatalogStore, output_dir: str | Path | None = None, a
 
     all_models_nav = [(s, a["workspace"], a["name"]) for s, a in analyses]
     written_model_files: set[str] = set()
+    rendered_analyses: list[tuple[str, dict]] = []
     for slug, analysis in analyses:
-        model_html = render_model_html(
-            analysis,
-            slug=slug,
-            anonymous=anonymous,
-            all_models_nav=all_models_nav,
-            e2e_graph=e2e_graph,
-        )
-        fname = f"{slug}.html"
-        written_model_files.add(fname)
-        _atomic_write_text(models_dir / fname, model_html)
+        try:
+            model_html = render_model_html(
+                analysis,
+                slug=slug,
+                anonymous=anonymous,
+                all_models_nav=all_models_nav,
+                e2e_graph=e2e_graph,
+            )
+            fname = f"{slug}.html"
+            written_model_files.add(fname)
+            _atomic_write_text(models_dir / fname, model_html)
+            rendered_analyses.append((slug, analysis))
+        except Exception as exc:
+            portal_warnings.append(f"[ERR_MODEL_RENDER] Semantic model '{analysis.get('name') or slug}': {mask_secrets(str(exc))}")
+    analyses = rendered_analyses
+    state["errors"] = portal_warnings
 
     # Summary KPIs
     total_ws = len(state["workspaces"]) or len({a["workspace"] for _, a in analyses})
@@ -4425,20 +4443,26 @@ def generate_portal(store: CatalogStore, output_dir: str | Path | None = None, a
             m_nm = "External / Unscanned Model"
             m_sl = ""
             m_ws = rep.get("workspace") or ""
-        catalog_xray_items[rid] = build_report_xray_entry(
-            rep=r_obj,
-            model_name=m_nm,
-            model_slug=m_sl,
-            model_workspace=m_ws,
-            highlight_dax_fn=lambda expr: _highlight_dax(expr, auto_pretty=True),
-            from_index=True,
-            anonymous=anonymous,
-            e2e_graph=e2e_graph,
-            dataset_id=r_obj.get("dataset_id") or "",
-        )
+        try:
+            catalog_xray_items[rid] = build_report_xray_entry(
+                rep=r_obj,
+                model_name=m_nm,
+                model_slug=m_sl,
+                model_workspace=m_ws,
+                highlight_dax_fn=lambda expr: _highlight_dax(expr, auto_pretty=True),
+                from_index=True,
+                anonymous=anonymous,
+                e2e_graph=e2e_graph,
+                dataset_id=r_obj.get("dataset_id") or "",
+            )
+        except Exception as exc:
+            portal_warnings.append(f"[ERR_REPORT_XRAY] Report '{rep.get('name') or rid_raw}': {mask_secrets(str(exc))}")
 
     for df_id, df_obj in enriched_dataflows.items():
-        catalog_xray_items[f"df:{df_id}"] = build_dataflow_xray_entry(df_obj, _highlight_m, extract_m_steps)
+        try:
+            catalog_xray_items[f"df:{df_id}"] = build_dataflow_xray_entry(df_obj, _highlight_m, extract_m_steps)
+        except Exception as exc:
+            portal_warnings.append(f"[ERR_DATAFLOW_XRAY] Dataflow '{df_obj.get('name') or df_id}': {mask_secrets(str(exc))}")
 
     catalog_xray_json = json.dumps({"items": catalog_xray_items, "reportOrder": catalog_report_order}, ensure_ascii=False).replace("</", "<\\/")
 
@@ -4696,6 +4720,21 @@ def generate_portal(store: CatalogStore, output_dir: str | Path | None = None, a
             )
             health_entries.append((0 if is_bad else 1, -len(a["reports"]), a["name"].lower(), row_str))
 
+    for w_msg in portal_warnings:
+        clean_w = mask_secrets(str(w_msg))
+        w_search = f"catalog scan warning {clean_w}".lower()
+        w_row = (
+            f'<tr data-health-sev="warn" data-health-search="{esc(w_search)}">'
+            f"<td><b>Catalog Scanner / Parser</b></td>"
+            f"<td>Workspace / Local</td>"
+            f"<td><span class='badge badge-warn'>WARN</span></td>"
+            f"<td><b>Handled Item Warning</b></td>"
+            f"<td>{esc(clean_w)}</td>"
+            f"</tr>"
+        )
+        health_entries.append((1, 0, "zz_scanner", w_row))
+
+    total_findings = len(health_entries)
     health_entries.sort(key=lambda t: (t[0], t[1], t[2]))
     health_rows = [t[3] for t in health_entries]
     crit_findings_cnt = sum(1 for t in health_entries if t[0] == 0)

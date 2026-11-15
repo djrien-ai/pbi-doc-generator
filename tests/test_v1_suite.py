@@ -981,6 +981,131 @@ def test_v11_studio_oauth_signin_cancel_and_error_resilience() -> None:
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+def test_v11_crash_resilience_and_fault_isolation() -> None:
+    """Verify Studio HTTP, CatalogStore, Portal builder, MCP server, and CLI never crash on corrupt input or runtime errors."""
+    import contextlib
+    import io
+    import tempfile
+    import threading
+    import urllib.error
+    import urllib.request
+    from unittest.mock import patch
+
+    import pbi_catalog.portal as portal_mod
+    from pbi_catalog.cli import main as cli_main
+    from pbi_catalog.mcp_server import CatalogMcpEngine, handle_jsonrpc_message
+    from pbi_catalog.store import CatalogStore
+    from pbi_catalog.web_ui import create_studio_server
+    from scripts.build_demo_portal import build_demo
+
+    tmp = Path(tempfile.mkdtemp(prefix="pbi_v11_resilience_"))
+    try:
+        # 1. Corrupted catalog_state.json recovery
+        store = CatalogStore(tmp)
+        store.ensure_dirs()
+        store.state_file.write_text("{TRUNCATED_CORRUPT_JSON!!!", encoding="utf-8")
+        recovered = store.load()
+        assert isinstance(recovered, dict) and recovered.get("models") == {}
+        assert store.state_file.with_suffix(".corrupt.json").is_file()
+
+        # 2. Studio HTTP server resilience against malformed JSON, bad binary payloads, and unexpected exceptions
+        httpd, state_obj = create_studio_server(tmp, host="127.0.0.1", port=0)
+        port = httpd.server_address[1]
+        threading.Thread(target=httpd.serve_forever, daemon=True).start()
+        base = f"http://127.0.0.1:{port}"
+        try:
+            # 2a. Broken JSON payload -> HTTP 400 with error_code ERR_BAD_JSON, server stays alive
+            bad_req = urllib.request.Request(
+                f"{base}/api/connect",
+                data=b"{broken_json_payload",
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            try:
+                urllib.request.urlopen(bad_req, timeout=5)
+                raise AssertionError("Expected HTTP 400 on malformed JSON")
+            except urllib.error.HTTPError as he:
+                assert he.code == 400
+                err_obj = json.loads(he.read().decode("utf-8"))
+                assert err_obj["ok"] is False and err_obj["error_code"] == "ERR_BAD_JSON"
+
+            # 2b. Invalid UTF-8 bytes -> HTTP 400 with error_code ERR_BAD_JSON
+            bad_utf8 = urllib.request.Request(
+                f"{base}/api/connect",
+                data=b"\xff\xfe\xfd\x00",
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            try:
+                urllib.request.urlopen(bad_utf8, timeout=5)
+                raise AssertionError("Expected HTTP 400 on invalid UTF-8")
+            except urllib.error.HTTPError as he:
+                assert he.code == 400
+                err_obj = json.loads(he.read().decode("utf-8"))
+                assert err_obj["ok"] is False and err_obj["error_code"] == "ERR_BAD_JSON"
+
+            # 2c. Unexpected exception inside handler -> HTTP 500 with error_code + secret redaction, server stays alive!
+            with patch.object(state_obj, "get_models_count", side_effect=RuntimeError("boom password=SuperSecretPassword123!")):
+                try:
+                    urllib.request.urlopen(f"{base}/api/status", timeout=5)
+                    raise AssertionError("Expected HTTP 500 when handler raises RuntimeError")
+                except urllib.error.HTTPError as he:
+                    assert he.code == 500
+                    err_obj = json.loads(he.read().decode("utf-8"))
+                    assert err_obj["ok"] is False
+                    assert err_obj["error_code"] == "ERR_RUNTIMEERROR"
+                    assert "SuperSecretPassword123" not in err_obj["error"]
+
+            # Immediately verify server is STILL healthy right after the 500 error!
+            with urllib.request.urlopen(f"{base}/api/status", timeout=5) as r:
+                assert r.status == 200
+                st_ok = json.loads(r.read().decode("utf-8"))
+                assert "models_count" in st_ok
+        finally:
+            httpd.shutdown()
+            httpd.server_close()
+
+        # 3. Per-model fault isolation in generate_portal(): 1 exploding model must NOT crash the rest of the catalog
+        demo_dir = tmp / "fault_isolated_demo"
+        build_demo(demo_dir)
+        demo_store = CatalogStore(demo_dir)
+        orig_analyze = portal_mod.analyze_model
+
+        def _flaky_analyze(m_meta, bundle, **kwargs):
+            if m_meta.get("id") == "ds-legacy":
+                raise ValueError("Simulated corrupt TMDL partition in ds-legacy")
+            return orig_analyze(m_meta, bundle, **kwargs)
+
+        with patch.object(portal_mod, "analyze_model", side_effect=_flaky_analyze):
+            idx_html = portal_mod.generate_portal(demo_store)
+            assert idx_html.is_file()
+            idx_txt = idx_html.read_text(encoding="utf-8")
+            # Healthy sibling models still rendered cleanly!
+            assert "Global Supply Chain" in idx_txt
+            assert "Group Working Capital" in idx_txt
+            assert "ERR_MODEL_ANALYZE" in idx_txt
+
+        # 4. MCP JSON-RPC resilience against non-dict payloads & unknown tools
+        mcp_eng = CatalogMcpEngine(demo_store)
+        non_dict_resp = handle_jsonrpc_message(mcp_eng, [1, 2, 3])  # type: ignore[arg-type]
+        assert non_dict_resp is not None and non_dict_resp["error"]["code"] == -32600
+        bad_tool_resp = handle_jsonrpc_message(
+            mcp_eng,
+            {"jsonrpc": "2.0", "id": 99, "method": "tools/call", "params": {"name": "nonexistent_tool", "arguments": {}}},
+        )
+        assert bad_tool_resp is not None and bad_tool_resp["result"]["isError"] is True
+
+        # 5. CLI top-level exception shield returns exit code 1 + clean stderr message (never raw traceback)
+        err_buf = io.StringIO()
+        with contextlib.redirect_stderr(err_buf):
+            rc = cli_main(["import-local", str(tmp / "nonexistent_missing_model_999.pbix"), "--catalog", str(tmp)])
+        assert rc == 1
+        err_out = err_buf.getvalue()
+        assert "Error [" in err_out and "Traceback" not in err_out
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 if __name__ == "__main__":
     test_issue_12_tmdl_table_doc_comment()
     test_secret_masking_and_readonly_guard()
@@ -992,4 +1117,5 @@ if __name__ == "__main__":
     test_v11_unified_backend_e2e_sharepoint_and_privacy()
     test_v11_clean_slate_single_model_export_and_sharepoint_publisher()
     test_v11_studio_oauth_signin_cancel_and_error_resilience()
-    print("ALL 10 V1.1 TEST SUITES PASSED SUCCESSFULLY!")
+    test_v11_crash_resilience_and_fault_isolation()
+    print("ALL 11 V1.1 TEST SUITES PASSED SUCCESSFULLY!")

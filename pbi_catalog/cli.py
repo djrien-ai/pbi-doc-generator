@@ -55,6 +55,19 @@ def _default_catalog_dir() -> Path:
 
 
 def main(argv: list[str] | None = None) -> int:
+    try:
+        return _run_cli(argv)
+    except KeyboardInterrupt:
+        print("\nInterrupted by user.", file=sys.stderr)
+        return 130
+    except Exception as exc:
+        err_code = type(exc).__name__.upper()
+        safe_msg = mask_secrets(str(exc) or err_code)
+        print(f"Error [{err_code}]: {safe_msg}", file=sys.stderr)
+        return 1
+
+
+def _run_cli(argv: list[str] | None = None) -> int:
     args_list = list(sys.argv[1:] if argv is None else argv)
 
     # Backwards compatibility: if first arg is an existing .pbix / .pbip / .xlsx file, run single-file doc
