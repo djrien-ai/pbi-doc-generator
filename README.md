@@ -10,7 +10,7 @@
 [![LinkedIn](https://img.shields.io/badge/LinkedIn-Rien_Scheerlinck-0A66C2?logo=linkedin&logoColor=white)](https://www.linkedin.com/in/rienscheerlinck/)
 [![Support on Ko-fi](https://img.shields.io/badge/Support_on_Ko--fi-Buy_me_a_coffee-FF5E5B?logo=ko-fi&logoColor=white)](https://ko-fi.com/rienscheerlinck)
 
-[**Live Interactive Demo**](https://djrien-ai.github.io/pbi-doc-generator/) &bull; [**Download Windows `.zip` (No Python)**](https://github.com/djrien-ai/pbi-doc-generator/releases/latest) &bull; [**What's New in `v1.1`**](#why-bi--fabric-teams-upgrade-to-v11) &bull; [**Quick Start**](#quick-start) &bull; [**10-Tool MCP Setup**](#local-ai-assistant-setup-mcp-server---10-read-only-tools) &bull; [**Security**](SECURITY.md) &bull; [**`v1.2` Roadmap**](ROADMAP.md)
+[**Live Interactive Demo**](https://djrien-ai.github.io/pbi-doc-generator/) &bull; [**Download Windows `.zip` (No Python)**](https://github.com/djrien-ai/pbi-doc-generator/releases/latest/download/PBI_Doc_Generator_Windows_Portable.zip) &bull; [**What's New in `v1.1`**](#why-bi--fabric-teams-upgrade-to-v11) &bull; [**Quick Start**](#quick-start) &bull; [**10-Tool MCP Setup**](#local-ai-assistant-setup-mcp-server---10-read-only-tools) &bull; [**Security**](SECURITY.md) &bull; [**`v1.2` Roadmap**](ROADMAP.md)
 
 > [!TIP]
 > **Try `v1.1.0` Latest Stable Release in 30 Seconds**

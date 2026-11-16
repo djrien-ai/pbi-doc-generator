@@ -952,7 +952,7 @@ def publish_to_docs(portal_dir: Path, docs_dir: Path) -> None:
         '  </div>\n'
         '  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">\n'
         '    <a href="https://github.com/djrien-ai/pbi-doc-generator" target="_blank" rel="noopener" style="background:transparent;color:#f8fafc;border:1px solid #64748b;border-radius:6px;padding:4px 10px;font-size:12px;font-weight:700;text-decoration:none">&#9733; Star on GitHub (MIT)</a>\n'
-        '    <a href="https://github.com/djrien-ai/pbi-doc-generator/releases/latest" target="_blank" rel="noopener" style="background:#2563eb;color:#fff;border:1px solid #3b82f6;border-radius:6px;padding:4px 11px;font-size:12px;font-weight:700;text-decoration:none">Download v1.1 (.zip)</a>\n'
+        '    <a href="https://github.com/djrien-ai/pbi-doc-generator/releases/latest/download/PBI_Doc_Generator_Windows_Portable.zip" title="Direct download: Windows Portable .zip (no Python required)" style="background:#2563eb;color:#fff;border:1px solid #3b82f6;border-radius:6px;padding:4px 11px;font-size:12px;font-weight:700;text-decoration:none">&#11015; Download v1.1 (.zip)</a>\n'
         '  </div>\n'
         '</div>\n'
     )
@@ -999,7 +999,7 @@ def publish_to_docs(portal_dir: Path, docs_dir: Path) -> None:
             model_bar = (
                 '<div class="demo-tour-bar" style="background:linear-gradient(90deg,#0f172a,#1e293b);color:#f8fafc;padding:7px 24px;font-size:12px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;border-bottom:1px solid #334155">\n'
                 '  <div><span style="background:#2563eb;color:#fff;font-weight:700;padding:2px 8px;border-radius:999px;font-size:10.5px;margin-right:8px">LIVE v1.1 DEMO</span><a href="../index.html" style="color:#93c5fd;font-weight:600;text-decoration:none">&larr; Back to Full Multi-Workspace Catalog &amp; Report X-Ray</a></div>\n'
-                '  <div style="display:flex;align-items:center;gap:8px"><a href="https://github.com/djrien-ai/pbi-doc-generator" target="_blank" rel="noopener" style="color:#f8fafc;border:1px solid #64748b;border-radius:6px;padding:3px 9px;font-weight:700;text-decoration:none">&#9733; Star on GitHub</a><a href="https://github.com/djrien-ai/pbi-doc-generator/releases/latest" target="_blank" rel="noopener" style="background:#2563eb;color:#fff;border-radius:6px;padding:3px 10px;font-weight:700;text-decoration:none">Download v1.1 (.zip)</a></div>\n'
+                '  <div style="display:flex;align-items:center;gap:8px"><a href="https://github.com/djrien-ai/pbi-doc-generator" target="_blank" rel="noopener" style="color:#f8fafc;border:1px solid #64748b;border-radius:6px;padding:3px 9px;font-weight:700;text-decoration:none">&#9733; Star on GitHub</a><a href="https://github.com/djrien-ai/pbi-doc-generator/releases/latest/download/PBI_Doc_Generator_Windows_Portable.zip" title="Direct download: Windows Portable .zip (no Python required)" style="background:#2563eb;color:#fff;border-radius:6px;padding:3px 10px;font-weight:700;text-decoration:none">&#11015; Download v1.1 (.zip)</a></div>\n'
                 '</div>\n'
             )
             mhtml = mhtml.replace("</head>", model_meta + "</head>", 1)

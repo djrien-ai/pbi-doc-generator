@@ -1,3 +1,6 @@
+> [!TIP]
+> **Direct Windows Download (No Python Required):** [**Click here to download `PBI_Doc_Generator_Windows_Portable.zip`**](https://github.com/djrien-ai/pbi-doc-generator/releases/latest/download/PBI_Doc_Generator_Windows_Portable.zip) -> Right-click **Extract All...** -> double-click **`PBI_Doc_Generator.exe`**. *(Prefer a zero-install preview first? [**Open the Live Browser Demo**](https://djrien-ai.github.io/pbi-doc-generator/).)*
+
 ![pbi-doc-generator v1.1 Interactive Portal, Report X-Ray & Live Lineage Walkthrough](https://raw.githubusercontent.com/djrien-ai/pbi-doc-generator/main/docs/media/v1_1_showcase_walkthrough.gif)
 
 > [!IMPORTANT]
