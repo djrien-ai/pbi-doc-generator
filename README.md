@@ -7,6 +7,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-3776AB.svg)](https://www.python.org/)
 [![100% Local & Read-Only](https://img.shields.io/badge/Privacy-100%25_Local_%26_Read--Only-0f766e.svg)](SECURITY.md)
+[![djrien-ai/pbi-doc-generator MCP server](https://glama.ai/mcp/servers/djrien-ai/pbi-doc-generator/badges/score.svg)](https://glama.ai/mcp/servers/djrien-ai/pbi-doc-generator)
 [![LinkedIn](https://img.shields.io/badge/LinkedIn-Rien_Scheerlinck-0A66C2?logo=linkedin&logoColor=white)](https://www.linkedin.com/in/rienscheerlinck/)
 [![Support on Ko-fi](https://img.shields.io/badge/Support_on_Ko--fi-Buy_me_a_coffee-FF5E5B?logo=ko-fi&logoColor=white)](https://ko-fi.com/rienscheerlinck)
 
